@@ -1,11 +1,17 @@
 # openDC
 
+![Open Drift City](https://github.com/Xerender13/openDC/blob/d05ced31e936e77c70660c8ca0f6aef5ba121735/openDC_logo_white.png)
+
 Drift City (Skid Rush) Stage 2 Emulation Project: a server emulator for the **2011 US Drift City client**.
+
+**DISCLAIMER: This project is all entirely made with Claude Code (vibecoded)**
 
 The emulator is a native server written in Python. It keeps the original server's architecture (separate auth /
 lobby / game / area / battle-area services, the original SQL Server database tables), reads the server tables in the
 2011 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
 the rest itself.
+
+[Link to the client download](https://drive.google.com/file/d/19rOxAPsX7-XTpyP1zCFxTQvcQbavK7QN/view?usp=drive_link)
 
 | Folder | What |
 |---|---|
@@ -37,3 +43,18 @@ the rest itself.
 Settings: `Emulator/emulator.ini` (server) and `Client/DriftCityLauncher.ini` (server address, window mode, HUD).
 To let other players join, put your address in their `DriftCityLauncher.ini` and in
 `Emulator/server_data/serverlist.txt`, and open TCP ports 11005-11051.
+
+Current emulator progress (16.10.2026): 
+Game features that haven't been done yet:
+- Channels and Channel Battle
+- Party Patrol
+- Virtual HUV
+- Undercity
+- GT Tournament
+- Seasonal Events
+- Some drift shop items and specific consumable items
+
+Features that still require testing and might work with issues:
+- Crew management
+- Mitro City Missions
+- Repeatable Missions
