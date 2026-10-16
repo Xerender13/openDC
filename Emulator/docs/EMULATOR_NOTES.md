@@ -5,9 +5,27 @@ against a server we control. Everything below was measured, unless marked *(gues
 
 **The emulator project is `Emulator/`** (this file is `Emulator/docs/EMULATOR_NOTES.md`; started 2026-10-12, see
 `Emulator/README.md`). **Start with "Current state and where to continue" right below** (session 12), then the session entries.
-Paths in older entries say `Server/...`: that folder is now `Server2008/`.
+Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
 ## Session 13 (2026-10-16 afternoon; not yet confirmed in game)
+
+- **Mitro City (Taipei) traffic** (user: no traffic cars): the client joined **area 68** there (from Moon Palace
+  channel 0, area 4); the emulator took 68 for an Oros area and sent Oros's .tcs cars (0x2bd), which Taipei cannot
+  place. Now areas 62-75 = Taipei (city_traffic.TAIPEI_AREAS; other Taipei channels not seen yet) and Taipei gets
+  **path traffic (0x21e)** on Taipei/Path/path_taipei.chpath (136 lanes, 336 km; chunked chpath layout in the
+  city_traffic module text — make_traffic_paths.read_chpath's fixed offsets break on it), driven by tw_traffic.Race
+  (crossings found once in a thread, ~2 s; stepped every 0.5 s, ~7% of a core for 400 cars), 40-70 km/h,
+  TrafficFlowControl block 5 models, emulator.ini cars.taipei = 400; 0x220 / 0x223 wreck the car. **Signals**
+  (user request): path_taipei.signal (248 stop points on 63 paths) on ZoneServer's rule (0x5983ad loads
+  trafficSignal_%d.txt / PVP_map*.signal; 0x5976d0: one 60 s cycle of the server clock, type 0 red 0-30 / green
+  30-58 / amber 58-60 s, type 2 green 0-28 / amber 28-30 / red 30-60 s); city_traffic.CityRace adds them to the
+  engine's stops. The client's Taipei lamps cannot follow (it reads .signal only for trainPath; its lamp table comes
+  from a .tcs). Not yet confirmed in game.
+
+- **Mitro City missions not offered again after failing** (user): a failed child quest makes the client send 0x10c,
+  then 0x181 (row, 1) (client 0x5138b0; give-up 0x513a70 sends (row, 0)); its 0x182 handler 0x50ed80 only redraws the
+  window and the mother quest stayed in its held list (+0x12c) until the next login. mothers.mother_give_up now
+  resends 0x17c (0x754fb0 clears and rebuilds the list). Not yet confirmed.
 
 - **Part on an occupied slot** (user: docking refused on Double Beta parts, fine on High GR Beta; H set parts came off
   without a Heat Treatment Kit): the client sends only 0x199 for a part dropped on a filled slot and expects the old

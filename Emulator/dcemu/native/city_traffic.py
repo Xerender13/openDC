@@ -25,14 +25,31 @@ those within 320 m of each player as 0x2bd / 0x2c2. Measured from its output (20
   Moon Palace 300, Koinonia 400, Cras 438, Oros 380 (its ini: 300 / 400 / 500 / 500).
 The agent had the cities wrong: areas 52-61 (where the 2011 client drives Oros) got Cras's lanes and
 cars, 76-85 (Cras) Oros's. Here an area's city follows the client: area = 4 + 24 x (block - 1) +
-channel, blocks 1 Moon Palace, 2 Koinonia, 3 Oros, 4 Cras (5: Taipei, guessed). Areas 0-3 (the
-tutorial) have none, as under the 2008 server.
+channel, blocks 1 Moon Palace, 2 Koinonia, 3 Oros, 4 Cras. Mitro City (Taipei) is not on that scheme: the client
+joined area 68 there from Moon Palace channel 0 (2026-10-16), so 62-75 (unused by the 10 channels of Oros and Cras)
+are taken as Taipei. Areas 0-3 (the tutorial) have none, as under the 2008 server.
 
 The cities' files are the client's, by its world numbering (0x44e840: 1 MOONPALACE, 2 KOINONIA, 3 CRAS,
 4 OROS, 5 TAIPEI, 6 NEOOROS; TrafficFlowControl.xlt's "N차도시" blocks use the same order):
 server_data/tables/<City>/<city>.tcs (tools/sync_data.py) and the car models of Init/TrafficFlowControl.xlt
-(weighted by its frequency column 1 / 3 / 6). Taipei has no .tcs (path_taipei.chpath + .signal: path
-traffic like the races' 0x21e), so it has no city traffic yet.
+(weighted by its frequency column 1 / 3 / 6).
+
+Taipei has no .tcs: its traffic is path traffic like the races' (the client loads path_taipei.chpath for the city,
+client 0x4a8e60 mode 0; its traffic object takes 0x21e there: u32 tick, f32 progress, f16 speed, f16 acceleration,
+u16 car id, u16 model, u16 path). path_taipei.chpath: 136 one-way lanes (paths 0/1/2.. side by side), 336 km. Its
+cars are driven by the race traffic engine (tw_traffic.Race: following, right of way where paths cross, a car at its
+path's end comes back at the start out of sight), with city speeds and TrafficFlowControl block 5's models; the
+crossings are found once, in a thread (about 2 s). Collisions (0x220 / 0x223) wreck the car, as in races.
+Signals: path_taipei.signal ("trafficSignal", version, path count, then per path a count and "type path position"
+lines; position in progress units). ZoneServer read these too (trafficSignal_%d.txt / PVP_map*.signal, 0x5983ad;
+XiPathIndex signal entry: position, metres, type, state, last change) and ran them on one 60 s cycle of the server
+clock (0x5976d0, t = tick % 60000 ms): type 0 red 0-30 s, green 30-58 s, amber 58-60 s; type 2 the other phase:
+green 0-28 s, amber 28-30 s, red 30-60 s. The cars here stop for red, and for amber when they can do so comfortably.
+The client cannot show these: it reads .signal only for trainPath, and its lamps (0x5375e0, table from the .tcs) stay
+as they are in Taipei.
+chpath layout: "CHPATH" header, then chunks [u16 tag][u8][u32 size incl. the 7 header bytes] from 0x2a; tag 0x200
+per path holds (after one byte) 0x210, 0x211 (u32 x3, f32 total, f32 total) and 0x220 (u32 n, n x (f32 progress,
+x, y, z)); progress = travel time at 100 km/h (metres / 27.78).
 
 An area's traffic runs while players are in it (and a while after), stepped once a second; each player
 gets the cars and lamps within 320 m once a second, in frames split at command boundaries.
@@ -66,15 +83,66 @@ STOPPED = -100.0            # acceleration sent for a stopped car
 # world city id -> (folder, .tcs file); the area block -> world city id
 CITIES = {1: ('MoonPalace', 'moonpalace.tcs'), 2: ('Koinonia', 'koinonia.tcs'), 3: ('Cras', 'Cras.tcs'),
           4: ('Oros', 'Oros.tcs'), 5: ('Taipei', None)}
+PATH_CITIES = {5: os.path.join('Taipei', 'Path', 'path_taipei.chpath')}     # path traffic (0x21e)
 AREA_CITY = {1: 1, 2: 2, 3: 4, 4: 3, 5: 5}
-CAR_COUNT = {1: 300, 2: 400, 3: 438, 4: 380}    # what TrafficAgent drove per area
+TAIPEI_AREAS = range(62, 76)
+CAR_COUNT = {1: 300, 2: 400, 3: 438, 4: 380, 5: 400}    # what TrafficAgent drove per area; Taipei: chosen
+PATH_SPEED = (40 / 3.6, 70 / 3.6)                       # m/s: Taipei's cars (the other cities' lanes: 70 km/h)
+PATH_STEP = 0.5                                         # seconds between engine steps of a path-traffic area
+SIGNAL_CYCLE = 60.0                                     # ZoneServer's path signals (module text)
+
+
+def path_light(kind, t):
+    """'G', 'A' or 'R' of a path signal of type kind (0 / 2) at t seconds into the 60 s cycle."""
+    if kind == 2:
+        return 'G' if t < 28 else 'A' if t < 30 else 'R'
+    return 'R' if t < 30 else 'G' if t < 58 else 'A'
+
+
+def read_signals(text):
+    """A path .signal file -> {path: [(position, type), ..] by position}."""
+    out = {}
+    for line in text.splitlines()[4:]:
+        f = line.split('//')[0].split()
+        if len(f) == 3:
+            try:
+                kind, path, pos = int(f[0]), int(f[1]), float(f[2])
+            except ValueError:
+                continue
+            out.setdefault(path, []).append((pos, kind))
+    for v in out.values():
+        v.sort()
+    return out
 
 
 def area_city(area):
     """World city id of a city area, or None (the tutorial areas 0-3, battle areas)."""
     if area < 4:
         return None
+    if area in TAIPEI_AREAS:
+        return 5
     return AREA_CITY.get((area - 4) // 24 + 1)
+
+
+def read_chpath(data):
+    """A .chpath file -> [(total progress, [(x, y, z), ..])] by path index (layout in the module text)."""
+    def chunks(o, end):
+        while o + 7 <= end:
+            tag, _, size = struct.unpack_from('<HBI', data, o)
+            if size < 7:
+                return
+            yield tag, o + 7, o + size
+            o += size
+    paths = []
+    for tag, a, b in chunks(0x2a, len(data)):
+        if tag != 0x200:
+            continue
+        sub = {t: (x, y) for t, x, y in chunks(a + 1, b)}
+        total, = struct.unpack_from('<f', data, sub[0x211][0] + 12)
+        o = sub[0x220][0]
+        n, = struct.unpack_from('<I', data, o)
+        paths.append((total, [struct.unpack_from('<4f', data, o + 4 + 16 * i)[1:] for i in range(n)]))
+    return paths
 
 
 def car_models(path):
@@ -298,6 +366,134 @@ class AreaTraffic:
         return out
 
 
+class _Viewer:
+    __slots__ = ('pos',)
+
+    def __init__(self, pos):
+        self.pos = pos
+
+
+_engine = None
+
+
+def engine():
+    """The race traffic engine (tw_traffic.py), loaded once."""
+    global _engine
+    if _engine is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('city_path_engine', os.path.join(os.path.dirname(__file__), 'tw_traffic.py'))
+        _engine = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_engine)
+    return _engine
+
+
+class PathCity:
+    """A path-traffic city (Taipei): the engine's paths (by the client's path index) and crossings, the
+    signals (path -> [(metres, type)]) and the car models."""
+    def __init__(self, paths, models, signals=None):
+        e = engine()
+        self.paths = [e.Path(total, pts if pts else [(0.0, 0.0, 0.0)]) for total, pts in paths]
+        self.junctions = e.find_junctions(self.paths)
+        self.models = models or [(0, 1)]
+        self.km = sum(p.length for p in self.paths) / 1000
+        self.signals = {}
+        for k, sigs in (signals or {}).items():
+            if 0 <= k < len(self.paths) and self.paths[k].total > 0:
+                path = self.paths[k]
+                self.signals[k] = [(pos / path.total * path.length, kind) for pos, kind in sigs]
+
+
+def _city_race():
+    """The engine's Race with the path signals added to its stops."""
+    e = engine()
+    if getattr(e, 'CityRace', None) is None:
+        class CityRace(e.Race):
+            signals = {}
+
+            def junction_gaps(self, now, ahead):
+                waits = super().junction_gaps(now, ahead)
+                t = (tick() % int(SIGNAL_CYCLE * 1000)) / 1000.0
+                for c in ahead:
+                    sigs = self.signals.get(c.path)
+                    if not sigs:
+                        continue
+                    d = self.metres_along(c)
+                    for m, kind in sigs:
+                        if m <= d:
+                            continue
+                        gap = m - d - 3.0                   # the stop line a little before the signal
+                        if gap > c.v * c.v / (2 * e.BRAKE) + c.v * 4 + 30:
+                            break                           # too far to matter yet
+                        light = path_light(kind, t)
+                        if light == 'R' and gap > c.v * c.v / (2 * e.BRAKE) - 1 or \
+                                light == 'A' and gap > c.v * c.v / (2 * e.BRAKE / COMFORT) - 1:
+                            waits[c] = min(waits.get(c, gap), gap)
+                            c.go = False
+                        break
+                return waits
+        e.CityRace = CityRace
+    return e.CityRace
+
+
+class PathAreaTraffic:
+    """The traffic of one path-traffic area: an engine Race without a race (no start line, no countdown)."""
+    def __init__(self, area, city, count, rng=None):
+        e = engine()
+        self.area, self.city, self.idle_since = area, city, None
+        rng = rng or random.Random()
+        cls = _city_race()
+        race = self.race = cls.__new__(cls)
+        race.room, race.track, race.level, race.signals = area, None, 'city', city.signals
+        race.paths, race.junctions, race.models = city.paths, city.junctions, city.models
+        race.speed_min, race.speed_max = PATH_SPEED
+        race.start, race.hold_until = (1e12, 1e12), 0.0
+        race.cars, race.racers = [], set()
+        grid, next_id = e.Grid(), 1
+        total = city.km * 1000
+        share = [count * path.length / total if total else 0 for path in city.paths]
+        ns = [int(x) for x in share]                # by lane length, the remainders to the largest fractions
+        for k in sorted(range(len(share)), key=lambda k: ns[k] - share[k])[:count - sum(ns)]:
+            ns[k] += 1
+        for p, (path, n) in enumerate(zip(city.paths, ns)):
+            if not n:
+                continue
+            gap = path.length / n
+            for k in range(n):
+                prog = path.metres((k + rng.uniform(0.1, 0.9)) * gap)
+                pos = path.at(prog)
+                if not any(grid.near(pos, 8.0)):
+                    grid.add(race.new_car(next_id, p, prog, race.cruise()), pos)
+                    next_id += 1
+        race.by_id = {c.id: c for c in race.cars}
+        race.task = None
+        self.cars = race.cars
+        self.task = asyncio.get_running_loop().create_task(self.run())
+
+    async def run(self):
+        """The engine's own loop steps every 0.2 s (about 20 ms for 250 cars here); a city area takes 0.5 s."""
+        last = time.monotonic()
+        while True:
+            await asyncio.sleep(PATH_STEP)
+            now = time.monotonic()
+            self.race.step(now, min(now - last, 1.0))
+            last = now
+
+    def step(self):
+        pass                                        # run() steps the engine
+
+    def see(self, positions):
+        self.race.racers = {_Viewer(tuple(p[:2])) for p in positions}
+
+    def commands_near(self, x, y, now):
+        return [m[2:] for m in self.race.snapshot(x, y, now)]      # [u16 type][body] each
+
+    def hit(self, car_id):
+        self.race.hit(car_id)
+
+    def close(self):
+        self.task.cancel()
+
+
 def frames(commands):
     """Commands ([u16 type][body] each) packed into frames of at most MAX_OUT bytes, cut between commands."""
     out, chunk, size = [], [], 0
@@ -318,9 +514,17 @@ class CityTraffic:
         self.data, self.log = data_dir, log
         self.counts = {**CAR_COUNT, **(counts or {})}
         self.cities = {}            # world city id -> City (loaded on first use), None if it has no .tcs
-        self.areas = {}             # area -> AreaTraffic
+        self.areas = {}             # area -> AreaTraffic / PathAreaTraffic
+        self.loading = {}           # world city id -> future of a PathCity being built
         self.models = car_models(os.path.join(data_dir, 'Init', 'TrafficFlowControl.xlt'))
         self.task = None
+        self.waiting = {}           # world city id -> areas to start once its PathCity is built
+
+    def hit(self, area, car_id):
+        """A player hit a path-traffic car (0x220 / 0x223)."""
+        at = self.areas.get(area)
+        if isinstance(at, PathAreaTraffic):
+            at.hit(car_id)
 
     def city(self, cid):
         if cid not in self.cities:
@@ -337,12 +541,54 @@ class CityTraffic:
                 self.log(f'city traffic: no lanes for city {cid} ({path or "no .tcs: path traffic not done yet"})')
         return self.cities[cid]
 
+    def path_city(self, cid, area):
+        """A path-traffic city, built in a thread on first use (its crossings take seconds); None until then."""
+        if cid in self.cities:
+            return self.cities[cid]
+        if cid not in self.loading:
+            path = os.path.join(self.data, 'tables', PATH_CITIES[cid])
+            if not os.path.exists(path):
+                self.cities[cid] = None
+                self.log(f'city traffic: no paths for city {cid} ({path})')
+                return None
+
+            def build():
+                with open(path, 'rb') as f:
+                    paths = read_chpath(f.read())
+                sig = os.path.splitext(path)[0] + '.signal'
+                signals = read_signals(open(sig, encoding='cp949', errors='replace').read()) if os.path.exists(sig) else {}
+                return PathCity(paths, self.models.get(cid, []), signals)
+
+            def done(fut):
+                self.loading.pop(cid, None)
+                try:
+                    c = self.cities[cid] = fut.result()
+                except Exception as e:
+                    self.cities[cid] = None
+                    self.log(f'city traffic: {CITIES[cid][0]}: {e!r}')
+                    return
+                self.log(f'city traffic: {CITIES[cid][0]}: {len(c.paths)} paths, {c.km:.0f} km, '
+                         f'{sum(len(v) for v in c.junctions.values())} crossings, '
+                         f'{sum(len(v) for v in c.signals.values())} signals, {len(c.models)} car models')
+                for a in self.waiting.pop(cid, ()):
+                    self.touch(a)
+            self.loading[cid] = asyncio.get_running_loop().run_in_executor(None, build)
+            self.loading[cid].add_done_callback(done)
+        self.waiting.setdefault(cid, set()).add(area)
+        return None
+
     def touch(self, area):
         """A player is in the area: its traffic runs (started if needed)."""
         cid = area_city(area)
         if cid is None or self.counts.get(cid, 0) <= 0:
             return None
         at = self.areas.get(area)
+        if at is None and cid in PATH_CITIES:
+            city = self.path_city(cid, area)
+            if city is None or not city.paths:
+                return None
+            at = self.areas[area] = PathAreaTraffic(area, city, self.counts[cid])
+            self.log(f'city traffic: area {area} ({CITIES[cid][0]}) starts, {len(at.cars)} cars on paths')
         if at is None:
             city = self.city(cid)
             if city is None or not city.spawn:
@@ -368,9 +614,13 @@ class CityTraffic:
                     at.idle_since = at.idle_since or time.monotonic()
                     if time.monotonic() - at.idle_since > IDLE_SECONDS:
                         del self.areas[area]
+                        if isinstance(at, PathAreaTraffic):
+                            at.close()
                         self.log(f'city traffic: area {area} stops (no players)')
                     continue
                 try:
+                    if isinstance(at, PathAreaTraffic):
+                        at.see([p.pos for p in players])
                     at.step()
                     for p in players:
                         for f in frames(at.commands_near(*p.pos, now)):

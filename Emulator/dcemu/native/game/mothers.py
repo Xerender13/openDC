@@ -12,7 +12,11 @@ start / end post, up to 4 rewards (exp, mito, reputation "GC_Reputation_0N amoun
         "To Mitro City" (mq_5th_003) also makes it send 0xc80 for Mitro City (position.py: city travel).
   0x17f MotherQuestComplete (u32 row) -> 0x180 (u32 row): client 0x513460 shows the done message; the rewards come
         as 0x7d1 (exp), 0x7d2 (Mito), 0x7d4 (reputation).
-  0x181 MotherQuestGiveUp (u32 row, u32) -> 0x182 (u32 row): the client only refreshes its window.
+  0x181 MotherQuestGiveUp (u32 row, u32 1 = a child quest failed (client 0x5138b0, after its 0x10d) / 0 = given up
+        (0x513a70, after 0x10f)) -> 0x182 (u32 row): the client's handler 0x50ed80 only refreshes its window and never
+        drops the mother quest from its held list, so the NPC would not offer it again until the next login (user:
+        Mitro City missions not repeatable after failing); 0x17c is sent again after it (0x754fb0 clears and rebuilds
+        the list).
   0x17c MyMotherQuestList (u32 n, n x (u32 row, u32 flag)) at login: the client's list (0x754fb0) of the mother
         quests held; flag != 0 sets a bool at +0x28 of its entry, read here as "done" *(guess)*.
   0x7d1 (XiStrExpInfo @2, u16 level @0xe, i32 exp gained @0x10; client 0x517cd0, text 11198 "%d EXP Received"),
@@ -127,11 +131,14 @@ async def add_reputation(session, p, name, n):
     send(session, reputation_frame(REPUTATIONS.index(name) + 1, await reputation(p, name), n))
 
 
+def list_frame(held):
+    return Frame(0x17c, struct.pack('<I', len(held)) + b''.join(
+        struct.pack('<II', i, int(s == DONE)) for i, s in sorted(held.items())))
+
+
 async def on_login(session, p):
     """0x17c the mother quests held, 0x7d4 the three reputations."""
-    held = await load(p)
-    send(session, Frame(0x17c, struct.pack('<I', len(held)) + b''.join(
-        struct.pack('<II', i, int(s == DONE)) for i, s in sorted(held.items()))))
+    send(session, list_frame(await load(p)))
     for k, name in enumerate(REPUTATIONS):
         send(session, reputation_frame(k + 1, await reputation(p, name)))
 
@@ -238,3 +245,4 @@ async def mother_give_up(session, frame):
         await db.execute(DELETE_SQL, (db.server_id, c.cid, rows()[i]['id']))
         session.log.note(f'mother quest given up: {rows()[i]["id"]} ({frame.payload[4:8].hex()})')
     send(session, Frame(0x182, struct.pack('<I', i)))
+    send(session, list_frame(held))         # the client keeps a given-up / failed one held otherwise

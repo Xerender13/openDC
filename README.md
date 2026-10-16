@@ -43,6 +43,7 @@ the rest itself.
 4. Log in with `admin` / `admin`, or any new ID and password (accounts are created on first login).
 
 Settings: `Emulator/emulator.ini` (server) and `Client/DriftCityLauncher.ini` (server address, window mode, HUD).
+Moving an existing setup (database, client) to another machine: [`Emulator/docs/HANDOVER.md`](Emulator/docs/HANDOVER.md).
 To let other players join, put your address in their `DriftCityLauncher.ini` and in
 `Emulator/server_data/serverlist.txt`, and open TCP ports 11005-11051.
 

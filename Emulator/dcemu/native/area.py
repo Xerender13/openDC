@@ -279,6 +279,8 @@ def relay_near(t):
             return
         if t in (0x220, 0x223) and context.race_traffic:
             context.race_traffic.hit(car, struct.unpack_from('<H', p)[0])
+        if t in (0x220, 0x223) and session.service == 'area' and context.city_traffic:
+            context.city_traffic.hit(car.area, struct.unpack_from('<H', p)[0])     # Taipei's path traffic
         receivers = world_of(session).receivers(car)
         if receivers:
             out = Frame(t, p)

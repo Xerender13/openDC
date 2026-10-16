@@ -7,6 +7,7 @@
 #   launch.bat setup          first time (and after a client patch): build the emulator image, copy the client's tables
 #   launch.bat init-db        create the game database from db\*.sql (an existing one is DELETED: asks first)
 #   launch.bat restore-db F   replace the game database with the SQL Server backup F (e.g. db\SKDBTW_clean.bak; asks)
+#   launch.bat backup-db [F]  save the game database to a SQL Server backup (default db\SKDBTW_<date>.bak)
 #   launch.bat stop           stop the emulator and the database
 #   launch.bat restart-emu    restart the emulator (clients are disconnected)
 #   launch.bat status         what is running
@@ -94,6 +95,17 @@ switch ($Command) {
         if ($LASTEXITCODE -ne 0) { Die 'the restore failed' }
         docker exec dcemu2011_db rm -f /var/opt/mssql/data/restore.bak
         Write-Host 'database restored'
+    }
+    'backup-db' {
+        $file = $Rest | Select-Object -First 1
+        if (-not $file) { $file = "db\SKDBTW_$(Get-Date -Format yyyy-MM-dd).bak" }
+        Wait-Db
+        docker @Sql -Q "BACKUP DATABASE SKDBTW TO DISK='/var/opt/mssql/data/backup.bak' WITH INIT, COPY_ONLY" | Out-Null
+        if ($LASTEXITCODE -ne 0) { Die 'the backup failed' }
+        docker cp dcemu2011_db:/var/opt/mssql/data/backup.bak $file
+        if ($LASTEXITCODE -ne 0) { Die 'copying the backup out of the container failed' }
+        docker exec dcemu2011_db rm -f /var/opt/mssql/data/backup.bak
+        Write-Host "database saved to $file"
     }
     'stop'        { docker compose stop emulator db }
     'restart-emu' { Need-Setup; Compose restart emulator }

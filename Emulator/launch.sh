@@ -13,6 +13,8 @@
 #   ./launch.sh logs [part]  follow a log: emu (default), db
 #   ./launch.sh setup        first time: the Python environment (.venv with python-tds) and the client tables (server_data/Init, server_data/tables)
 #   ./launch.sh init-db      create the game database from db/*.sql (an existing one is DELETED: asks first)
+#   ./launch.sh backup-db [F]    save the game database to a SQL Server backup (default db/SKDBTW_<date>.bak)
+#   ./launch.sh restore-db F     replace the game database with the backup F (e.g. db/SKDBTW_clean.bak; asks first)
 #
 # Needs: Python 3.10+, podman (or docker) with podman-compose / docker compose. The emulator's settings are in
 # emulator.ini; the client's in ../Client/DriftCityLauncher.ini.
@@ -44,6 +46,11 @@ python() {
   if [ -x .venv/bin/python ]; then echo .venv/bin/python
   elif [ -x .venv/Scripts/python.exe ]; then echo .venv/Scripts/python.exe
   else echo python3; fi
+}
+
+sqlcmd() {      # SQL Server's sqlcmd inside the database container, as sa (password from emulator.ini)
+  local pw; pw=$(sed -n '/^\[database\]/,/^\[/s/^password *= *//p' emulator.ini | sed 's/ *;.*//' | head -1)
+  "$(engine)" exec dcemu2011_db /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$pw" -b "$@"
 }
 
 listening() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q .; }
@@ -161,6 +168,24 @@ case "${1:-all}" in
     old_stack
     compose stop db || true
     compose --profile setup run --rm db-setup ;;
-  -h|--help|help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' ;;
+  backup-db)
+    f=${2:-db/SKDBTW_$(date +%F).bak}
+    start_db
+    sqlcmd -Q "BACKUP DATABASE SKDBTW TO DISK='/var/opt/mssql/data/backup.bak' WITH INIT, COPY_ONLY" >/dev/null
+    "$(engine)" cp dcemu2011_db:/var/opt/mssql/data/backup.bak "$f"
+    "$(engine)" exec dcemu2011_db rm -f /var/opt/mssql/data/backup.bak
+    echo "database saved to $f" ;;
+  restore-db)
+    f=${2:-}
+    [ -n "$f" ] && [ -f "$f" ] || die "usage: ./launch.sh restore-db FILE.bak"
+    read -r -p "This replaces the SKDBTW database (all accounts and characters) with $f. Type YES: " a
+    [ "$a" = YES ] || die "cancelled"
+    stop_emu
+    start_db
+    "$(engine)" cp "$f" dcemu2011_db:/var/opt/mssql/data/restore.bak
+    sqlcmd -Q "IF DB_ID(N'SKDBTW') IS NOT NULL ALTER DATABASE SKDBTW SET SINGLE_USER WITH ROLLBACK IMMEDIATE; RESTORE DATABASE SKDBTW FROM DISK='/var/opt/mssql/data/restore.bak' WITH REPLACE, MOVE 'SKDBTW' TO '/var/opt/mssql/data/SKDBTW.mdf', MOVE 'SKDBTW_log' TO '/var/opt/mssql/data/SKDBTW_log.ldf'; ALTER DATABASE SKDBTW SET MULTI_USER" >/dev/null
+    "$(engine)" exec dcemu2011_db rm -f /var/opt/mssql/data/restore.bak
+    echo "database restored (start the emulator: ./launch.sh server)" ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (./launch.sh help)" ;;
 esac
