@@ -389,7 +389,7 @@ async def equip_item(session, frame):
         return send(session, Frame(0x19a, frame.payload[:12]))
     contents = context.data.contents
     on_car = [i for i in p.items if i.car_id == car_id and i is not it and (i.state & 0xffff) == ON_CAR]
-    changed = []
+    changed, redraw = [], None
     if on_top(info.type):
         base = next((i for i in on_car if not on_top(info_of(i).type) and slot_of(i) == slot), None)
         if not base or info.grade not in GRADE_FITS.get(info_of(base).grade, ()):
@@ -411,6 +411,9 @@ async def equip_item(session, frame):
             base = SLOT_BASE[info.type]
             free = next((s for s in range(base, base + lines) if s not in taken), None)
             if free is not None:
+                # the client has already drawn the new part over the dropped-on one (user: the first set's parts
+                # became invisible): resend that one after the new part so it is drawn back in its own slot
+                redraw = old
                 slot, old = free, None
                 frame = Frame(frame.type, struct.pack('<III', inven_idx, slot, car_id) + frame.payload[12:])
         if old:
@@ -435,7 +438,7 @@ async def equip_item(session, frame):
     await save_state(p, *changed)
     session.log.note(f'equip {info.item_id} on car {car_id} slot {slot}')
     send(session, Frame(0x19a, frame.payload[:12]))
-    send(session, mod_list(*((i, CHANGED) for i in changed)))
+    send(session, mod_list(*((i, CHANGED) for i in changed + ([redraw] if redraw else []))))
     for f in stat_frames(p):
         send(session, f)
 

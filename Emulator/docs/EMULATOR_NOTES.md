@@ -23,6 +23,8 @@ Paths in older entries say `Server/...`: that folder is now `Server2008/`.
   first one off): the client sends the slot it was dropped on (Double Beta Dura -> 107 with 106 free); the part there
   is replaced only when the type's Main.PartsInvenLine lines are full (0x19a echoes the slot used). Client slot pick:
   0x5fe32c.. (the target if free, else the first free index below the per-type limit 0x5fdde0, default 2).
+  The client draws the new part over the dropped-on one at once (user: the first set's parts went invisible, the
+  DB was right): the 0x192 now also carries the dropped-on part after the new one. Not yet confirmed.
 - **Set parts need no Heat Treatment Kit** (user, confirmed with other players: the kit is only for normal H parts):
   items.needs_heat returns False for set parts (setparts.is_set) and for an H docking on one; they drag off / swap
   freely. Normal H parts still only by a kit used on the part (0x1a3).
