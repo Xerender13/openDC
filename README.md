@@ -47,6 +47,7 @@ To let other players join, put your address in their `DriftCityLauncher.ini` and
 `Emulator/server_data/serverlist.txt`, and open TCP ports 11005-11051.
 
 **Current emulator progress (16.10.2026):** 
+
 **Game features that haven't been done yet:**
 - Channels and Channel Battle
 - Party Patrol
