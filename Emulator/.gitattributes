@@ -1,0 +1,10 @@
+# Line endings that must survive a checkout on Windows (git's core.autocrlf):
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+# db/01_initialize_database.sql is UTF-16: never convert it
+*.sql       -text
+*.bak       binary

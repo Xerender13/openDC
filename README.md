@@ -1,2 +1,39 @@
 # openDC
-Drift City (Skid Rush) Stage 2 Emulation Project
+
+Drift City (Skid Rush) Stage 2 Emulation Project: a server emulator for the **2011 US Drift City client**.
+
+The emulator is a native server written in Python. It keeps the original server's architecture (separate auth /
+lobby / game / area / battle-area services, the original SQL Server database tables), reads the server tables in the
+2011 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
+the rest itself.
+
+| Folder | What |
+|---|---|
+| `Emulator/` | the server: `launch.sh` (Linux) / `launch.bat` (Windows), `docker-compose.yml`, the code in `dcemu/`. Start with [`Emulator/README.md`](Emulator/README.md); the detailed research notes are [`Emulator/docs/EMULATOR_NOTES.md`](Emulator/docs/EMULATOR_NOTES.md) |
+| `Launcher/` | source of `DriftCityLauncher` (Go): starts the client against your server; `build.sh` builds the Linux and Windows launchers into `Client/` |
+| `Client/` | **not in this repository**: the 2011 US client (with `DriftCityLauncher`) is shared separately. Put it here, next to `Emulator/` |
+
+## Quick start
+
+1. Get the client and unpack it as `Client/` in this folder.
+2. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / macOS) or podman / docker
+   with compose (Linux; also Python 3.10+).
+3. Start it:
+
+   **Windows** (in `Emulator\`):
+   ```bat
+   launch.bat setup       :: once: builds the emulator image, copies the client's tables
+   launch.bat init-db     :: once: an empty database with the account admin / admin
+   launch.bat             :: database + emulator + the client
+   ```
+
+   **Linux** (in `Emulator/`):
+   ```sh
+   ./launch.sh setup && ./launch.sh init-db && ./launch.sh
+   ```
+
+4. Log in with `admin` / `admin`, or any new ID and password (accounts are created on first login).
+
+Settings: `Emulator/emulator.ini` (server) and `Client/DriftCityLauncher.ini` (server address, window mode, HUD).
+To let other players join, put your address in their `DriftCityLauncher.ini` and in
+`Emulator/server_data/serverlist.txt`, and open TCP ports 11005-11051.

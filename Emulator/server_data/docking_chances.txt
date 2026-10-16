@@ -1,0 +1,48 @@
+# Docking part crafting: the chances and ranges used when three parts and a seed are combined
+# (parts shop, Combine tab; dcemu/native/game/docking.py). Edit freely: the emulator reads this file when
+# it starts. Columns are separated by spaces or tabs; text after # is a comment.
+#
+# letters <grade> <seed> <chance of letter A> <B> <C> ...
+#   The chance (any unit, a row is scaled to 100 %) of each grade letter. <grade> is the parts' grade:
+#   N, S or H. <seed> is "seed" (Seed Parts) or "plus" (Seed PLUS Parts). The number of values is the number
+#   of letters that can be made: a 0 or a missing value means that letter is never made. The client has
+#   Normal A-H, Super A-J and Hyper A-O.
+#   Defaults: A about 26 %, each next letter 3/4 of the one before (the curve of the player video "Drift City
+#   Remastered Dockings Guide"); with a Seed PLUS each next letter 4/5 of the one before (a guess).
+#   The letter decides the hidden bonus: the docked part's base x the letter's % (Normal A 10 % .. H 80 %,
+#   Super A 7 % .. J 70 %, Hyper A 4 % .. O 56 %, from the client's tables).
+#
+#                A      B      C      D      E      F      G      H
+letters N seed  27.78  20.84  15.63  11.72   8.79   6.59   4.94   3.71
+letters N plus  24.03  19.23  15.38  12.30   9.84   7.87   6.30   5.04
+#                A      B      C      D      E      F      G      H      I      J
+letters S seed  26.49  19.87  14.90  11.18   8.38   6.29   4.71   3.54   2.65   1.99
+letters S plus  22.41  17.92  14.34  11.47   9.18   7.34   5.87   4.70   3.76   3.01
+#                A      B      C      D      E      F      G      H      I      J      K      L
+letters H seed  25.82  19.36  14.52  10.89   8.17   6.13   4.60   3.45   2.58   1.94   1.45   1.09
+letters H plus  21.48  17.18  13.74  11.00   8.80   7.04   5.63   4.50   3.60   2.88   2.31   1.84
+#
+# white <grade> <lowest> <highest> <rate>
+#   The white range below is cut into one band per letter, in order: A gets the lowest points, the last letter
+#   the highest (a later letter always has at least the white of an earlier one).
+#   Normal and Super: the white (base) points are a whole number from <lowest> to the best the parts allow:
+#   the parts' average base (table value + random bonus) rounded down to a multiple of 5, times <rate>,
+#   at most <highest>. Not measured: ranges from StrategyWiki, rates chosen so the best parts reach the top.
+white N 0 19 1.0
+white S 12 27 0.9
+#
+# white_hyper <sum> <lowest> <highest> <lowest step> <highest step>
+#   Hyper, as measured in the player video: every part counts its base // 5; with the three counts adding up
+#   to <sum> the range is <lowest> .. <highest>; each count more moves the lowest by <lowest step> and the
+#   highest by <highest step> (rounded up). Defaults: 3 x base 37-39 (sum 21) -> 21-27, 3 x base 40-43 ->
+#   24-31, 3 x base 45-48 -> 27-35.
+white_hyper 21 21 27 1 1.3333
+#
+# purple <spread>
+#   The purple bonus points: from the parts' average enhancement (rounded down) to that + <spread>
+#   (+0 parts: 0-5, +12 parts: 12-17; at most 25, the client's largest "Docking Bonus").
+purple 5
+#
+# upgrade_max_level <level>
+#   Three parts without a seed make the next higher part, only up to this level.
+upgrade_max_level 70

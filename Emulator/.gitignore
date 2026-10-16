@@ -1,0 +1,28 @@
+# Machine-local state: never commit
+.ticket_secret
+.emulator.pid
+.venv/
+__pycache__/
+*.pyc
+logs/
+
+# Original client packs kept for the tools' "reset" (copies of the game's files)
+client_backup/
+
+# Copied from the client by `./launch.sh setup` / `launch.bat setup` (tools/sync_data.py): rebuilt on each machine
+server_data/Init/
+server_data/teammark/
+server_data/tables/*
+# ... except the 2008 server's own tables, which only this repository has
+!server_data/tables/Contents.ini
+!server_data/tables/InstantDrop_Server.tdf
+!server_data/tables/ItemDropServer.tdf
+!server_data/tables/ItemServer.tdf
+!server_data/tables/ItemUpgradeServer.tdf
+!server_data/tables/LevelServer.tdf
+!server_data/tables/rushtimetable.txt
+!server_data/tables/UseItemServer.tdf
+
+# Database backups other than the clean one (they hold accounts and characters)
+db/*.bak
+!db/SKDBTW_clean.bak

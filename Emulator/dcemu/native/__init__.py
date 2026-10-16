@@ -1,0 +1,117 @@
+"""Native services: the emulator is the server (no 2008 ZoneServer behind them).
+
+Same architecture as the original server (separate auth / lobby / game / area / barea services
+on their own ports, the same SQL Server database and tables, serverlist.txt), but the messages
+are the 2011 client's and the tables are read in the 2011 client's own formats (.xlt / .tdf as
+the client has them, see data.py), not converted to the 2008 server's columns.
+
+A service is native when its ZoneServer port in emulator.ini is 0; its handlers are the modules
+here, registered like the proxy handlers (dcemu.handlers.on). Shared state (the database,
+the server list) lives in `context`, set up by __main__.
+
+Times: the 2008 server's clock runs an hour behind UTC (its time_t values, e.g. the lobby's
+character dates and GetDateTime, are UTC - 3600, while its broken-down dates are UTC; the
+database stores UTC). While game/area still run on the 2008 server the native services use the
+same clock: CLOCK_SHIFT.
+"""
+import calendar
+import hashlib
+import hmac
+import os
+import secrets
+import time
+
+CLOCK_SHIFT = -3600
+
+
+def now():
+    """The server clock as a time_t."""
+    return int(time.time()) + CLOCK_SHIFT
+
+
+_tick0 = time.monotonic()
+
+
+def tick():
+    """The server tick (GetSystemTick): milliseconds since the emulator started, as a u32."""
+    return int((time.monotonic() - _tick0) * 1000) & 0xffffffff
+
+
+def time_t(dt):
+    """A database datetime (UTC) -> time_t on the server clock; None -> 0."""
+    return calendar.timegm(dt.timetuple()) + CLOCK_SHIFT if dt else 0
+
+
+SECRET_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.ticket_secret')
+
+
+def _secret():
+    try:
+        return open(SECRET_FILE, 'rb').read()
+    except OSError:
+        s = secrets.token_bytes(32)
+        with open(SECRET_FILE, 'wb') as f:
+            f.write(s)
+        return s
+
+
+def ticket_for(member):
+    """The login ticket (auth -> lobby) of an account: derived from the account and a secret kept in
+    Emulator/.ticket_secret, so it stays valid when the emulator restarts (the client keeps its
+    ticket and checks in to the lobby again without logging in)."""
+    d = hmac.new(context.secret, member.lower().encode('utf-8'), hashlib.sha256).digest()
+    return (int.from_bytes(d[:4], 'little') & 0x7fffffff) | 1
+
+
+class Context:
+    db = None            # native.db.Database
+    data = None          # native.data.Tables
+    server_list = []     # native.auth.ServerEntry
+    secret = _secret()   # for ticket_for
+    ranking_port = 0
+    start_time = now()   # sent in LoadCharAck (m_ServerStartTime)
+    delete_wait_days = None  # emulator.ini [native] delete_wait_days; None = what the client asks
+    race_traffic = None      # native.race.RaceTraffic, when barea is native
+    city_traffic = None      # native.city_traffic.CityTraffic: the city's traffic cars ([traffic] city = native)
+    sections = {}            # battle zone: PvP channel id -> (name, lowest car grade, highest, exp multiplier)
+    practice_alone = True    # battle zone: a room with one member starts a practice run, not a race
+    realmatch = 'always'     # Real Match open hours: always, schedule (realmatchtable.txt) or off
+    realmatch_minutes = 60   # schedule: how long each opening lasts
+    realmatch_car = (50, 9)  # the car everyone drives in a Real Match: car type, grade; None = own cars
+    realmatch_effect = 1     # Etc.RealMatchEffect while a player is in a Real Match room (0 = never)
+    laptime_level_limit = False  # Lap Time: laptimeinfo.txt's level limit per arena
+    sticker_upload = 'all'   # who may upload stickers: all or gm
+    sticker_daily_limit = 0  # stickers a character may upload per day (0 = no limit)
+    drink_exp = 30           # EXP drink: % more exp from play (2008 CalcExperience: x 0.3; item text: 30%)
+    drink_mito = 50          # MITO drink: % more Mito from play (item text: 50%)
+    option_parts = False     # option parts can be equipped (Main.OptionItem; the official 2011 server: off)
+    docking_parts = True     # docking parts: combining and docking (Main.DockingItem)
+    mita500 = dict(enabled=False, bottles=10, regen_sec=300, buff_sec=1800, fee=500, lucky_rate=10)   # [mita500]
+    enhancer_plus = 1.5      # [items] enhancer_plus: x success % with a Mittron Enhancer PLUS (gauge fill 2)
+    enhancer_deluxe = 2.0    # [items] enhancer_deluxe: x success % with a DELUXE (gauge fill 4)
+    rename_days = 60         # [items] rename_days: days before a renamed character can be renamed again (kit text: 60)
+    auto_register = True     # [auth] auto_register: logging in with an unknown ID creates that account
+    mail_min_level = 1       # emulator.ini [mail] min_level: the lowest level that can send messages
+    mail_fee = 0             # [mail] fee: Mito per message sent
+    auction_days = 7         # emulator.ini [auction] days: how long a listing runs before it expires
+    auction_min_level = 1    # [auction] min_level (client GlobalContent AuctionMinLevel: 1 in the US client)
+    auction_item_fee = 7     # [auction] item_fee: % of the price taken at registration (Main.AuctionCommission)
+    auction_cars = True      # [auction] cars: the car auction open (0x708, Main.AuctionCar)
+    auction_car_fee = 10     # [auction] car_fee: % (2008 CarTaxReg 0.1)
+    auction_drift = False    # [auction] drift_items: the drift item auction
+    auction_drift_fee = 10   # [auction] drift_fee: % (Main.AuctionVSCommission)
+    daymission_reset_hour = 0  # emulator.ini [daymission] reset_hour: the hour (local) a new mission day starts
+    instant_city_minutes = 5    # emulator.ini [instant] city_offer_minutes: a City instant mission offered this often (0: off)
+    gotcha_enabled = True    # emulator.ini [gotcha] enabled: the Gotcha machine (main menu button)
+    gotcha_season = 13       # [gotcha] season: the newest season offered (Etc.GotchaSeason; client GotchaViewSeason 13)
+    gotcha_mito_price = 0    # [gotcha] mito_price / coin_price: 0 = the client's prices (gotcha.py)
+    gotcha_coin_price = 0
+    extra_flags = {}         # emulator.ini [flags]: content flags by 2011 name, sent at login
+    rush_schedule = True     # [rush] schedule: the 2008 rushtimetable.txt starts rushes at its hours
+    rush_always = False      # [rush] always: a zone with start_members players starts a rush (City.AlwaysRushTime)
+    rush_start_members = 2   # [rush] start_members (City.RushTimeStartMember)
+    rush_countdown = 60      # [rush] countdown: seconds from reaching start_members to the start (client text: 1 min)
+    rush_test_health = 0     # [rush] test_health: every rush HUV's health (for testing; 0 = the client's table)
+
+
+context = Context()

@@ -1,0 +1,69 @@
+# The emulator's container: the game database (SQL Server). The emulator itself runs on the host (python3 -m
+# dcemu); ./launch.sh starts all of it. (The old city traffic agent is in ../Server2008/traffic_agent/.)
+name: dcemu2011
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    container_name: dcemu2011_db
+    platform: linux/amd64
+    ports:
+      - "127.0.0.1:14330:1433"   # emulator.ini [database] (local only)
+    volumes:
+      - mssql-data:/var/opt/mssql
+    environment:
+      - "ACCEPT_EULA=Y"
+      - "MSSQL_SA_PASSWORD=z0ne!server"
+      - "MSSQL_PID=Express"
+    healthcheck:
+      test: ["CMD-SHELL", "(/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1') >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # The emulator itself in a container (Windows: launch.bat; anywhere: docker compose up -d). On Linux
+  # ./launch.sh runs it on the host instead and starts only "db". Clients connect to the published ports.
+  emulator:
+    build: .
+    image: dcemu2011-emulator
+    container_name: dcemu2011_emu
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - "DCEMU_DB_HOST=db"
+      - "DCEMU_DB_PORT=1433"
+    volumes:
+      - ./:/emu                  # emulator.ini, server_data/, logs/ stay on the host
+      - ../Client:/client:ro     # only for the table copy: docker compose run --rm emulator python -m tools.sync_data /client server_data
+    ports:
+      - "11005:11005"            # auth   (the client's DriftCityLauncher.ini address)
+      - "11011:11011"            # lobby  (these four: server_data/serverlist.txt)
+      - "11021:11021"            # game
+      - "11031:11031"            # area
+      - "11041:11041"            # barea
+      - "11051:11051"            # ranking
+    init: true                 # a real init as PID 1: the emulator stops on SIGTERM at once
+    restart: unless-stopped
+    stop_grace_period: 5s
+
+  # Creates (or rebuilds: everything in it is lost) the SKDBTW database from db/*.sql: ./launch.sh init-db
+  db-setup:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    platform: linux/amd64
+    profiles: ["setup"]
+    volumes:
+      - mssql-data:/var/opt/mssql
+      - ./db:/scripts:ro
+    environment:
+      - "ACCEPT_EULA=Y"
+      - "MSSQL_SA_PASSWORD=z0ne!server"
+      - "MSSQL_PID=Express"
+    entrypoint: ["/bin/bash", "/scripts/setup-db.sh"]
+    command: []
+
+volumes:
+  mssql-data:
+    # the database volume the 2008 server stack (../Server2008) made, so existing characters stay
+    name: driftcity2011_mssql-data
