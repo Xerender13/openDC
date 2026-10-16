@@ -5,6 +5,7 @@
 Drift City (Skid Rush) Stage 2 Emulation Project: a server emulator for the **2011 US Drift City client**.
 
 **DISCLAIMER: This project is all entirely made with Claude Code (vibecoded)**
+
 **It's still early stage work in progress!**
 
 The emulator is a native server written in Python. It keeps the original server's architecture from the leaked 2008 files (separate auth /
