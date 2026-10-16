@@ -5,8 +5,9 @@
 Drift City (Skid Rush) Stage 2 Emulation Project: a server emulator for the **2011 US Drift City client**.
 
 **DISCLAIMER: This project is all entirely made with Claude Code (vibecoded)**
+**It's still early stage work in progress!**
 
-The emulator is a native server written in Python. It keeps the original server's architecture (separate auth /
+The emulator is a native server written in Python. It keeps the original server's architecture from the leaked 2008 files (separate auth /
 lobby / game / area / battle-area services, the original SQL Server database tables), reads the server tables in the
 2011 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
 the rest itself.
@@ -44,8 +45,8 @@ Settings: `Emulator/emulator.ini` (server) and `Client/DriftCityLauncher.ini` (s
 To let other players join, put your address in their `DriftCityLauncher.ini` and in
 `Emulator/server_data/serverlist.txt`, and open TCP ports 11005-11051.
 
-Current emulator progress (16.10.2026): 
-Game features that haven't been done yet:
+**Current emulator progress (16.10.2026):** 
+**Game features that haven't been done yet:**
 - Channels and Channel Battle
 - Party Patrol
 - Virtual HUV
@@ -54,7 +55,9 @@ Game features that haven't been done yet:
 - Seasonal Events
 - Some drift shop items and specific consumable items
 
-Features that still require testing and might work with issues:
+**Features that still require testing and might work with issues:**
 - Crew management
 - Mitro City Missions
 - Repeatable Missions
+
+If you find a bug, something not working not listed above or something working wrongly (not like it was on official servers), creating an issue describing the issue will help the project to improve.
