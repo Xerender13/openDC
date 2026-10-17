@@ -1,8 +1,9 @@
 """Native auth service (11005): login and the server list, in the 2011 client's layouts.
 
 Login 0x14, C>S (2011, 0x9a from the type): u32 version @0 (payload), UTF-16 ID @4 (80 bytes),
-password @0x54 (64 bytes, plain text, ASCII), 4 more bytes. Checked like the 2008 server's
-getAccInfo: MEUSERMT row for the ID, PASSWORD = lowercase MD5 hex of the password, VALID = 'y'.
+password @0x54 (64 bytes, plain text: ANSI from the US client, UTF-8 from the EU one), 4 more bytes. The EU
+client (DriftCityEU.exe set to nation 7-10 by tools/eu_client.py) then sends 0x7cf Nation (u32 nation): native/nation.py.
+Checked like the 2008 server's getAccInfo: MEUSERMT row for the ID, PASSWORD = lowercase MD5 hex of the password, VALID = 'y'.
 An ID without a row is registered with the password typed (emulator.ini [auth] auto_register): the
 login then goes on as for an existing account. Empty passwords and IDs outside REGISTER_ID are refused.
 
@@ -18,19 +19,21 @@ Reply: one frame with
                    network address, the local one 127.0.0.1).
 The ticket is checked again by the lobby (check-in 0x29).
 """
+import asyncio
 import hashlib
 import os
 import re
 import secrets
 import socket
 import struct
+import traceback
 from dataclasses import dataclass
 
 from ..handlers import on
 from ..protocol import C2S
 from ..wire import Frame, read_wstr
 from ..handlers.auth import read_password
-from . import context, ticket_for
+from . import context, nation, ticket_for
 
 LOGIN, LOGIN_ACK, SERVER_LIST = 0x14, 0x16, 0x17
 OK, WRONG_PASSWORD, UNKNOWN_ID, NO_ID, SUSPENDED = 0, 1, 2, 4, 12
@@ -103,10 +106,32 @@ async def register(member, password):
 
 @on('native:auth', C2S, LOGIN)
 async def login(session, frame):
+    """The answer waits for the client's nation (nation.py: the EU client's 0x7cf comes right behind the login), so it
+    is sent from a task: this connection's next frames (that 0x7cf) are read meanwhile."""
     p = frame.payload
     member = read_wstr(p, 4, 80)
-    password = read_password(p[0x54:0x94])
-    result = await check_login(member, password)
+    asyncio.get_running_loop().create_task(answer_login(session, member, bytes(p[0x54:0x94])))
+
+
+async def answer_login(session, member, password_field):
+    try:
+        session.state['login_member'] = member
+        if nation.allowed_all() and all(b < 0x80 for b in password_field):
+            n = nation.detected(session)    # every nation may play and the password reads the same: no wait
+        else:
+            n = await nation.wait_detected(session)
+        password = read_password(password_field, utf8=n in nation.EU)
+        if not nation.allowed(n):
+            result = nation.WRONG_NATION
+            session.log.note(f'login {member!r}: refused, client nation {n} ({nation.name(n)}) is not allowed here '
+                             f'(emulator.ini [nation] allow: {nation.allowed_names()})')
+        else:
+            result = await check_login(member, password)
+            if result == OK:
+                nation.remember(member, n)
+    except Exception:
+        session.log.note('login failed:\n' + traceback.format_exc())
+        return
     ticket = ticket_for(member) if result == OK else secrets.randbits(31) | 1
     session.log.note(f'login {member!r}: result {result}')
     ack = struct.pack('<Ii', ticket, result) + bytes(0x4c - 8)

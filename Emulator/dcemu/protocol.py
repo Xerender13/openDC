@@ -29,6 +29,7 @@ NAMES = {
     0x16: 'LoginAck',
     0x17: 'ServerList',
     0x7b: 'GameLogin',
+    0x7cf: 'Nation',          # EU client, auth port, right after the login: u32 nation (7-10)
     0x1b5: 'Unknown437',      # 2011 client, auth port; the 2008 server says "Wrong Command: 437"
     0x1c7: 'RealMatchCarInfo',
     0x1ce: 'RoomInfo',

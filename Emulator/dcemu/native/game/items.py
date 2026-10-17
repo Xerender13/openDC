@@ -375,9 +375,13 @@ async def equip_item(session, frame):
     it = next((i for i in p.items if i.inven_idx == inven_idx), None)
     info = info_of(it) if it else None
     car = next((c for c in p.char.cars if c.car_id == car_id), None)
+    from .. import nation
+    why = nation.part_allowed(session, p, info, car) if info else None
     if (not it or not info or info.type == 5 or (it.state & 0xffff) == 4 or it.upgrade < 0   # < 0: broken
-            or p.char.level < info.req_level or not car or car.on_auction
+            or why or not car or car.on_auction
             or (on_top(info.type) and not context.option_parts)):
+        if why:
+            session.log.note(f'equip {info.item_id}: refused ({why}; nation {nation.of(session)})')
         return error(session, '20027')                  # ItemEquipFail
     if info.type == DOCK:
         from .docking import dock

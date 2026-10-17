@@ -1,14 +1,16 @@
-// DriftCityLauncher starts the 2011 US Drift City client (DriftCity.exe, GamesCampus build of 2011-10-27,
-// ASProtect) against a server of our choice. It lives in the client folder, next to DriftCity.exe, and
+// DriftCityLauncher starts the 2011 Drift City client (DriftCity.exe, GamesCampus build of 2011-10-27,
+// ASProtect; or DriftCityEU.exe, the same build unpacked and set to an EU nation by Emulator/tools/eu_client.py)
+// against a server of our choice. It lives in the client folder, next to the exe ([client] exe), and
 // reads DriftCityLauncher.ini there (written with the defaults when missing).
 //
 // What it does (found in the client's unpacked image; the Python original is
 // Server2008/tools/dev/run_us2011.py):
 //   - the client only runs when started by the launcher: `DriftCity.exe /runsw <token>`, token =
 //     md5(str(t - t % 300000)) in hex with t = the millisecond tick count (GetTickCount)
-//   - the login server address is hard-coded for nation 1 (US): 208.80.248.47 (live) and 208.80.248.215
-//     (alpha) at 0x8daaa4 / 0x8daab4 (16-byte slots); once the client has unpacked itself, the launcher
-//     writes the configured address there
+//   - the login server address is hard-coded per nation in 16-byte slots 0x8daa14..0x8daad4 (US, nation 1:
+//     208.80.248.47 live / 208.80.248.215 alpha at 0x8daaa4 / 0x8daab4; EU, nations 7-10: 62.146.191.136 /
+//     .135 at 0x8daa14 / 0x8daa24; client 0x538ff0); once the client has unpacked itself, the launcher
+//     writes the configured address over every slot
 //   - the build has no GameGuard files, but nation 1 creates the GameGuard object: at 0x4e114b the client
 //     switches on its nation class; the launcher puts a hardware breakpoint there (a debug register, no
 //     code change: ASProtect checks the code) and moves the thread to 0x4e1191, the branch that creates the
@@ -51,8 +53,9 @@ const (
 	ggObject   = 0x94d168 // the protection object pointer
 	ggVtable   = 0x8d0d34 // vtable of the GameGuard object
 	noGGVtable = 0x8d0d7c // vtable of the object whose checks succeed
-	addrLive   = 0x8daaa4
-	addrAlpha  = 0x8daab4
+	addrLive   = 0x8daaa4 // the US live server's slot: unpacked once it holds liveAddress
+	addrFirst  = 0x8daa14 // the server address slots of all nations (16 bytes each, client 0x538ff0)
+	addrLast   = 0x8daad4
 	netObject  = 0x973e40 // the network object pointer (client 0x536360)
 	netVtable  = 0x8cddd0
 	netFlags   = 0x2b4 // its flag word; bit 4 = show item icons on pick-up
@@ -174,12 +177,38 @@ func patchesFor(cfg Config) Patches {
 
 var liveAddress = []byte("208.80.248.47")
 
+// clientExe: the client program ([client] exe), set by main.
+var clientExe = "DriftCity.exe"
+
+// writeAddress writes ip over every nation's server slot that holds an IPv4 address. -> the slots written, or 0
+// while the client has not unpacked itself yet (the US live slot does not hold its address).
+func writeAddress(read func(addr uint32, n int) []byte, write func(addr uint32, b []byte) bool, ip string) int {
+	if b := read(addrLive, len(liveAddress)); b == nil || string(b) != string(liveAddress) {
+		return 0
+	}
+	n := 0
+	for a := uint32(addrFirst); a <= addrLast; a += 16 {
+		slot := read(a, 16)
+		if slot == nil {
+			return n
+		}
+		if end := strings.IndexByte(string(slot), 0); end > 0 && validAddress(string(slot[:end])) &&
+			write(a, addressBytes(ip)) {
+			n++
+		}
+	}
+	return n
+}
+
 const defaultIni = `; Settings of DriftCityLauncher (the 2011 Drift City client launcher), next to DriftCity.exe
 [server]
 ; the login server (the emulator's auth port 11005) the client connects to: an IPv4 address, at most 15 characters
 address = 127.0.0.1
 
 [client]
+; the client program in this folder: DriftCityEU.exe (the European client, see Emulator/tools/eu_client.py) or
+; DriftCity.exe (the US client); empty = DriftCityEU.exe when it is there
+exe =
 ; goption.ini MainUIType: 0 = the classic HUD, 1 = the 2011 "ADV" HUD
 main_ui_type = 1
 ; item_icons: 1 = show the items received (combos, traffic items, patrol prizes) as icons on the HUD, 0 = only the
@@ -265,14 +294,39 @@ func validAddress(ip string) bool {
 	return true
 }
 
-// token is the /runsw argument for the tick count t (milliseconds).
-func token(t uint64) string {
+// token is the /runsw argument for the tick count t (milliseconds): md5 of the 5-minute window, written "%d" by
+// the US check (client 0x509980), "eu_%d_plz_do_not_hack" by the EU nations' check (0x5095a0).
+func token(t uint64, eu bool) string {
 	if s := os.Getenv("DRIFTCITY_TOKEN"); s != "" {
 		return s
 	}
-	sum := md5.Sum([]byte(strconv.FormatUint(t-t%300000, 10)))
+	text := strconv.FormatUint(t-t%300000, 10)
+	if eu {
+		text = "eu_" + text + "_plz_do_not_hack"
+	}
+	sum := md5.Sum([]byte(text))
 	return hex.EncodeToString(sum[:])
 }
+
+// euNation: the nation (7-10) an exe changed by Emulator/tools/eu_client.py sets in the options constructor
+// (0x4e4106: push N; pop eax; ...; mov al, 1), or 0 for the original code (nation 1, US).
+func euNation(path string) int {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	tail := []byte{0x58, 0x88, 0x9e, 0x68, 0x01, 0x00, 0x00, 0x89, 0x86, 0x6c, 0x01, 0x00, 0x00, 0xa3, 0x80, 0xd8,
+		0x94, 0x00, 0xb0, 0x01}
+	for i := 2; i+len(tail) <= len(b); i++ {
+		if b[i] == 0x58 && b[i-2] == 0x6a && string(b[i:i+len(tail)]) == string(tail) && b[i-1] >= 7 && b[i-1] <= 10 {
+			return int(b[i-1])
+		}
+	}
+	return 0
+}
+
+// clientEU: the client is set to an EU nation (main).
+var clientEU bool
 
 // setOptions writes goption.ini: Fullscreen (when windowed) and MainUIType.
 func setOptions(clientDir string, windowed bool, mainUI string) {
@@ -338,11 +392,18 @@ func main() {
 			}
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "DriftCity.exe")); err != nil {
-		fail("DriftCity.exe is not in %s: put the launcher into the client folder", dir)
-	}
 	logFile, _ = os.Create(filepath.Join(dir, "DriftCityLauncher.log"))
 	cfg, iniPath := loadConfig(dir)
+	clientExe = cfg.get("client.exe", "")
+	if clientExe == "" {
+		clientExe = "DriftCity.exe"
+		if _, err := os.Stat(filepath.Join(dir, "DriftCityEU.exe")); err == nil {
+			clientExe = "DriftCityEU.exe"
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, clientExe)); err != nil {
+		fail("%s is not in %s: put the launcher into the client folder (or set [client] exe in %s)", clientExe, dir, iniPath)
+	}
 	ip := cfg.get("server.address", "127.0.0.1")
 	for _, a := range os.Args[1:] {
 		switch strings.ToLower(a) {
@@ -357,7 +418,12 @@ func main() {
 	if !validAddress(ip) {
 		fail("server address %q: an IPv4 address (at most 15 characters) is needed (%s)", ip, iniPath)
 	}
-	logf("client %s, server %s", dir, ip)
+	if n := euNation(filepath.Join(dir, clientExe)); n != 0 {
+		clientEU = true
+		logf("client %s (EU, nation %d), server %s", filepath.Join(dir, clientExe), n, ip)
+	} else {
+		logf("client %s, server %s", filepath.Join(dir, clientExe), ip)
+	}
 	if err := launch(dir, ip, cfg); err != nil {
 		fail("%v", err)
 	}

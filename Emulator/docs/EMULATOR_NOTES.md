@@ -7,6 +7,34 @@ against a server we control. Everything below was measured, unless marked *(gues
 `Emulator/README.md`). **Start with "Current state and where to continue" right below** (session 12), then the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## EU client (2026-10-17; worked out in a side folder `Drift City EU 2011`, merged into this project the same day)
+
+**Merged layout:** `Client US/` (the US client; `DriftCityLauncher.ini exe = DriftCityUS.exe`, the unpacked US exe from
+`tools/eu_client.py us`; `DriftCity.exe` still there) and `Client EU/` (`DriftCityEU.exe` set to nation 8, `Data_EU_eng/`).
+`./launch.sh [all|client] eu` / `launch.bat [all|client] eu` start the EU client; `setup` copies the tables from
+`Client US/`; `Launcher/build.sh` builds into both. One database for both versions (`dcemu2011_db`); emulator.ini
+`[nation] allow = all` (with all nations allowed and an ASCII password the login does not wait for the client's 0x7cf;
+its nation is noted when it comes). The side folder kept its own database (container `dcemueu2011_db`, volume
+`drifteu2011_mssql-data`, port 14331: its EU test character), not used here.
+
+
+**The "EU client" `Client EU/DriftCityEU.exe` is the US build (2011-10-27, same timestamp, same addresses) dumped without
+ASProtect** (stolen import calls restored); unchanged it is nation 1 (US) with the US server address. The program
+serves every publisher; the nation (client 0x4e9360, global 0x94d880; 1 US, 7 EU de, 8 EU eng, 9 EU fr, 10 EU es) is
+set only by the options constructor (0x4e4106). `Emulator/tools/eu_client.py setup [eng|de|fr|es]` (docstring has
+the bytes): sets the nation (original kept in `client_backup/DriftCityEU.exe.orig`, `reset` restores), skips the
+dname.chk data file check 0x4ed620 ("Invalid Files Detected": the list is the US folder's), builds
+`Client EU/Data_EU_<lang>/` from Data_US (hard links; World.agt with the five Data_US tables of the patch packs folded
+in, since patches name them Data_US\...). EU nation differences found so far: data packs ../Data_EU_eng/*_eueng.agt;
+login server slots 0x8daa14/24 (62.146.191.136/.135); start token md5("eu_%d_plz_do_not_hack") (0x5095a0) instead
+of md5("%d"); no GameGuard (class table 0x4e1210 = 0); login 0x14 with a UTF-8 password, then 0x7cf (u32 nation) on
+auth (0x7feaf0); GlobalText EU ENG column has ~2,200 texts vs ~5,600 US (expect blanks). The launcher: `[client]
+exe` (default DriftCityEU.exe when present), EU token when the exe holds an EU nation, address over all 13 slots.
+**Own database**: compose project dcemueu2011, container dcemueu2011_db, volume drifteu2011_mssql-data, port 14331
+(the US characters stay in driftcity2011_mssql-data). Status: client starts, reaches the login screen (2026-10-17).
+**Nation-aware emulator** (2026-10-17): `dcemu/native/nation.py` - every session knows its client's nation (0x7cf from the EU client on each connection; none = US 1; Player.nation set at the game login); `nation.of(x)`, `is_eu(x)`, `rule(x, name)`; emulator.ini [nation] client = auto | N and us.<rule> / eu.<rule>. First rule: part requirements (items.equip_item -> nation.part_allowed): ItemClient column 7 = player level, column 8 = the client's "Required Grade" (tooltip 0x657442, item record +0x124; read as the car's V grade; 0 in all US rows). **Nation lock**: emulator.ini [nation] allow (here eu): the auth answer waits for the client's 0x7cf (<= 1 s; none = US) and refuses other nations with result 99 before the password check (no account made); accepted logins remember the account's nation (nation.remember) for the lobby / game check-ins, because on game the 0x7cf can come after the check-in (a refusal by order once left the character loading). **US exe**: `eu_client.py us` writes Client/DriftCityUS.exe = the unpacked exe, nation 1, GameGuard class byte 0x4e1211 2 -> 0 (runs to the login screen; launcher [client] exe = DriftCityUS.exe). **F2 user information car panel = EU client design**: 0x294 GameCharInfo is answered the same for both (0x295); the handler 0x515be0 fills the window with 0x56ff80 -> 0x56f910 (shared; only the distance unit differs: miles for US, km for others, 0x56fbb1), then draws the car panel with 0x551ce0 (car-name image 0x564820 by car type, V grade 0x563f30) only for nations 1-3 and 6: table 0x570010 (nation - 4) = 0 0 1 0 0 0 0 skips it for 4, 5 and 7-10. Then shown on the user's request (2026-10-17, the one exception): `eu_client.py f2 on` (part of setup) sets the table bytes of nations 7-10 (0x570013-16) to 1; `f2 off` = EU design. Before that it was kept as the EU design (user: "Keep the EU design, that's the key point of the version"; the F2 box under the portrait is the crew, empty without one). **EU changes in the emulator are gated on the client's nation** (user): part_grade only eu (us.part_grade = 0), the password decoded as UTF-8 only for EU (decoded after the nation is known), 0x0005 logged (nation.eu_report). **No stat points from the player's level in the EU version** (user): nation rule level_points (us 1, eu 0) -> Player.stats char points 0 for EU players (0x2f8, F2 0x295, other players' info); characters loaded for someone else get nation.of_member (the account's last login nation, else an EU nation on an EU-only server). The EU client also sends a one-off 0x0005 (104 bytes, client report, sender 0x7e3ef0) that US clients never sent. Login to the city in EU mode works. Next: the V-grade rules (EU-only branches, e.g. 0x5fa8ed in the item code; the
+'7..10' nation checks: Handoff/scratchpad_eu1 `nat2.py` pattern = list GetNation call sites and their compares).
+
 ## Session 13 (2026-10-16 afternoon; not yet confirmed in game)
 
 - **Mitro City (Taipei) traffic** (user: no traffic cars): the client joined **area 68** there (from Moon Palace

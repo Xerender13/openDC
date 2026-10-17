@@ -37,7 +37,7 @@ import struct
 from ..handlers import on, on_open
 from ..protocol import C2S
 from ..wire import Frame, read_wstr
-from . import context, now, ticket_for, time_t
+from . import context, nation, now, ticket_for, time_t
 from .admin import account_valid
 
 NAME_BYTES = 0x2a
@@ -66,6 +66,11 @@ async def check_in(session, frame):
     ok = bool(member) and ticket == ticket_for(member)
     if ok and not await account_valid(member):      # banned since the login (tickets outlive restarts)
         session.log.note(f'check-in {member!r}: the account is blocked')
+        ok = False
+    n = nation.known(session, member)
+    n = nation.US if n is None else n               # the lobby gets the EU client's 0x7cf before the check-in
+    if ok and not nation.allowed(n):
+        session.log.note(f'check-in {member!r}: client nation {n} ({nation.name(n)}) is not allowed here')
         ok = False
     owner = member
     if ok:

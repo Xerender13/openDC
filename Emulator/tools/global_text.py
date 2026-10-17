@@ -38,7 +38,7 @@ def write_pack(client, files):
 
 def main():
     args = sys.argv[1:]
-    client = os.path.join(HERE, '..', '..', 'Client')
+    client = os.path.join(HERE, '..', '..', 'Client US')
     if args and os.path.isdir(args[0]):
         client, args = args[0], args[1:]
     if not args or args[0] not in ('show', 'set', 'reset'):

@@ -11,7 +11,7 @@ Derived values (2008 server -> here):
   item TableIdx    the 2011 item tables (data.Tables); ExpireTick = CTIME, or the server tick
                    (SKID_SERVER_TB.SERVERPTICK) when 0
 Stats (XiStrStatInfo): based = the car grade's stats, equip = the parts on the current car (part
-value + its random bonus) and the drift shop items on it (VShopItem Bonus columns), char = level / 2 each (Contents.ini Main.HalfLevelPoint, else level).
+value + its random bonus) and the drift shop items on it (VShopItem Bonus columns), char = level / 2 each (Contents.ini Main.HalfLevelPoint, else level; 0 for EU players: nation rule level_points).
 """
 from .. import context, time_t
 from .records import Car, Character, Item, Stats, VisualItem
@@ -71,6 +71,7 @@ class Player:
         self.quests = quests
         self.coupon_vars = coupon_vars
         self.buffs = {}             # stat index -> (points, monotonic end): timed point-up items
+        self.nation = 1             # the client's nation (native/nation.py), set at the game login
 
     @property
     def tick(self):
@@ -153,8 +154,9 @@ class Player:
                     for k, n in enumerate(mk2_points(v)):
                         equip[k] += n
             s.equip = tuple(equip)
+        from .. import nation
         points = self.char.level // 2 if t.contents.get('Main.HalfLevelPoint') else self.char.level
-        s.char = (points,) * 4
+        s.char = (points if nation.rule(self, 'level_points') else 0,) * 4
         import time
         s.item_use = tuple(v if end > time.monotonic() else 0
                            for v, end in (self.buffs.get(k, (0, 0)) for k in range(4)))
@@ -217,6 +219,8 @@ async def load(name, member=None):
     cv = await db.row(COUPON_VARS_SQL, (db.server_id, cid))
     coupon_vars = tuple(_f(v) for v in cv) if cv else (0.0,) * 10
     p = Player(char, items, vsitems, quests, coupon_vars, tick)
+    from .. import nation
+    p.nation = nation.of_member(char.member)    # the game login sets the client's own (login.load_char)
     for it in items:                            # set parts without an expiry yet
         await start_expiry(p, it)
     from .items import fix_shared_slots

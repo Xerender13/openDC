@@ -5,7 +5,7 @@ the 2008 server's own tables); and the cities' traffic data
 signals) and tables/<City>/Path/*.chpath / *.signal (path traffic; Taipei has no .tcs), a patch's
 version where Patch.0xx has one; the built-in crew marks Data_US/gameui/teammark/01-10 -> teammark/ (crews.py).
 
-usage: python3 -m tools.sync_data [client dir, default ../Client] [data dir, default server_data]
+usage: python3 -m tools.sync_data [client dir, default ../Client US] [data dir, default server_data]
 """
 import os
 import sys
@@ -17,7 +17,7 @@ import agt                         # noqa: E402
 
 
 def main():
-    client = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'Client')
+    client = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'Client US')
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, 'server_data')
     c = Client(client)
     names = {p.rsplit('\\', 1)[-1] for p in c.files if p.endswith(('.xlt', '.tdf'))

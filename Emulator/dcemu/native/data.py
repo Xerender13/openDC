@@ -95,6 +95,7 @@ class ItemInfo:
     stack_max: int
     grade: str = ''          # ItemClient column 6: N S H E (parts), FN.. FE / ON.. OE (options, docking)
     req_level: int = 0       # ItemClient column 7
+    req_grade: int = 0       # ItemClient column 8 (the car's V grade a part needs: nation.part_allowed)
     value: int = 0           # UseItemClient column 9 (e.g. 30 points), usable items
     time: int = 0            # UseItemClient column 10 (seconds)
     reward: str = ''         # UseItemClient column 3: its RewardGroup.xlt group (gift boxes, lucky bags, lotteries)
@@ -318,7 +319,7 @@ class Tables:
         if 0 <= table_idx < len(parts):
             r = parts[table_idx]
             return ItemInfo(table_idx, r[2], r[0], PART_TYPES.get(r[0], DOCK_TYPE if r[0].startswith('dock_') else 10),
-                            _num(r[12]), _num(r[13]), r[15] == 'True', 1, r[6], _num(r[7]), name=r[4],
+                            _num(r[12]), _num(r[13]), r[15] == 'True', 1, r[6], _num(r[7]), req_grade=_num(r[8]), name=r[4],
                             tradeable=len(r) > 17 and r[17] == 'True')
         k = table_idx - len(parts)
         if 0 <= k < len(use):

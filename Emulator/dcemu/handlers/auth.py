@@ -29,12 +29,19 @@ def md5_hex(password):
     return hashlib.md5(password.encode('utf-8')).hexdigest()
 
 
-def read_password(field):
+def read_password(field, utf8=False):
     """Plain password from the field, UTF-16 if it looks like it (ASCII text has no 0 byte
-    after its first character), else a narrow string."""
+    after its first character), else a narrow string: Latin-1 (the US client), or UTF-8 for the EU
+    client (utf8=True: nations 7-10 encode it as UTF-8, client 0x538807)."""
     if len(field) >= 2 and field[0] and not field[1]:
         return read_wstr(field, 0, len(field))
-    return bytes(field).split(b'\0', 1)[0].decode('latin-1')
+    raw = bytes(field).split(b'\0', 1)[0]
+    if utf8:
+        try:
+            return raw.decode('utf-8')
+        except UnicodeDecodeError:
+            pass
+    return raw.decode('latin-1')
 
 
 @on('auth', C2S, LOGIN)

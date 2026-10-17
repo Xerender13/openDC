@@ -68,6 +68,8 @@ def native_setup(cp):
         context.enhancer_deluxe = float(cp['items'].get('enhancer_deluxe', context.enhancer_deluxe) or 1)
     if cp.has_section('auth'):
         context.auto_register = cp['auth'].get('auto_register', '1').strip() not in ('0', 'no', 'off')
+    from .native import nation
+    nation.configure(cp['nation'] if cp.has_section('nation') else {})
     if cp.has_section('mail'):
         context.mail_min_level = int(cp['mail'].get('min_level', context.mail_min_level))
         context.mail_fee = int(cp['mail'].get('fee', context.mail_fee))

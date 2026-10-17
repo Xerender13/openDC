@@ -226,7 +226,7 @@ func descendant(pid int) bool {
 	return false
 }
 
-// clientPids: the Wine processes running DriftCity.exe.
+// clientPids: the Wine processes running the client (clientExe).
 func clientPids() []int {
 	var out []int
 	ents, _ := os.ReadDir("/proc")
@@ -240,7 +240,7 @@ func clientPids() []int {
 			continue
 		}
 		first := strings.ToLower(string(bytes.SplitN(argv, []byte{0}, 2)[0]))
-		if strings.HasSuffix(first, "driftcity.exe") {
+		if strings.HasSuffix(first, strings.ToLower(clientExe)) {
 			out = append(out, pid)
 		}
 	}
@@ -363,6 +363,7 @@ func patch(pid int, ip string) []string {
 	note(fmt.Sprintf("breakpoint set in %d threads", len(tr.tids)))
 	defer tr.detach()
 	addressDone := false
+	read, write := procRead(pid), procWrite(pid)
 	for time.Since(t0) < 90*time.Second {
 		if tr.poll() {
 			note("GameGuard skipped")
@@ -375,13 +376,10 @@ func patch(pid int, ip string) []string {
 			time.Sleep(2 * time.Millisecond)
 			continue
 		}
-		buf := make([]byte, 13)
 		if !addressDone {
-			if n, _ := m.ReadAt(buf, addrLive); n == 13 && bytes.Equal(buf, liveAddress) {
-				m.WriteAt(addressBytes(ip), addrLive)
-				m.WriteAt(addressBytes(ip), addrAlpha)
+			if n := writeAddress(read, write, ip); n > 0 {
 				addressDone = true
-				note("address")
+				note(fmt.Sprintf("address (%d slots)", n))
 			}
 		}
 		if addressDone {
@@ -439,9 +437,9 @@ func launch(dir, ip string, cfg Config) error {
 	if len(old) > 0 {
 		logf("ignoring running client(s) %v", old)
 	}
-	tok := token(tickCount())
+	tok := token(tickCount(), clientEU)
 	logf("token %s", tok)
-	c := r.command(dir, "./DriftCity.exe", "/runsw", tok)
+	c := r.command(dir, "./"+clientExe, "/runsw", tok)
 	if logFile != nil {
 		c.Stdout, c.Stderr = logFile, logFile
 	}

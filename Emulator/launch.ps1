@@ -1,9 +1,9 @@
 # Drift City 2011 emulator launcher for Windows (Docker Desktop): the database and the emulator run in containers
-# (docker-compose.yml), the client natively (..\Client\DriftCityLauncher.exe). launch.bat runs this script.
+# (docker-compose.yml), the client natively (..\Client US\ or ..\Client EU\DriftCityLauncher.exe). launch.bat runs this script.
 #
-#   launch.bat [all]          database + emulator + the client
+#   launch.bat [all] [eu]     database + emulator + the client (US, or the EU client with eu)
 #   launch.bat server         database + emulator, no client
-#   launch.bat client         the 2011 client only
+#   launch.bat client [eu]    the 2011 client only (US, or the EU client with eu)
 #   launch.bat setup          first time (and after a client patch): build the emulator image, copy the client's tables
 #   launch.bat init-db        create the game database from db\*.sql (an existing one is DELETED: asks first)
 #   launch.bat restore-db F   replace the game database with the SQL Server backup F (e.g. db\SKDBTW_clean.bak; asks)
@@ -14,11 +14,12 @@
 #   launch.bat logs [db]      follow the emulator's (or the database's) output; Ctrl+C stops following
 #   launch.bat gm ARGS        GM commands (tools\gmctl.py): who | kick NAME | block NAME days | ban ACCOUNT ...
 #
-# Needs Docker Desktop (running). Settings: emulator.ini; the client's: ..\Client\DriftCityLauncher.ini.
+# Needs Docker Desktop (running). Settings: emulator.ini; the clients': ..\Client US\ and ..\Client EU\DriftCityLauncher.ini.
 param([string]$Command = 'all', [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)
 $ErrorActionPreference = 'Continue'   # docker writes progress to stderr: exit codes are checked instead
 Set-Location $PSScriptRoot
-$ClientDir = Join-Path $PSScriptRoot '..\Client'
+$ClientDir = Join-Path $PSScriptRoot '..\Client US'      # the US client: setup copies its tables
+$ClientEuDir = Join-Path $PSScriptRoot '..\Client EU'    # the EU client (tools\eu_client.py)
 $Sql = @('exec', 'dcemu2011_db', '/opt/mssql-tools18/bin/sqlcmd', '-C', '-S', 'localhost', '-U', 'sa', '-P', 'z0ne!server', '-b')
 
 function Die($msg) { Write-Host "launch: $msg" -ForegroundColor Red; exit 1 }
@@ -61,18 +62,19 @@ function Start-Server {
     Die 'the emulator did not start (launch.bat logs)'
 }
 
-function Start-Client {
-    $exe = Join-Path $ClientDir 'DriftCityLauncher.exe'
+function Start-Client([string]$Which = 'us') {
+    $dir = if ($Which -eq 'eu') { $ClientEuDir } else { $ClientDir }
+    $exe = Join-Path $dir 'DriftCityLauncher.exe'
     if (-not (Test-Path $exe)) { Die "$exe not found" }
-    Write-Host 'client: starting'
-    Start-Process -FilePath $exe -WorkingDirectory $ClientDir
+    Write-Host "client: starting ($(Split-Path $dir -Leaf))"
+    Start-Process -FilePath $exe -WorkingDirectory $dir
 }
 
 Docker-Check
 switch ($Command) {
-    'all'         { Start-Server; Start-Client }
+    'all'         { Start-Server; Start-Client $Rest[0] }
     'server'      { Start-Server }
-    'client'      { Start-Client }
+    'client'      { Start-Client $Rest[0] }
     'setup' {
         Compose build emulator
         Compose run --rm --no-deps emulator python -m tools.sync_data /client server_data

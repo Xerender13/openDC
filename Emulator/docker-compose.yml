@@ -36,7 +36,7 @@ services:
       - "DCEMU_DB_PORT=1433"
     volumes:
       - ./:/emu                  # emulator.ini, server_data/, logs/ stay on the host
-      - ../Client:/client:ro     # only for the table copy: docker compose run --rm emulator python -m tools.sync_data /client server_data
+      - "../Client US:/client:ro"   # only for the table copy (the US client): docker compose run --rm emulator python -m tools.sync_data /client server_data
     ports:
       - "11005:11005"            # auth   (the client's DriftCityLauncher.ini address)
       - "11011:11011"            # lobby  (these four: server_data/serverlist.txt)

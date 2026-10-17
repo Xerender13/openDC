@@ -21,8 +21,8 @@ copies of what it reads (`server_data/`: a few server-side tables, exp tables, s
 paths). The city traffic is native too (`dcemu/native/city_traffic.py`, on the client's own lanes); the 2008
 traffic program (TrafficAgent.exe under Wine in a container) moved to `../Server2008/traffic_agent/`, for
 comparing only (`emulator.ini [traffic] city = agent`). `../Server2008/` (the 2008 ZoneServer stack and the research tools) is not needed
-to run it. The client is started with `../Client/DriftCityLauncher` (Linux) or `DriftCityLauncher.exe`
-(Windows), source in `../Launcher/`.
+to run it. The client is started with `../Client US/DriftCityLauncher` (Linux) or `DriftCityLauncher.exe`
+(Windows), source in `../Launcher/`; the EU client the same way from `../Client EU/` (`tools/eu_client.py`, below).
 
 ```
 2011 client --11005..11051--> emulator (python3 -m dcemu) --14330--> SQL Server  (container dcemu2011_db)
@@ -52,13 +52,13 @@ disconnects the clients.
 
 The database and the emulator run in containers (`docker-compose.yml` services `db` and `emulator`, the image
 from `Dockerfile`), the client natively. Install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/),
-put the 2011 client in `..\Client` (next to this folder), then in this folder:
+put the 2011 client in `..\Client US` (next to this folder), then in this folder:
 
 ```bat
 launch.bat setup        :: once: builds the emulator image, copies the client's tables to server_data\
 launch.bat init-db      :: once: an empty database with the account admin / admin (asks; deletes an existing one)
-launch.bat              :: database + emulator + the client (..\Client\DriftCityLauncher.exe)
-launch.bat server | client | stop | restart-emu | status | logs [db] | gm who | help
+launch.bat              :: database + emulator + the client (..\Client US\DriftCityLauncher.exe; "launch.bat all eu": ..\Client EU)
+launch.bat server | client [eu] | stop | restart-emu | status | logs [db] | gm who | help
 ```
 
 `emulator.ini`, `server_data\` and `logs\` are the files in this folder (mounted into the container): edit them
@@ -82,7 +82,7 @@ podman exec dcemu2011_db /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 
 (stop the emulator first: `./launch.sh stop emu`)
 
 New accounts are made by logging in with a new ID (`emulator.ini [auth] auto_register = 1`).
-Settings: `emulator.ini`; the client's: `../Client/DriftCityLauncher.ini` (server address, windowed /
+Settings: `emulator.ini`; the clients': `../Client US/DriftCityLauncher.ini`, `../Client EU/DriftCityLauncher.ini` (server address, windowed /
 fullscreen, HUD type, Proton or Wine). `-q` logs to the file only.
 
 | Folder / file | What |
@@ -103,6 +103,17 @@ Log: `logs/<start time>.msgs.txt`, one line per message, the full payload in hex
 ```
 
 `#n` is the connection. Lengths include the 4-byte header.
+
+## The EU client and nations
+
+One 2011 program serves every publisher; a nation number picks the version (1 US, 7-10 EU de / eng / fr / es).
+`tools/eu_client.py setup eng` turns `../Client EU/DriftCityEU.exe` (the unpacked exe) into the EU English client
+and builds its `Data_EU_eng/` from `Data_US/`; `tools/eu_client.py us` writes `../Client US/DriftCityUS.exe`, the
+unpacked US client (no GameGuard). The EU client sends its nation (0x7cf) on every connection; the US client sends
+nothing. `dcemu/native/nation.py` keeps it per session and player, and every EU-only rule goes through it, so US
+clients behave as before: `emulator.ini [nation]` `allow` (which nations may log in), `us.*` / `eu.*` rules (EU: no
+stat points from the player's level; parts may need a V grade, ItemClient column 8). Details: the "EU side project"
+entry in `docs/EMULATOR_NOTES.md`.
 
 ## Code
 

@@ -83,6 +83,11 @@ async def keepalive(session):
 @on(SVC, C2S, 0x78)
 async def check_in(session, frame):
     member = read_wstr(frame.payload, 8, 80)
+    from .. import nation
+    n = nation.known(session, member)               # None: the 0x7cf may still come (it can follow the check-in)
+    if n is not None and not nation.allowed(n):
+        session.log.note(f'check-in {member!r}: client nation {n} ({nation.name(n)}) is not allowed here: closed')
+        return session.close()
     session.state['member'] = member
     session.log.note(f'check-in {member!r}')
     send(session, Frame(0x79, struct.pack('<I', 1)))
@@ -162,6 +167,9 @@ async def load_char(session, frame):
         return error(session, '20089')
     session.state['player'] = p
     session.state['chat_block'] = chat_until
+    from .. import nation
+    p.nation = nation.of(session)
+    session.log.note(f'client nation {p.nation} ({nation.name(p.nation)})')
     from .auction import mark_cars, open_frame
     await mark_cars(p)
     from .items import merge_stacks

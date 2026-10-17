@@ -19,7 +19,7 @@ import collections
 
 _handlers = collections.defaultdict(list)
 
-MODULES = ['auth', 'lobby', 'game', 'area', 'vshop', 'room', '..native.auth', '..native.lobby', '..native.stickers', '..native.ranking', '..native.game', '..native.area']
+MODULES = ['auth', 'lobby', 'game', 'area', 'vshop', 'room', '..native.auth', '..native.nation', '..native.lobby', '..native.stickers', '..native.ranking', '..native.game', '..native.area']
 
 
 def on(service, direction, msg_type):

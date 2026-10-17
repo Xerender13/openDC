@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Drift City 2011 emulator launcher: start the components together or one by one.
 #
-#   ./launch.sh [all]        database + emulator (in the background) + the client
+#   ./launch.sh [all] [eu]   database + emulator (in the background) + the client (US, or the EU client with eu)
 #   ./launch.sh server       database + emulator (in the background), no client
 #   ./launch.sh db           the database only (SQL Server container)
 #   ./launch.sh emu [-q]     the emulator only, in the foreground (Ctrl+C stops it; -q: log to the file only)
 #   ./launch.sh emu-bg       the emulator only, in the background (output: logs/emulator.out)
-#   ./launch.sh client       the 2011 client (../Client/DriftCityLauncher)
+#   ./launch.sh client [eu]  the 2011 client: ../Client US/DriftCityLauncher, or ../Client EU/ with eu
 #   ./launch.sh stop [part]  stop everything, or one part: emu, db
 #   ./launch.sh restart-emu  stop and start the background emulator (clients are disconnected)
 #   ./launch.sh status       what is running
@@ -17,13 +17,15 @@
 #   ./launch.sh restore-db F     replace the game database with the backup F (e.g. db/SKDBTW_clean.bak; asks first)
 #
 # Needs: Python 3.10+, podman (or docker) with podman-compose / docker compose. The emulator's settings are in
-# emulator.ini; the client's in ../Client/DriftCityLauncher.ini.
+# emulator.ini; the clients' in ../Client US/DriftCityLauncher.ini and ../Client EU/DriftCityLauncher.ini (the EU client:
+# tools/eu_client.py).
 set -euo pipefail
 cd "$(dirname "$0")"
 HERE=$(pwd)
 PIDFILE=$HERE/.emulator.pid
 OUT=$HERE/logs/emulator.out
-CLIENT_DIR=$HERE/../Client
+CLIENT_DIR="$HERE/../Client US"          # the US client: setup copies its tables
+CLIENT_EU_DIR="$HERE/../Client EU"       # the EU client (DriftCityEU.exe, tools/eu_client.py)
 AREA_PORT=11031
 AUTH_PORT=11005
 
@@ -118,11 +120,13 @@ stop_emu() {
   rm -f "$PIDFILE"
 }
 
-start_client() {
-  local exe=$CLIENT_DIR/DriftCityLauncher
+start_client() {   # $1: us (default) or eu
+  local dir=$CLIENT_DIR
+  case "${1:-us}" in us|US) ;; eu|EU) dir=$CLIENT_EU_DIR ;; *) die "client: us or eu, not '$1'" ;; esac
+  local exe=$dir/DriftCityLauncher
   [ -x "$exe" ] || die "$exe not found"
-  echo "client: starting"
-  (cd "$CLIENT_DIR" && nohup ./DriftCityLauncher >> "$CLIENT_DIR/DriftCityLauncher.log" 2>&1 &)
+  echo "client: starting (${dir##*/})"
+  (cd "$dir" && nohup ./DriftCityLauncher >> "$dir/DriftCityLauncher.log" 2>&1 &)
 }
 
 status() {
@@ -135,13 +139,13 @@ status() {
 }
 
 case "${1:-all}" in
-  all)       start_db; start_emu_bg; start_client ;;
+  all)       start_db; start_emu_bg; start_client "${2:-us}" ;;
   server)    start_db; start_emu_bg ;;
   db)        start_db ;;
   emu)       shift; listening $AUTH_PORT && die "port $AUTH_PORT is in use (./launch.sh status)"
              after_emu_up; exec "$(python)" -m dcemu "$@" ;;
   emu-bg)    start_emu_bg ;;
-  client)    start_client ;;
+  client)    start_client "${2:-us}" ;;
   restart-emu) stop_emu; start_emu_bg ;;
   stop)
     case "${2:-all}" in

@@ -10,7 +10,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -113,7 +112,7 @@ func alive(h syscall.Handle) bool {
 	return r != 0 && code == stillActive
 }
 
-// clientPids: the running DriftCity.exe processes.
+// clientPids: the running client processes (clientExe).
 func clientPids() map[uint32]bool {
 	out := map[uint32]bool{}
 	snap, _, _ := procCreateToolhelp32Snapshot.Call(th32csSnapProcess, 0)
@@ -124,7 +123,7 @@ func clientPids() map[uint32]bool {
 	var e processEntry
 	e.Size = uint32(unsafe.Sizeof(e))
 	for r, _, _ := procProcess32FirstW.Call(snap, uintptr(unsafe.Pointer(&e))); r != 0; r, _, _ = procProcess32NextW.Call(snap, uintptr(unsafe.Pointer(&e))) {
-		if strings.EqualFold(syscall.UTF16ToString(e.ExeFile[:]), "DriftCity.exe") {
+		if strings.EqualFold(syscall.UTF16ToString(e.ExeFile[:]), clientExe) {
 			out[e.ProcessID] = true
 		}
 	}
@@ -142,11 +141,9 @@ func patch(h syscall.Handle, ip string) []string {
 			return append(done, "process gone")
 		}
 		if !address {
-			if b := readMem(h, addrLive, 13); b != nil && bytes.Equal(b, liveAddress) {
-				writeMem(h, addrLive, addressBytes(ip))
-				writeMem(h, addrAlpha, addressBytes(ip))
+			if n := writeAddress(winRead(h), winWrite(h), ip); n > 0 {
 				address = true
-				note("address")
+				note(fmt.Sprintf("address (%d slots)", n))
 			}
 		} else if ob := readMem(h, ggObject, 4); ob != nil && binary.LittleEndian.Uint32(ob) != 0 {
 			obj := binary.LittleEndian.Uint32(ob)
@@ -190,9 +187,9 @@ func launch(dir, ip string, cfg Config) error {
 	logf("display: %s", map[bool]string{true: "windowed", false: "fullscreen"}[windowed])
 	setWindowed(windowed)
 	old := clientPids()
-	tok := token(tickCount())
+	tok := token(tickCount(), clientEU)
 	logf("token %s", tok)
-	cmdline, _ := syscall.UTF16PtrFromString(fmt.Sprintf(`"%s\DriftCity.exe" /runsw %s`, dir, tok))
+	cmdline, _ := syscall.UTF16PtrFromString(fmt.Sprintf(`"%s\%s" /runsw %s`, dir, clientExe, tok))
 	wdir, _ := syscall.UTF16PtrFromString(dir)
 	var si startupInfo
 	si.Cb = uint32(unsafe.Sizeof(si))
@@ -200,7 +197,7 @@ func launch(dir, ip string, cfg Config) error {
 	r, _, e := procCreateProcessW.Call(0, uintptr(unsafe.Pointer(cmdline)), 0, 0, 0, 0, 0,
 		uintptr(unsafe.Pointer(wdir)), uintptr(unsafe.Pointer(&si)), uintptr(unsafe.Pointer(&pi)))
 	if r == 0 {
-		return fmt.Errorf("starting DriftCity.exe: %v", e)
+		return fmt.Errorf("starting %s: %v", clientExe, e)
 	}
 	closeHandle(pi.Thread)
 	seen := map[uint32]bool{pi.ProcessID: true}
