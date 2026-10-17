@@ -32,7 +32,8 @@ What an EU nation changes, as far as read (client addresses):
   - many rules branch on the nation (460 GetNation calls), e.g. EU-only checks in the item code (0x5fa8ed).
 
 The data folder is made from Data_US (the only data we have): the packs under their EU names (hard links where
-unchanged), and World.agt with the Data_US tables of the patch packs folded in (the patches name them
+unchanged; Client EU has no Data_US of its own since 2026-10-17, so ../Client US/Data_US is used), and World.agt
+with the Data_US tables of the patch packs folded in (the patches name them
 "Data_US\\World\\data\\...", which an EU client never looks up; ItemUpgradeClient, ArbeitClient, ItemClient,
 UseItemClient, Instant_Client). Run `setup` again after a client patch.
 
@@ -54,12 +55,27 @@ EU folder's own pack only (Data_EU_<lang>/gameui/uitex.agt, header bytes 20-31 k
 client_backup/uitex_<folder>.agt.orig; `speedo mph` puts it back). The TW picture is kept as
 client_backup/tw_speedometer_406.dds; `setup` applies it again when that file is there.
 
+Part requirements by V grade (user, 2026-10-17: the EU tooltip must show "Required Grade", not the level): the item
+tooltip (0x657442) shows "Required Level" when ItemClient column 7 (+0x120) is not 0, else "Required Grade" column 8
+(+0x124), for every nation; the EU client's tables (also the user's older EU ItemClient.tdf) have 0 in column 8.
+`grades` (part of setup) writes the emulator's EU rule (dcemu.native.data.part_grade_rule: parts N V1-3 / S V4-6 /
+H V7-9 by tier, options and docking N V1 / S V4 / H V7) into Data_EU_<lang>/World.agt's ItemClient.tdf: column 7 0,
+column 8 the grade (the changed cells point at existing strings of the table; the table header's u32 @4 is the same
+in every table, not a checksum). The first original is kept as client_backup/World_<folder>.agt.orig.
+
+Speed unit texts (user, 2026-10-17: "any MPH changed to KPH"): `kph` (part of setup) sets the HUD speed labels of
+Data_EU_<lang>/gameui/game.nui (six controls, T1="MPH" / "mph", NM "..._km/h") to KPH / kph (first original:
+client_backup/game_<folder>.nui.orig). GlobalText 11874 "mph" (the only speed unit in the EU text column):
+tools/global_text.py "../Client EU" --column EU_eng set 11874=kph (Patch.006, a shared pack: not part of setup).
+
 The client dir defaults to ../Client EU (../Client US for `us`).
 
 usage: python3 Emulator/tools/eu_client.py [client dir] setup [de|eng|fr|es]   (default eng)
        python3 Emulator/tools/eu_client.py [client dir] us            DriftCityUS.exe: the unpacked US client
        python3 Emulator/tools/eu_client.py [client dir] f2 on|off     the F2 car panel for EU nations
        python3 Emulator/tools/eu_client.py [client dir] speedo [TW client dir | mph]   the dial with Km/h
+       python3 Emulator/tools/eu_client.py [client dir] grades        part tooltips with the required V grade
+       python3 Emulator/tools/eu_client.py [client dir] kph           the HUD speed labels KPH instead of MPH
        python3 Emulator/tools/eu_client.py [client dir] status
        python3 Emulator/tools/eu_client.py [client dir] reset         the original exe back (the data folder stays)
 """
@@ -273,9 +289,21 @@ def us_patches(client):
     return out
 
 
+def us_data(client):
+    """The Data_US folder to build from: the client's own, else ../Client US/Data_US (Client EU keeps only
+    Data_EU_eng since 2026-10-17: its Data_US was deleted to save space, user)."""
+    own = os.path.join(client, 'Data_US')
+    if os.path.isdir(own):
+        return own
+    other = os.path.join(client, '..', 'Client US', 'Data_US')
+    if not os.path.isdir(other):
+        sys.exit(f'no Data_US in {client} or {os.path.normpath(other)}: needed to build the EU folder')
+    return other
+
+
 def make_world(client, dst):
     """Data_US/World.agt with the patch packs' Data_US tables in it, header bytes 20-31 kept."""
-    src = os.path.join(client, 'Data_US', 'World.agt')
+    src = os.path.join(us_data(client), 'World.agt')
     header, files = agt.read(src)
     patches = us_patches(client)
     names = {n.lower(): i for i, (n, _) in enumerate(files)}
@@ -294,8 +322,8 @@ def make_world(client, dst):
 
 
 def make_folder(client, lang):
-    us, eu = os.path.join(client, 'Data_US'), os.path.join(client, FOLDER[lang])
-    print(f'{FOLDER[lang]}: from Data_US')
+    us, eu = us_data(client), os.path.join(client, FOLDER[lang])
+    print(f'{FOLDER[lang]}: from {os.path.normpath(us)}')
     for root, dirs, files in os.walk(us):
         rel = os.path.relpath(root, us)
         os.makedirs(os.path.join(eu, rel), exist_ok=True)
@@ -310,6 +338,105 @@ def make_folder(client, lang):
         else:
             link_or_copy(os.path.join(us, src), os.path.join(eu, dst))
         print(f'  {dst} <- Data_US/{src}')
+
+
+def tdf_set(data, changes):
+    """A .tdf (bitmap + table) with cells changed: {(row, col): text}. Changed cells point at a string already in
+    the table when there is one, else at a new one appended (the table's size @12 grows)."""
+    bmp, = struct.unpack_from('<I', data, 2)
+    t = bytearray(data[bmp:])
+    cols, n = struct.unpack_from('<II', t, 16)
+    offs = list(struct.unpack_from(f'<{cols * n}I', t, 24))
+
+    def text(o):
+        e = t.index(b'\0\0', o)
+        while (e - o) % 2:
+            e = t.index(b'\0\0', e + 1)
+        return t[o:e].decode('utf-16-le')
+    at = {}
+    for o in offs:
+        at.setdefault(text(o), o)
+    for (r, c), v in changes.items():
+        if v not in at:
+            at[v] = len(t)
+            t += v.encode('utf-16-le') + b'\0\0'
+        offs[r * cols + c] = at[v]
+    struct.pack_into(f'<{cols * n}I', t, 24, *offs)
+    struct.pack_into('<I', t, 12, len(t))
+    return data[:bmp] + bytes(t)
+
+
+def set_grades(client):
+    """Data_EU_<lang>/World.agt: ItemClient.tdf column 7 = 0 and column 8 = the EU V grade (see the module text)."""
+    sys.path.insert(0, os.path.join(HERE, '..'))
+    from dcemu.native.data import part_grade_rule, part_tiers
+    for folder in FOLDER.values():
+        path = os.path.join(client, folder, 'World.agt')
+        if not os.path.exists(path):
+            continue
+        backup = os.path.join(HERE, '..', 'client_backup', f'World_{folder}.agt.orig')
+        if not os.path.exists(backup):
+            shutil.copy2(path, backup)
+            print(f'{folder}/World.agt: original kept as {os.path.normpath(backup)}')
+        from dcemu.native.data import read_tdf
+
+        def item_table(pack):
+            header, files = agt.read(pack)
+            k = next(i for i, (name, _) in enumerate(files) if name.lower() == 'world\\data\\itemclient.tdf')
+            tmp = os.path.join(client, folder, 'ItemClient.tdf.tmp')
+            open(tmp, 'wb').write(files[k][1])
+            rows = read_tdf(tmp)
+            os.remove(tmp)
+            return header, files, k, rows
+        header, files, k, rows = item_table(path)
+        data = files[k][1]
+        # the levels (and so the tiers) from a table this step has not changed yet: the current one when it still has
+        # levels, else the first original (a second run must not read the zeroed levels)
+        has_levels = any(r[7] not in ('0', '') for r in rows if len(r) > 8 and r[0] in ('speed', 'accel'))
+        source = rows if has_levels else item_table(backup)[3]
+        by_id = {r[2]: r for r in source if len(r) > 8}
+        tiers = part_tiers(source)
+        changes, count = {}, 0
+        for r, row in enumerate(rows):
+            if len(row) < 9:
+                continue
+            src = by_id.get(row[2], row)
+            level = int(float(src[7])) if src[7].replace('.', '', 1).isdigit() else 0
+            grade = part_grade_rule(row[0], row[6], level, tiers)
+            if grade and (row[7] != '0' or row[8] != str(grade)):
+                changes[(r, 7)], changes[(r, 8)] = '0', str(grade)
+                count += 1
+        if not changes:
+            print(f'{folder}/World.agt: ItemClient.tdf grades already set')
+            continue
+        files[k] = (files[k][0], tdf_set(data, changes))
+        tmp = path + '.new'
+        agt.write(tmp, header, files)
+        raw = bytearray(open(tmp, 'rb').read())
+        raw[20:32] = header[20:32]
+        open(tmp, 'wb').write(bytes(raw))
+        os.replace(tmp, path)
+        print(f'{folder}/World.agt: ItemClient.tdf: {count} items show the required V grade (level 0)')
+
+
+def set_kph(client):
+    """Data_EU_<lang>/gameui/game.nui: the HUD speed labels T1="MPH" / "mph" -> "KPH" / "kph"."""
+    for folder in FOLDER.values():
+        path = os.path.join(client, folder, 'gameui', 'game.nui')
+        if not os.path.exists(path):
+            continue
+        d = open(path, 'rb').read()
+        n = d.count(b'T1="MPH"') + d.count(b'T1="mph"')
+        if not n:
+            print(f'{folder}/gameui/game.nui: speed labels already KPH')
+            continue
+        backup = os.path.join(HERE, '..', 'client_backup', f'game_{folder}.nui.orig')
+        if not os.path.exists(backup):
+            shutil.copy2(path, backup)
+        tmp = path + '.new'
+        open(tmp, 'wb').write(d.replace(b'T1="MPH"', b'T1="KPH"').replace(b'T1="mph"', b'T1="kph"'))
+        os.replace(tmp, path)
+        print(f'{folder}/gameui/game.nui: {n} speed labels KPH')
 
 
 def make_us(client):
@@ -340,7 +467,7 @@ def main():
         client, args = args[0], args[1:]
     elif args and args[0] == 'us':
         client = os.path.join(HERE, '..', '..', 'Client US')
-    if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2', 'speedo'):
+    if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2', 'speedo', 'grades', 'kph'):
         sys.exit(__doc__)
     if args[0] == 'status':
         n = nation_of(open(os.path.join(client, EXE), 'rb').read())
@@ -365,6 +492,10 @@ def main():
         return set_f2(client, args[1] == 'on')
     if args[0] == 'us':
         return make_us(client)
+    if args[0] == 'grades':
+        return set_grades(client)
+    if args[0] == 'kph':
+        return set_kph(client)
     if args[0] == 'reset':
         if not os.path.exists(BACKUP):
             sys.exit('no backup: the exe was never changed by this tool')
@@ -375,6 +506,8 @@ def main():
     if lang not in FOLDER:
         sys.exit(f'language: one of {", ".join(FOLDER)}')
     make_folder(client, lang)
+    set_grades(client)
+    set_kph(client)
     set_nation(client, NATIONS[lang])
     set_filecheck(client, True)
     set_f2(client, True)

@@ -385,7 +385,7 @@ async def equip_item(session, frame):
             if why.startswith('car V'):                 # EU part grades: the same 0x0001, saying which grade
                 from .. import admin
                 session.log.note('error 20027 (the car grade text)')
-                return admin.message(session, f'Your car must be {why.split("< ")[1]} or higher to equip this item.')
+                return admin.message(session, 'Your car grade is not high enough for this part')   # as the EU client's 11276
         return error(session, '20027')                  # ItemEquipFail
     if info.type == DOCK:
         from .docking import dock

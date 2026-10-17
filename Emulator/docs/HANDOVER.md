@@ -120,6 +120,11 @@ entries at the top of `docs/EMULATOR_NOTES.md`.
   (battle_levels) and EU V tiers (Newbie V1-3, Pro 4X V4-5 / 6X V6 / 8X V7-8 / 16X V9: eu.section lines,
   rooms.PRO_TIERS_EU; the same in Client EU's GlobalContent.xlt Value_EU_eng, tools/global_content.py --column).
 - [nation] allow = all (both clients; the user tests a decompilation project).
+- Client EU: no Data_US of its own (eu_client.py setup builds from Client US/Data_US); part tooltips "Grade %d
+  required" with the grades written into its ItemClient.tdf (eu_client.py grades; eu.part_level = 0); refusal text
+  11276; KPH texts (11874, game.nui labels: eu_client.py kph; global_text.py --column EU_eng).
+- Main.AutoCarAssist on for all (garage Function 1 / 2 = the car grade's assists; the EU placeholder gone).
+- tools/item_names.py: English names for Korean-named usable items (random_skb_bust so far; 75 more could follow).
 
 **Done on 2026-10-17 (sessions 15-16), not yet confirmed in game:**
 - Auto Fill-Up (i_automitron): automatic refuel at 80 % of the price (0x2d3 with u32 1).

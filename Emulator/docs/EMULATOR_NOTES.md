@@ -98,6 +98,55 @@ Paths in older entries say `Server/...`: that folder is now `Server2008/`. Movin
   player (EU: emulator.ini eu.section.11 / .12, rooms.PRO_TIERS_EU), in car_allowed and per invitee in the invite
   list. Script-tested (every grade x section / tier, EU and US). **Not yet confirmed in game**; the EU client must
   be restarted to read the pack.
+- **Client EU without Data_US** (user: move what is needed to Data_EU_eng, delete the US data): Data_EU_eng already
+  held all 635 files (World.agt with the five patch tables folded in, checked equal to Patch.000 / 003 / 004 / 006;
+  uitex.agt with the Km/h dial); nation 8 loads only Data_EU_eng (the exe's per-nation path tables 0x8d4f07..), so
+  Client EU/Data_US (234 MB, identical to Client US/Data_US) was deleted. tools/eu_client.py setup now builds from
+  ../Client US/Data_US when the folder has none (us_data). Not yet started in game after the deletion.
+- **EU part tooltips show the required grade** (user: the EU client still showed levels; "Required grade is the one
+  that should be showing"). The tooltip (0x657442, all nations) shows "Required Level" when ItemClient column 7
+  (+0x120) is not 0, else "Required Grade" column 8 (+0x124); the user's ItemClient.tdf from an EU client
+  (~/Downloads, 737 rows / 23 columns, older) also has column 8 = 0 everywhere and the same levels, so the grades are
+  the emulator's rule. tools/eu_client.py **grades** (also in setup) writes it into Client EU's
+  Data_EU_eng/World.agt ItemClient.tdf: column 7 = 0, column 8 = data.part_grade_rule (now a function shared with
+  Tables.part_req_grade); levels for the tiers from the first original (client_backup/World_Data_EU_eng.agt.orig),
+  so a second run changes nothing; checked: all 749 items equal to the server's grade. The .tdf header's u32 @4
+  (520619991) is the same in every table (not a checksum); @12 = the table size. Server: **eu.part_level = 0**
+  (the EU client shows no level, so only the V grade counts for EU).
+- **KPH instead of MPH on the EU client** (user: "in localization ... any MPH changed to KPH"): GlobalText 11874 "mph"
+  -> "kph" in the EU English column (the only speed unit there; the "mile" hits are Mileage points; the EU texts
+  use km / km/h elsewhere): tools/global_text.py got `--column EU_de|EU_eng|EU_fr|EU_es` (the EU columns are all
+  headed "Value", columns 11-14) and a per-folder backup (client_backup/Patch.006_ClientEU.orig). The HUD's six speed
+  labels in Data_EU_eng/gameui/game.nui (T1="MPH" / "mph", controls named ..._km/h) -> KPH / kph: eu_client.py
+  **kph** (also in setup; client_backup/game_Data_EU_eng.nui.orig). The Newbie tooltip picture is the same in all
+  packs (not the 161MPH edit). The HUD's speed number is km/h on the EU client (user-confirmed 2026-10-17), so the KPH labels match it. The EU client was
+  running during the change: the new texts and tooltips show after its restart. **Not yet confirmed in game.**
+- **Grade tooltip text** (user: "Grade %s required" instead of the word ranking): GlobalText 11275 (EU English
+  "Ranking %d required"; US "Required Grade: %d") -> "Grade %d required" in Client EU's Patch.006 (global_text.py
+  --column EU_eng). %d, not %s: the client passes the number (push [item+0x124], 0x657469), and %s would read it
+  as a text address. Not yet seen in game.
+- **Grade refusal text** (user: "Your car grade is not high enough for this part", screenshot of "Your level isn't high
+  enough for this class of car."): the client refuses the part itself, no 0x199 sent: with column 7 = 0 it compares
+  the car's grade (0x5fa290) with +0x124 (0x5fe251 part drop, 0x60b5da the other equip path) and shows GlobalText
+  11276 (column 7 > 0: the level, 0x5fe22e, text 0x8e1420). 11276 EU English -> the user's text (Client EU
+  Patch.006); the server's own refusal (items.equip_item, EU part_grade) now sends the same words. Not yet seen in game.
+- **Garage Function 2 showed "(º¸³Ê½º ¾î½Ã½ºÆ® ¿É¼Ç)" on the EU client** (user; the session 14 open item): the CP949
+  placeholder "(보너스 어시스트 옵션)" of game.nui control 1650007 ID_GARAGE_GETON_PANEL_ASSIST2. The garage (0x79c2d0)
+  fills Function 1 / 2 ([garage+0xa8] / +0xac) with the car grade's assists only with **Main.AutoCarAssist**
+  ([net+0x274] & 0x180000, 2011 only -> sent 0); without it it hides only Function 1 (0x79c34c). GlobalContent
+  MyGarageAdv: US 0 (Function 2 hidden at 0x79ab7c), EU 1 -> the placeholder showed. The assists are VehicleUpgrade
+  "OptionID" (112 car grades, e.g. Metro V2 "BA_CS_060 CH_AD_015", Turbo Start AL_QS_001) -> Assist_Client.tdf rows.
+  The flag also feeds the car tooltips (0x657b7e, 0x65bde8), 0x70f4a0, and makes 0x71ac10 skip the old fixed
+  per-car assist list (its cases test nations 2 / 3). User's choice: on for **all** clients -> handlers/game.py
+  NEW_FLAGS 'Main.AutoCarAssist': 1 (dword @0xc = 0x8803e8 checked). Whether the client applies the assists in races
+  by itself (as part options) or needs the server is not known yet. **Not yet confirmed in game.**
+- **"?? ?? ???" item in Xerander's inventory** (user screenshot): random_skb_bust "쓸모 없는 스킬북" (event_item; not in
+  rw_random_skb, origin unknown): its name / description are Korean in both clients' tables (the fonts have no
+  Korean). New tools/item_names.py (NAMES: "Useless Skill Book" / "A skill book too old to be of any use.") writes
+  Client US Patch.004 (client_backup/Patch.004.orig), Client EU Data_EU_eng/World.agt and
+  server_data/tables/UseItemClient.tdf; read back, 2 cells changed each, header bytes kept, the EU grades intact.
+  75 other UseItemClient rows still have Korean names (old event items: Seoul Motor Show tickets, Pizza Hut coupons,
+  Indiana Jones items, event ticket pieces). **Not yet confirmed in game** (both clients must restart).
 
 ## Session 16 (2026-10-17): Party Patrol and its solo test mode
 

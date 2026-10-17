@@ -25,7 +25,7 @@ Rules that differ by nation go through this module (`rule(x, name)`), so the han
     part_level   a part needs the player's level >= ItemClient column 7 ("Req Level")
     part_grade   a part needs the car's V grade >= ItemClient column 8 (the client's tooltip "Required Grade: %d",
                  GlobalText 11275, shown when column 7 is 0; client item record +0x120 level, +0x124 grade,
-                 tooltip 0x657442). Which grade it means is not in the client (it only shows the number); the EU
+                 tooltip 0x657442; EU: eu_client.py grades fills it). Which grade it means is not in the client (it only shows the number); the EU
                  texts call it the car's rank ("Your car's rank ...", 12140): read here as the car's V grade.
 On for EU only (EU changes never touch US clients: user, 2026-10-17). The US tables fill only column 7; with
 column 8 empty the grade comes from the part's grade and tier (data.Tables.part_req_grade, user 2026-10-17: best N
@@ -64,7 +64,7 @@ NAMES = {0: 'KR', 1: 'US', 2: 'JP', 3: 'TW', 4: 'INI', 5: 'TH thai', 6: 'TH eng'
 RULES = {
     'us': dict(part_level=True, part_grade=False, level_points=True, half_level_points=False, drop_by_grade=False,
                battle_levels=True),
-    'eu': dict(part_level=True, part_grade=True, level_points=False, half_level_points=False, drop_by_grade=True,
+    'eu': dict(part_level=False, part_grade=True, level_points=False, half_level_points=False, drop_by_grade=True,
                battle_levels=False),
 }
 

@@ -107,7 +107,14 @@ NEW_FLAGS = {'Etc.InventoryReform': 2, 'Main.NeoCityMainUI': 1, 'Etc.VShopSeason
              # party patrol pillars (byte [net+0x280] bit 5, client 0x62f95d): with it a party of 2+ sees the party_move /
              # party_move_ROO rows at the patrol pillars instead of the solo ones (native/game/partypatrol.py); missing
              # from the 2008 Contents.ini (user request 2026-10-17: Party Patrol)
-             'InstantMission.PartyPatrol': 1}
+             'InstantMission.PartyPatrol': 1,
+             # the 2011 car assists ([net+0x274] & 0x180000, bits 19-20): each car grade's VehicleUpgrade OptionID assists
+             # (Assist_Client.tdf: Turbo Start AL_QS_001, battle options BA_* / CH_*) listed in the garage's Function 1 / 2
+             # (0x79c35a -> 0x7175f0; GlobalContent MyGarageAdv: EU 1 two boxes, US 0 one) and the car tooltips
+             # (0x657b7e, 0x65bde8); 0x71ac10 then skips the old fixed per-car assist list (its cases test nations
+             # 2 / 3). Without it the EU garage showed control 1650007's placeholder "(보너스 어시스트 옵션)" in
+             # Function 2 (user, 2026-10-17; the US client hides that box)
+             'Main.AutoCarAssist': 1}
 
 
 def _flag_table(name):

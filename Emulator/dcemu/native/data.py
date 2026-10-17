@@ -72,6 +72,27 @@ USE_TYPE, DOCK_TYPE = 5, 11
 # not above their own. Options (FN / FS / FH) and docking parts (ON / OS / OH): the grade's first V grade.
 GRADE_BASE = {'N': 1, 'S': 4, 'H': 7}
 BASE_PARTS = ('speed', 'accel', 'crash', 'boost')
+
+
+def part_tiers(rows):
+    """ItemClient rows -> {grade letter: sorted levels of the normal parts (no set)}."""
+    tiers = {}
+    for r in rows:
+        if len(r) > 7 and r[0] in BASE_PARTS and r[1] == 'n/a' and r[6] in GRADE_BASE:
+            tiers.setdefault(r[6], set()).add(_num(r[7]))
+    return {k: sorted(v) for k, v in tiers.items()}
+
+
+def part_grade_rule(kind, grade, req_level, tiers):
+    """The EU rule above for one item (column 0 kind, column 6 grade, column 7 level) -> V grade, 0 = none. Also
+    written into the EU client's own ItemClient.tdf (tools/eu_client.py grades: its tooltip shows the grade)."""
+    if len(grade) == 2 and grade[0] in 'FO' and grade[1] in GRADE_BASE:      # options, docking parts
+        return GRADE_BASE[grade[1]]
+    if kind not in BASE_PARTS or grade not in GRADE_BASE:
+        return 0
+    levels = tiers.get(grade) or [req_level]
+    pos = max((k for k, lv in enumerate(levels) if lv <= req_level), default=0)
+    return GRADE_BASE[grade] + pos * 3 // len(levels)
 USE_STACK = 99           # usable items stack to UseItem column 5, 99 when empty (the 2008 loader)
 
 
@@ -334,21 +355,10 @@ class Tables:
         above (GRADE_BASE)."""
         if info.req_grade:
             return info.req_grade
-        g = info.grade or ''
-        if len(g) == 2 and g[0] in 'FO' and g[1] in GRADE_BASE:        # options, docking parts
-            return GRADE_BASE[g[1]]
-        if info.kind not in BASE_PARTS or g not in GRADE_BASE:
-            return 0
         tiers = getattr(self, '_part_tiers', None)
         if tiers is None:
-            tiers = {}
-            for r in self._part_rows:
-                if r[0] in BASE_PARTS and r[1] == 'n/a' and r[6] in GRADE_BASE:
-                    tiers.setdefault(r[6], set()).add(_num(r[7]))
-            tiers = self._part_tiers = {k: sorted(v) for k, v in tiers.items()}
-        levels = tiers.get(g) or [info.req_level]
-        pos = max((k for k, lv in enumerate(levels) if lv <= info.req_level), default=0)
-        return GRADE_BASE[g] + pos * 3 // len(levels)
+            tiers = self._part_tiers = part_tiers(self._part_rows)
+        return part_grade_rule(info.kind, info.grade or '', info.req_level, tiers)
 
     def item_info(self, table_idx):
         """-> ItemInfo of an item by its TableIdx (ItemClient.tdf rows, then UseItemClient.tdf), or None."""
