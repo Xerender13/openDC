@@ -52,20 +52,8 @@ To let other players join, put your address in their `DriftCityLauncher.ini` and
 
 ## EU version
 
-The same 2011 program serves every publisher; a nation number inside it picks the version. The EU client is the
-2011 exe unpacked and set to an EU nation (`DriftCityEU.exe`, English by default). Its main difference is that parts
-and some restrictions go by the car's V grade instead of the player's level, and the player's level adds no stat
-points. Setup:
-
-1. Copy the US client to `Client EU/` and put `DriftCityEU.exe` (the unpacked 2011 exe) in it.
-2. `python3 Emulator/tools/eu_client.py setup eng` (or `de`, `fr`, `es`): sets the nation in the exe (original kept in
-   `Emulator/client_backup/`) and makes the EU data folder `Data_EU_eng/` from `Data_US/`.
-3. Start it with `Client EU/DriftCityLauncher` (`./launch.sh client eu`, `launch.bat client eu`).
-
 The emulator recognises each client's nation and applies the EU rules only to EU clients (`emulator.ini` `[nation]`;
-`allow = eu` or `us` makes a server for one version only). The EU parts tables are not available, so the parts
-keep the US level requirements for now. `eu_client.py us` writes `Client US/DriftCityUS.exe`, the same exe as
-a US client without GameGuard (choose it with `exe =` in `DriftCityLauncher.ini`).
+`allow = eu` or `us` makes a server for one version only).
 
 **Current emulator progress (17.10.2026):** 
 
