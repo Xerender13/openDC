@@ -69,7 +69,6 @@ a US client without GameGuard (choose it with `exe =` in `DriftCityLauncher.ini`
 
 **Game features that haven't been done yet:**
 - Channels and Channel Battle
-- Party Patrol
 - Virtual HUV
 - Undercity
 - GT Tournament
@@ -78,5 +77,6 @@ a US client without GameGuard (choose it with `exe =` in `DriftCityLauncher.ini`
 
 **Features that still require testing and might work with issues:**
 - Crew management
+- Party Patrol
 
 If you find a bug, something not working not listed above or something working wrongly (not like it was on official servers), creating an issue describing the issue will help the project to improve.
