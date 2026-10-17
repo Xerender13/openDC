@@ -13,6 +13,8 @@ Reply: one frame with
                    0 OK, 1 wrong password (10046), 2 unknown ID (10047), 4 no ID / password (10049),
                    12 account blocked (11417); any other code shows "Authentication system
                    abnormal.(%d)" (10045), as the 2008 server's -1 / -2 / -3 did (user, 2026-10-13).
+                   The EU client maps the codes to the same text keys, but its texts differ for some
+                   (4 = "This is an ID with an age restriction"): nation.login_result.
     0x17 ServerList: u32 count, entries of 0x88 bytes (layout in handlers/auth.py), built from the
                    2008 server's serverlist.txt plus our ranking service. Its 127.0.0.1 addresses go out
                    as the address the client connected to (a client on the network gets the host's
@@ -129,6 +131,13 @@ async def answer_login(session, member, password_field):
             result = await check_login(member, password)
             if result == OK:
                 nation.remember(member, n)
+            else:
+                if session.state.get('nation') is None:     # answered without waiting: the texts depend on it
+                    n = await nation.wait_detected(session)
+                eu = nation.login_result(n, result, member)
+                if eu != result:
+                    session.log.note(f'login {member!r}: result {result} sent as {eu} (nation {n}: {nation.name(n)} texts)')
+                    result = eu
     except Exception:
         session.log.note('login failed:\n' + traceback.format_exc())
         return

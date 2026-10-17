@@ -47,11 +47,19 @@ window draws the car-name image and V grade (0x551ce0: 0x564820 by car type, 0x5
 1-3 and 6; 0x56ffd6 picks by the table at 0x570010 (index nation - 4: 0 0 1 0 0 0 0), so EU nations left the box
 black. `setup` (or `f2 on`) sets the EU nations' bytes 0x570013-0x570016 to 1, the US path; `f2 off` puts 0 back.
 
+Speedometer (asked by the user, 2026-10-17): the classic HUD's dial picture (game.nui control 210001, piece
+"272,267~512,512_ui_play01.dds" in gameui/uitex.agt) says MPH. `speedo [TW client dir]` puts the 2008 Taiwan client's
+dial there (Data_TW.agt, picture "406" of its 2008 .ntx, same 240x245 area: "Km/h" and the RPM numbers 0-10) in the
+EU folder's own pack only (Data_EU_<lang>/gameui/uitex.agt, header bytes 20-31 kept; the first original kept as
+client_backup/uitex_<folder>.agt.orig; `speedo mph` puts it back). The TW picture is kept as
+client_backup/tw_speedometer_406.dds; `setup` applies it again when that file is there.
+
 The client dir defaults to ../Client EU (../Client US for `us`).
 
 usage: python3 Emulator/tools/eu_client.py [client dir] setup [de|eng|fr|es]   (default eng)
        python3 Emulator/tools/eu_client.py [client dir] us            DriftCityUS.exe: the unpacked US client
        python3 Emulator/tools/eu_client.py [client dir] f2 on|off     the F2 car panel for EU nations
+       python3 Emulator/tools/eu_client.py [client dir] speedo [TW client dir | mph]   the dial with Km/h
        python3 Emulator/tools/eu_client.py [client dir] status
        python3 Emulator/tools/eu_client.py [client dir] reset         the original exe back (the data folder stays)
 """
@@ -69,6 +77,10 @@ BACKUP = os.path.join(HERE, '..', 'client_backup', 'DriftCityEU.exe.orig')
 NATION_AT = 0x4e4106                      # virtual address of the 22 bytes
 ORIGINAL = bytes.fromhex('b801000000' '889e68010000' '89866c010000' 'a380d89400')
 FILECHECK_AT, FILECHECK, FILECHECK_OFF = 0x4ed620, bytes.fromhex('558bec'), bytes.fromhex('31c0c3')
+SPEEDO_PIECE = '272,267~512,512_ui_play01.dds'
+TW_PICTURE = '406'
+TW_SAVED = os.path.join(HERE, '..', 'client_backup', 'tw_speedometer_406.dds')
+TW_CLIENT = os.path.join(HERE, '..', '..', '..', 'Drift City 0.02 TW', 'Client')
 F2_AT, F2_EU, F2_US = 0x570013, bytes(4), bytes([1] * 4)   # F2 car panel table entries of nations 7-10
 US_EXE = 'DriftCityUS.exe'
 GG_CLASS_AT = 0x4e1210 + 1                 # protection class of nation 1: 2 GameGuard, 0 none
@@ -144,6 +156,71 @@ def set_f2(client, on):
     exe[at:at + 4] = want
     write_exe(path, exe)
     print(f'{EXE}: F2 car panel for EU nations {"on" if on else "off (EU design)"}')
+
+
+def eu_folder(client):
+    """The client's EU data folder (Data_EU_*), or None."""
+    return next((f for f in FOLDER.values() if os.path.isdir(os.path.join(client, f))), None)
+
+
+def tw_speedometer(tw_client):
+    """The 2008 Taiwan client's dial picture (DDS), kept in client_backup once read."""
+    if os.path.exists(TW_SAVED):
+        return open(TW_SAVED, 'rb').read()
+    sys.path.insert(0, os.path.join(HERE, '..', '..', 'Server2008', 'tools'))
+    pack = os.path.join(tw_client, 'Data_TW.agt')
+    if not os.path.exists(pack):
+        sys.exit(f'no {pack}: give the 0.02 TW client folder (speedo DIR)')
+    raw, es = agt.index(pack)
+    for e in es:
+        if e[0].lower().endswith('.ntx'):
+            d, p = agt.extract(raw, e), 0
+            while p + 20 <= len(d):                 # 2008 .ntx: char[16] name, u32 size, the image
+                name = d[p:p + 16].split(b'\0', 1)[0].decode('latin-1')
+                size = struct.unpack_from('<I', d, p + 16)[0]
+                if not name or not size:
+                    break
+                if name == TW_PICTURE:
+                    img = d[p + 20:p + 20 + size]
+                    os.makedirs(os.path.dirname(TW_SAVED), exist_ok=True)
+                    open(TW_SAVED, 'wb').write(img)
+                    return img
+                p += 20 + size
+    sys.exit(f'{pack}: no picture {TW_PICTURE}')
+
+
+def set_speedometer(client, img):
+    """img (DDS bytes) as the dial piece of the EU folder's uitex.agt; None = the original piece back."""
+    from ui_texture import entries
+    folder = eu_folder(client)
+    if not folder:
+        sys.exit('no EU data folder: run setup first')
+    path = os.path.join(client, folder, 'gameui', 'uitex.agt')
+    backup = os.path.join(HERE, '..', 'client_backup', f'uitex_{folder}.agt.orig')
+    if img is None:
+        _, orig = agt.read(backup if os.path.exists(backup) else path)
+        img = next(d[off + 72:off + 72 + size] for n, d in orig if n.lower().endswith('.ntx')
+                   for e, off, size in entries(d) if e.lower() == SPEEDO_PIECE.lower())
+    header, files = agt.read(path)
+    for i, (n, d) in enumerate(files):
+        if not n.lower().endswith('.ntx'):
+            continue
+        for e, off, size in entries(d):
+            if e.lower() == SPEEDO_PIECE.lower():
+                if d[off + 72:off + 72 + size] == img:
+                    return print(f'{folder}/gameui/uitex.agt: dial already so')
+                if not os.path.exists(backup):
+                    shutil.copy2(path, backup)
+                    print('original pack kept as', os.path.normpath(backup))
+                files[i] = (n, d[:off + 64] + struct.pack('<I', len(img)) + d[off + 68:off + 72] + img + d[off + 72 + size:])
+                tmp = path + '.new'
+                agt.write(tmp, header, files)
+                raw = bytearray(open(tmp, 'rb').read())
+                raw[20:32] = header[20:32]
+                open(tmp, 'wb').write(bytes(raw))
+                os.replace(tmp, path)
+                return print(f'{folder}/gameui/uitex.agt: dial {SPEEDO_PIECE} -> {len(img)} bytes')
+    sys.exit(f'{path}: no piece {SPEEDO_PIECE}')
 
 
 def set_filecheck(client, off):
@@ -263,7 +340,7 @@ def main():
         client, args = args[0], args[1:]
     elif args and args[0] == 'us':
         client = os.path.join(HERE, '..', '..', 'Client US')
-    if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2'):
+    if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2', 'speedo'):
         sys.exit(__doc__)
     if args[0] == 'status':
         n = nation_of(open(os.path.join(client, EXE), 'rb').read())
@@ -278,6 +355,10 @@ def main():
             if os.path.isdir(os.path.join(client, folder)):
                 print(f'{folder}: present')
         return
+    if args[0] == 'speedo':
+        if len(args) > 1 and args[1].lower() == 'mph':
+            return set_speedometer(client, None)
+        return set_speedometer(client, tw_speedometer(args[1] if len(args) > 1 else TW_CLIENT))
     if args[0] == 'f2':
         if len(args) < 2 or args[1] not in ('on', 'off'):
             sys.exit('f2 on|off')
@@ -297,6 +378,8 @@ def main():
     set_nation(client, NATIONS[lang])
     set_filecheck(client, True)
     set_f2(client, True)
+    if os.path.exists(TW_SAVED):                         # the Km/h dial, once taken from the TW client
+        set_speedometer(client, open(TW_SAVED, 'rb').read())
 
 
 if __name__ == '__main__':

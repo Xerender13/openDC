@@ -174,6 +174,22 @@ def rule(x, key):
     return RULES[group(x)][key]
 
 
+# Login results (auth 0x16 @4) whose text means something else in the EU texts. The client maps a code to a text key
+# (client 0x50cb10; nations other than 1: table 0x50ce80, the same keys for 1-5, 7, 10, 12-14) and the EU column
+# of those keys was written for the EU server's codes: 10049 (code 4) is "An ID or Password has not been entered."
+# in US English but "This is an ID with an age restriction" in EU English (user, 2026-10-17). EU English has
+# "You did not enter your ID or password." (10081), but no code reaches it, so an empty password is sent as 1
+# ("Your password is incorrect") and an empty ID as 2 ("This ID does not exist").
+NO_ID = 4
+
+
+def login_result(n, result, member):
+    """The login result to send to a client of nation n."""
+    if n in EU and result == NO_ID:
+        return 2 if not member else 1
+    return result
+
+
 def part_allowed(x, player, info, car):
     """-> None if the part may go on the car, else why not (for the log). x: the session or the player."""
     if rule(x, 'part_level') and info.req_level and player.char.level < info.req_level:
