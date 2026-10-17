@@ -13,7 +13,9 @@ lobby / game / area / battle-area services, the original SQL Server database tab
 2011 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
 the rest itself.
 
-[Link to the client download](https://drive.google.com/file/d/19rOxAPsX7-XTpyP1zCFxTQvcQbavK7QN/view?usp=drive_link)
+[Link to the US client download](https://drive.google.com/file/d/1ryBK-ZSFAEZfazAx7Ks4rUPvOWRyIt7J/view?usp=sharing)
+
+[Link to the EU client download](https://drive.google.com/file/d/1xqOmNVxj8UySWotUqleW5vHej6kofY3a/view?usp=sharing)
 
 | Folder | What |
 |---|---|
@@ -77,6 +79,5 @@ a US client without GameGuard (choose it with `exe =` in `DriftCityLauncher.ini`
 
 **Features that still require testing and might work with issues:**
 - Crew management
-- Party Patrol
 
 If you find a bug, something not working not listed above or something working wrongly (not like it was on official servers), creating an issue describing the issue will help the project to improve.
