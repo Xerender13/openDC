@@ -104,6 +104,8 @@ RESULT_GRACE, LOAD_TIMEOUT = 3.0, 120.0
 HOST_START_SECONDS = 15             # BS_Room::OnTick (0x3a98 ms)
 AREA_BASE = 900
 PRACTICE, PRACTICE_AREA_BASE = 100, 20000   # 0x1e7 type of a practice run; its area = base + serial
+MISSION_ROOM = 0x10000      # room type of a Mission Battle room (the client makes it itself, instant.py): a real race alone,
+                            # its reward is the instant mission's (0x3e2), not the battle's
 USER_INFO, CAR_ATTR, PLAYER_INFO = 12, 12, 0xd8
 
 rooms = {}                          # room id -> Room
@@ -1064,6 +1066,19 @@ async def start_request(session, frame):
         # the client says "The map does not support AI Battle" but sends the start anyway; started, it
         # raced with 7 strange cars (user, 2026-10-13)
         return admin.message(session, 'This track does not support AI racers: choose a track with the AI icon.')
+    if room.type & MISSION_ROOM:
+        # a Mission Battle runs as a practice run (0x1e7 type 100): the client's race object then marks it practice
+        # (0x7727c7: +0x126 = 1), which its Rechallenge (0x7824f0 -> race vfunc 0xcc 0x77bd20: a local restart only for
+        # practice) needs, and it has no gates (user: gates showed and Rechallenge did nothing in a normal race). The
+        # mission ends and pays through the client's 0x3eb / 0x3e2 (instant.py), not the race result. The client sends
+        # the start twice at once: the second is ignored.
+        now_ = asyncio.get_running_loop().time()
+        if now_ - getattr(room, 'mission_start', -10.0) < 2.0:
+            return
+        room.mission_start = now_
+        session.log.note(f'room {room.id}: Mission Battle on map {room.map_id} in area {room.area} (practice run)')
+        return room.cast(Frame(0x1e7, struct.pack('<iiiifii', PRACTICE, room.map_id, room.map_flag, room.area, 0.0,
+                                                start_time, -1)))
     if len(room.members) == 1 and context.practice_alone:
         # BS_Room::StartLoad's practice path (Contents.ini BattleZone.PracticeMode): one member -> 0x1e7 type
         # 100, the room keeps waiting: no go signal, no gate rewards, no end, no result (user, 2026-10-13)
@@ -1396,6 +1411,8 @@ async def gate(session, frame):
     reward = gate_reward(len(room.racers), len(passed), col_point == CLEAN_GATE, team_gates(room.type, len(room.racers)))
     if forced_reward is not None:               # GM command gmgate N (to find out what each number is)
         reward = forced_reward
+    if room.type & MISSION_ROOM:                # no gates in a Mission Battle (user, 2026-10-17)
+        reward = 0
     session.log.note(f'gate {index}: position {len(passed)} of {len(room.racers)}, reward {reward}')
     room.cast(Frame(0x1ee, struct.pack('<Ii', m.serial, reward)))
 
@@ -1427,6 +1444,25 @@ async def race_end(session, frame):
     await progress(room)
 
 
+async def battle_exp_item(session, p, exp):
+    """Battle EXP 25% / 50% up (i_n_battleEXP_25 / _50, use kind battle_exp: "To apply the effect automatically, carry it
+    in the inventory"; no client code reads them): the best one held adds its % to a battle's EXP, one is used up per
+    battle that pays EXP (a guess: they come in stacks) -> the EXP added."""
+    from .alchemy import take_count
+    from .items import info_of, mod_list
+    held = [(int(i.item_id.rsplit('_', 1)[1]), i.item_id) for i in p.items
+            if i.item_id.startswith('i_n_battleEXP_') and i.item_id.rsplit('_', 1)[1].isdigit() and not i.car_id
+            and (i.state & 0xffff) != 4 and info_of(i) and info_of(i).kind == 'battle_exp']
+    if not exp or not held:
+        return 0
+    rate, item_id = max(held)
+    changes = await take_count(p, item_id, 1)
+    if changes:
+        send(session, mod_list(*changes))
+    session.log.note(f'{item_id}: +{rate}% battle EXP')
+    return exp * rate // 100
+
+
 async def result(room):
     racers = [m for m in room.members if m.serial in room.racers and m.player]
     n = len(racers)
@@ -1444,13 +1480,17 @@ async def result(room):
         from .licenses import CITY_SUFFIX, city_of_track, count_many
         city = city_of_track(room.map_id)
         exp, money = play_bonus(p, exp, money, 'battle_team' if team_room(room.type) else 'battle_personal', city)
+        if room.type & MISSION_ROOM:            # a Mission Battle pays as its instant mission (instant.py)
+            exp = money = 0
+        exp += await battle_exp_item(m.session, p, exp)
         if exp:
             await add_exp(c, exp)
         if money:
             await add_money(c, money)
         # licenses: a battle played (team or individual room) and a race on a track of that city
-        await count_many(m.session, ['BattleTeam' if team_room(room.type) else 'BattlePersonal']
-                         + ([f'BattleTrack{CITY_SUFFIX[city][0]}'] if city in CITY_SUFFIX else []))
+        if not room.type & MISSION_ROOM:
+            await count_many(m.session, ['BattleTeam' if team_room(room.type) else 'BattlePersonal']
+                             + ([f'BattleTrack{CITY_SUFFIX[city][0]}'] if city in CITY_SUFFIX else []))
         if n > 1:
             await play_mode(c, 'PVP', 1, 1 if rank == 1 else 0, exp, money)
             if rank == 1 and is_real_match(room.type):     # coupon book: Duel (Real Match wins, DUEL_RM)

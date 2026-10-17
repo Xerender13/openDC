@@ -94,7 +94,16 @@ NEW_FLAGS = {'Etc.InventoryReform': 2, 'Main.NeoCityMainUI': 1, 'Etc.VShopSeason
              'BattleZone.BattleZoneReform': 1,
              # its section buttons (client 0x5a7530): Newbie (PvP channel 11) needs ChannelNewbie, Pro (12) ChannelPro
              # (the top bit, 0x5a77a2 js); without them both stayed locked (user, 2026-10-15). Real Match is 6.
-             'BattleZone.ChannelNewbie': 1, 'BattleZone.ChannelPro': 1, 'BattleZone.Channel16X': 1}
+             'BattleZone.ChannelNewbie': 1, 'BattleZone.ChannelPro': 1, 'BattleZone.Channel16X': 1,
+             # the battle quick slots (byte [net+0x296] bit 0, read at 0x5aca0a, 0x5f7ce9, 0x6047da (quick-slot drop),
+             # 0x60555d, 0x606a42, 0x60fbf3): the battle_quick items (Crash Capsule, Boost Recharger, Invincible Rush /
+             # Drift City Capsule, Emergency Boost Kit, Mk.II Battle Quick Repair Kit) act in the client on 0x1a2 kind
+             # 0x1b (0x72a9c2, by item id); missing from the 2008 Contents.ini (user, 2026-10-17: no battle slots)
+             'BattleZone.BattleQuickSlot': 1,
+             # a room's Start button with one player (client 0x5a3435): enabled with PracticeMode, else only for GM accounts
+             # (PType < 'N', char +0x7c); the 2008 Contents.ini has 0 (user, 2026-10-17: Newbie could not start alone,
+             # Xerander on the admin account could). The server runs it as a practice run (rooms.practice_alone).
+             'BattleZone.PracticeMode': 1}
 
 
 def _flag_table(name):

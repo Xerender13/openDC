@@ -1,11 +1,119 @@
-# Drift City 2011 US client: notes for building a server emulator
+# Drift City 2011 client (US and EU): notes for building a server emulator
 
-Hand-off for a new Claude session. Goal: make the **2011 US client** (`../../Client`) playable
-against a server we control. Everything below was measured, unless marked *(guess)*.
+Hand-off for a new Claude session. Goal: make the **2011 client** playable against a server we control: the US
+version (`../../Client US`) and, since session 14, the European version (`../../Client EU`). Everything below was measured, unless marked *(guess)*.
 
 **The emulator project is `Emulator/`** (this file is `Emulator/docs/EMULATOR_NOTES.md`; started 2026-10-12, see
-`Emulator/README.md`). **Start with "Current state and where to continue" right below** (session 12), then the session entries.
+`Emulator/README.md`). **Start with "Session 14 hand-off" right below**, then "Current state and where to continue"
+(session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
+
+## Session 15 (2026-10-17 morning; repo CLAUDE.md added, HANDOVER.md §5 updated)
+
+- **Mitro City mother quest retaken: "You cannot do missions while you're doing Chase missions."** (user, Agent
+  Riggs mq_5th_005): taking a mother quest makes the client send 0x106 for every child; nq_00006 "Converse with Agent
+  Riggs" was still REWARDED from the 2026-10-16 try, so quests.quest_start refused it with 20241 (that text) and the
+  client went straight to the patrol child. The children's progress was never reset after a failure (user: objectives
+  not reset). mothers._reset_children now drops the children's SKID_QUEST_TB rows at 0x181 (failed / given up) and at
+  0x17d (start; also clears rows left from before). Children belong to one mother quest only (MotherQuest.xlt).
+  Emulator restarted 09:55.
+- **Then: two quest markers, no timer, failed at 0** (user): on the retry the client sent 0x106 for both children at
+  once, because its own list still had nq_00006 rewarded and nq_00007 needs it (QuestClient col 4 = 50006); the
+  first try (2026-10-16) started only nq_00006 and nq_00007 after its 0x10b. Xerander is not stopped by the server's
+  previous-quest check (it lets PType 'A' through). Now 0x111 (login.quest_list_frame; client 0x51adb0 -> 0x750c50
+  frees its two quest lists and rebuilds them) is resent whenever children were dropped: at 0x181 before 0x17c, at
+  0x17d before 0x17e. Restarted ~10:10. **User-confirmed 2026-10-17**: Agent Riggs ran fine (one marker, the patrol after
+  the talk).
+- **Auto Fill-Up** (drift item i_automitron, category 34; user asked whether it works): it never did. The client
+  (0x5361b0, every 2 s) sends 0x2d3 (car, pay 0, fuel 0, u32 1) when the tank is below 20 %, i_automitron is held
+  (opts +0x1b12 from 0x5dd) and it has Mito; again 10 s later, 30 s with no Mito. The server read it as a price
+  question. session.fuel_charge now fills the tank at 80 % of the price (item text; with the Fuel Booster the lower
+  price, a guess), only as much as the Mito pays for, and answers with 1 @0x32 (0x2d4 handler 0x520290: the fuel
+  window stays closed). Script-tested (stub session); not yet in game.
+- **Battle quick slots** (user: no battle zone quick item slots): flag BattleZone.BattleQuickSlot ([net+0x296] bit 0;
+  0x5aca0a, 0x5f7ce9, 0x6047da quick-slot drop, 0x60555d, 0x606a42, 0x60fbf3) was 0 (not in the 2008 Contents.ini):
+  handlers/game.py NEW_FLAGS. The battle_quick items (i_n_00055 Crash Capsule, 00056 Boost Recharger, 00058 Invincible
+  Rush Capsule, 00059 Drift City Capsule, 00060 Emergency Boost Kit, 00099 Mk.II Battle Quick Repair Kit) act in the
+  client on 0x1a2 kind 0x1b (0x72a480 -> 0x72a9c2, by item id; Mk.II: energy + 30 % of the maximum, capped); the
+  server only uses them up (items.use_item, already so). **Battle EXP 25% / 50% up** (i_n_battleEXP_*, kind
+  battle_exp, "carry it in the inventory"; no client code for them): rooms.battle_exp_item adds the best one's % to
+  a battle's EXP and uses one up per battle that pays EXP (a guess). Not yet in game.
+- **Start alone greyed out for Newbie** (user; Xerander could): the room window (client 0x5a3435) enables Start for one
+  player only with BattleZone.PracticeMode, else only for GM accounts (PType < 'N', char +0x7c; Xerander is on the
+  admin account). The 2008 Contents.ini has PracticeMode=0 -> NEW_FLAGS 'BattleZone.PracticeMode': 1. Not the section.
+- **Mission Battles** (Line Ball i_n_00122 / Mecha Watch 00123 / Exodus Quake 00124, kind instant, value 0-2; user: the
+  item, used in the battle zone, makes a mission room and starts the solo mission, EXP at the end): the item use is
+  answered with an offer 0x3df of the Instant_Client row of type Mission_Battle1..3 (124-126, Battle_Lobby); accepted ->
+  0x3e0 -> 0x3e1; the client's battle lobby object (0x782bd0) switches Mission Battle on, sends 0x1b8 channel 5 and
+  0x1cc type 0x10000 (rooms.MISSION_ROOM), capacity 1, map flag 0x2048 / 0x204a. That room races for real (not the
+  one-member practice run); its battle result pays nothing; 0x3e2 (TableIdx only) pays instant.mission_battle_exp
+  (column 14 base; Line Ball points / collisions unknown to the server; Exodus Quake +30 % for 3:30 or less from the
+  race time). Layout and flow in instant.py's comment. Rechallenge Mission Battle (i_n_00125, instant_r): client
+  side (0x775408 shows its button while one is held), only used up here. **First run in game (user, 2026-10-17)**:
+  works end to end (offer, room, the client's own 0x1e6, race, 0x3e2, EXP). Then: the client sends **0x3eb** before
+  0x3e2 (u32 TableIdx, u32 kind 1-3, u32 value = Line Ball points (144) / Mecha Watch count, f32 time, u32 tries;
+  sender 0x7ef150): instant.mission_battle_result keeps it for the bonuses. The client sent 0x1e6 twice (the second
+  got 20186 "Already loading."). **Second run** (user): gates still there, Rechallenge did nothing after a failed
+  mission (the item was used, then nothing). The Rechallenge button (0x7824f0: free retries in mission +0x50, else the
+  i_n_00125 is used with 0x1a1) restarts the race with race vfunc 0xcc (0x77bd20, race manager vtable 0x8ecb90), which
+  restarts only a practice race (+0x126, set by the 0x1e7 handler vfunc 0xd4 0x7726d0 for type 100). So a Mission
+  Battle room's start is now answered as a **practice run** (0x1e7 type 100, the room's map flag; no gates either),
+  the duplicate start within 2 s ignored; the mission still ends and pays through 0x3eb / 0x3e2. **User-confirmed
+  2026-10-17**: no gates, failing and Rechallenge work, EXP at the end.
+- **License gained text** (12215 "%s", Patch.006): **user-confirmed 2026-10-17**, the license name shows, no number.
+
+## Session 14 hand-off (2026-10-17, ~09:50; the EU client session)
+
+Transcript `Handoff/claude_sessions/3160bd11-74ec-4c7a-982f-d8d0aecd4e8f.jsonl` (run from the side folder, so its
+path key is `-home-deck-Drift-City-Project-Drift-City-EU-2011`); working files `Handoff/scratchpad_session14/`
+(`tools/eu.py` = disassembler / xref / caller helpers for the unpacked exe; `nat2.py` lists every GetNation call
+site with its compares; `nation_probe.py` / `empty_probe.py` = login probes for a test emulator, `test_main.ini`;
+`speedo/` the dial pictures). The detail is in the "EU client" entry right below.
+
+**What happened:**
+- The user brought `DriftCityEU.exe` from the 2011 European client. It turned out to be **the US build itself**
+  (2011-10-27, same addresses), ASProtect-free; one program serves every publisher through a nation number (1 US,
+  7-10 EU de/eng/fr/es). Worked out in a side folder `Drift City EU 2011`, then **merged here**. The user deleted
+  the side folder; its DB container `dcemueu2011_db` is stopped. Its volume `drifteu2011_mssql-data` is exported to
+  `Handoff/db/drifteu2011_mssql-data.tar` and holds only a level-3 EU test character.
+- **Layout now:** `Client US/` (runs `DriftCityUS.exe` = the unpacked exe without GameGuard; `DriftCity.exe` kept)
+  and `Client EU/` (runs `DriftCityEU.exe`, nation 8). `./launch.sh [all|client] eu` for the EU client. One DB for
+  both, emulator.ini `[nation] allow = all`.
+- **`tools/eu_client.py`**: `setup eng` (nation, dname.chk check off, F2 car panel on, Data_EU_eng from Data_US,
+  re-applies the dial), `us`, `f2 on|off`, `speedo [TW dir|mph]`, `status`, `reset`. The exe differs from the
+  original in 29 bytes; the original is in `client_backup/DriftCityEU.exe.orig`.
+- **`dcemu/native/nation.py`**: nation per session / player (0x7cf from the EU client; none = US), nation lock
+  (`allow`), and EU-only rules. Active for EU: no stat points from the player's level, part V-grade check (but
+  ItemClient column 8 is empty in our US data, so it does nothing yet), UTF-8 passwords, login result codes
+  remapped to the EU texts (empty password -> 1, empty ID -> 2), 0x0005 logged.
+- **EU client changes made at the user's request:** the F2 car-name / V-grade panel shown (the EU client skips it by
+  design; `f2 on`), and the classic speedometer dial from the 2008 TW client ("Km/h", `speedo`).
+- **GitHub:** this folder is now a git working copy of github.com/Xerender13/openDC. Merge commit `e878145` is
+  pushed. The local EMULATOR_NOTES is now GitHub's redacted version (the test password is in memory).
+
+**User's standing direction (session 14):**
+- Keep the EU client's own design; patch it only for an exact request.
+- Every EU difference in the emulator goes through nation.py, and US behaviour must not change.
+- The user pushes to GitHub only when asking ("commit to github too").
+
+**State at hand-off:** the emulator (this folder, `allow = all`) and DB `dcemu2011_db` are running. The US client
+is running for the user ("switch the project to US client for now"). **Not pushed yet** (local changes):
+`dcemu/native/auth.py` + `nation.py` (EU login result texts, `allowed_all` fast path), `tools/eu_client.py`
+(`speedo`), these notes.
+
+**Open, first things next time:**
+1. **EU reference data:** the user is getting files from a real EU client. Wanted: `Data_EU_eng/Init_eueng.agt`,
+   `Data_EU_eng/World.agt` (ItemClient.tdf column 8 = required V grade; VShopItem / VehicleList EU rules), and EU
+   patches. Then sync them into server_data for EU players (data.py reads only the US tables today: per-nation tables
+   are the next design step), and fill `Client EU/Data_EU_eng` with them in place of the Data_US copies.
+2. Ask the user whether to keep this folder as a git working copy or go back to pushing from a separate clone
+   (memory drift-city-github), and whether to push the pending changes.
+3. The garage "Function 2" Korean placeholder "(보너스 아이템 옵션)" on the EU client with parts on the car: not yet
+   compared with a US car that has parts.
+4. The ADV HUD's speed unit is a text control (game.nui 220057, T1="MPH"); change it in Client EU's game.nui only if
+   the user asks.
+5. Two old test failures (tests/test_position.py: tutorial gate, `DB` stub without `rows`) predate session 14.
+6. The Session 13 entries (2026-10-16 afternoon) and session 12's open list below still stand.
 
 ## EU client (2026-10-17; worked out in a side folder `Drift City EU 2011`, merged into this project the same day)
 
@@ -32,8 +140,8 @@ auth (0x7feaf0); GlobalText EU ENG column has ~2,200 texts vs ~5,600 US (expect 
 exe` (default DriftCityEU.exe when present), EU token when the exe holds an EU nation, address over all 13 slots.
 **Own database**: compose project dcemueu2011, container dcemueu2011_db, volume drifteu2011_mssql-data, port 14331
 (the US characters stay in driftcity2011_mssql-data). Status: client starts, reaches the login screen (2026-10-17).
-**Nation-aware emulator** (2026-10-17): `dcemu/native/nation.py` - every session knows its client's nation (0x7cf from the EU client on each connection; none = US 1; Player.nation set at the game login); `nation.of(x)`, `is_eu(x)`, `rule(x, name)`; emulator.ini [nation] client = auto | N and us.<rule> / eu.<rule>. First rule: part requirements (items.equip_item -> nation.part_allowed): ItemClient column 7 = player level, column 8 = the client's "Required Grade" (tooltip 0x657442, item record +0x124; read as the car's V grade; 0 in all US rows). **Nation lock**: emulator.ini [nation] allow (here eu): the auth answer waits for the client's 0x7cf (<= 1 s; none = US) and refuses other nations with result 99 before the password check (no account made); accepted logins remember the account's nation (nation.remember) for the lobby / game check-ins, because on game the 0x7cf can come after the check-in (a refusal by order once left the character loading). **US exe**: `eu_client.py us` writes Client/DriftCityUS.exe = the unpacked exe, nation 1, GameGuard class byte 0x4e1211 2 -> 0 (runs to the login screen; launcher [client] exe = DriftCityUS.exe). **F2 user information car panel = EU client design**: 0x294 GameCharInfo is answered the same for both (0x295); the handler 0x515be0 fills the window with 0x56ff80 -> 0x56f910 (shared; only the distance unit differs: miles for US, km for others, 0x56fbb1), then draws the car panel with 0x551ce0 (car-name image 0x564820 by car type, V grade 0x563f30) only for nations 1-3 and 6: table 0x570010 (nation - 4) = 0 0 1 0 0 0 0 skips it for 4, 5 and 7-10. Then shown on the user's request (2026-10-17, the one exception): `eu_client.py f2 on` (part of setup) sets the table bytes of nations 7-10 (0x570013-16) to 1; `f2 off` = EU design. Before that it was kept as the EU design (user: "Keep the EU design, that's the key point of the version"; the F2 box under the portrait is the crew, empty without one). **EU changes in the emulator are gated on the client's nation** (user): part_grade only eu (us.part_grade = 0), the password decoded as UTF-8 only for EU (decoded after the nation is known), 0x0005 logged (nation.eu_report). **No stat points from the player's level in the EU version** (user): nation rule level_points (us 1, eu 0) -> Player.stats char points 0 for EU players (0x2f8, F2 0x295, other players' info); characters loaded for someone else get nation.of_member (the account's last login nation, else an EU nation on an EU-only server). The EU client also sends a one-off 0x0005 (104 bytes, client report, sender 0x7e3ef0) that US clients never sent. Login to the city in EU mode works. Next: the V-grade rules (EU-only branches, e.g. 0x5fa8ed in the item code; the
-'7..10' nation checks: Handoff/scratchpad_eu1 `nat2.py` pattern = list GetNation call sites and their compares).
+**Nation-aware emulator** (2026-10-17): `dcemu/native/nation.py` - every session knows its client's nation (0x7cf from the EU client on each connection; none = US 1; Player.nation set at the game login); `nation.of(x)`, `is_eu(x)`, `rule(x, name)`; emulator.ini [nation] client = auto | N and us.<rule> / eu.<rule>. First rule: part requirements (items.equip_item -> nation.part_allowed): ItemClient column 7 = player level, column 8 = the client's "Required Grade" (tooltip 0x657442, item record +0x124; read as the car's V grade; 0 in all US rows). **Nation lock**: emulator.ini [nation] allow (here eu): the auth answer waits for the client's 0x7cf (<= 1 s; none = US) and refuses other nations with result 99 before the password check (no account made); accepted logins remember the account's nation (nation.remember) for the lobby / game check-ins, because on game the 0x7cf can come after the check-in (a refusal by order once left the character loading). **US exe**: `eu_client.py us` writes Client/DriftCityUS.exe = the unpacked exe, nation 1, GameGuard class byte 0x4e1211 2 -> 0 (runs to the login screen; launcher [client] exe = DriftCityUS.exe). **F2 user information car panel = EU client design**: 0x294 GameCharInfo is answered the same for both (0x295); the handler 0x515be0 fills the window with 0x56ff80 -> 0x56f910 (shared; only the distance unit differs: miles for US, km for others, 0x56fbb1), then draws the car panel with 0x551ce0 (car-name image 0x564820 by car type, V grade 0x563f30) only for nations 1-3 and 6: table 0x570010 (nation - 4) = 0 0 1 0 0 0 0 skips it for 4, 5 and 7-10. Then shown on the user's request (2026-10-17, the one exception): `eu_client.py f2 on` (part of setup) sets the table bytes of nations 7-10 (0x570013-16) to 1; `f2 off` = EU design. Before that it was kept as the EU design (user: "Keep the EU design, that's the key point of the version"; the F2 box under the portrait is the crew, empty without one). **EU changes in the emulator are gated on the client's nation** (user): part_grade only eu (us.part_grade = 0), the password decoded as UTF-8 only for EU (decoded after the nation is known), 0x0005 logged (nation.eu_report). **No stat points from the player's level in the EU version** (user): nation rule level_points (us 1, eu 0) -> Player.stats char points 0 for EU players (0x2f8, F2 0x295, other players' info); characters loaded for someone else get nation.of_member (the account's last login nation, else an EU nation on an EU-only server). **Login error texts**: the EU client maps result codes to the same GlobalText keys, but the EU column means other things for some (10049 = code 4: US "An ID or Password has not been entered", EU "This is an ID with an age restriction": user saw it for an empty password); nation.login_result sends EU clients 1 for an empty password and 2 for an empty ID; a failed login waits for the client's 0x7cf first (with allow = all a successful one does not). **Km/h speedometer** (user): the classic HUD dial (game.nui 210001, piece 272,267~512,512_ui_play01.dds, "MPH" painted in) replaced in `Client EU/Data_EU_eng/gameui/uitex.agt` only by the 2008 TW client's dial (Data_TW.agt picture 406, "Km/h" + RPM numbers 0-10; uncompressed 256x256): `eu_client.py speedo` (`speedo mph` back; original pack client_backup/uitex_Data_EU_eng.agt.orig; setup re-applies it from client_backup/tw_speedometer_406.dds). The ADV HUD's unit is a text control (220057, T1="MPH" in game.nui), not changed. The EU client also sends a one-off 0x0005 (104 bytes, client report, sender 0x7e3ef0) that US clients never sent. Login to the city in EU mode works. Next: the V-grade rules (EU-only branches, e.g. 0x5fa8ed in the item code; the
+'7..10' nation checks: Handoff/scratchpad_session14/tools `nat2.py` pattern = list GetNation call sites and their compares).
 
 ## Session 13 (2026-10-16 afternoon; not yet confirmed in game)
 

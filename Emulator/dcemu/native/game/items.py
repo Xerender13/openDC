@@ -732,6 +732,9 @@ async def use_item(session, frame):
     if upgrade:
         from .cars import roll_upgrade_item
         await roll_upgrade_item(session, p, p.car, upgrade, info)
+    if info.kind == 'instant':                      # Line Ball / Mecha Watch / Exodus Quake Mission Battle (instant.py)
+        from .instant import offer_mission_battle
+        offer_mission_battle(session, info.value)
 
 
 def loop_stats_after(session, p, seconds):

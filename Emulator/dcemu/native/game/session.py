@@ -17,6 +17,7 @@ No answer (as the 2008 server in this setup): 0x7a CheckOutGame, 0x86 GetMail (a
     and the 2011-only 0x466 (u32), 0xc28 (u32), which the 2008 server did not know either (0x32d: licenses.py)
     (0x327 SetMyDeliveryItem: jobs.py).
 """
+import math
 import struct
 
 from ...handlers import on
@@ -209,6 +210,7 @@ async def drive_info(session, frame):
 
 
 PREMIUM_FUEL, PREMIUM_FUEL_DISCOUNT = 1, 0.5     # sale flag 1: char byte +0x363 set (not kept here)
+AUTO_FILL_UP, AUTO_FILL_UP_FACTOR = 34, 0.8      # drift category of i_automitron, its 20 % discount
 PAY_SQL = """SET NOCOUNT ON;
 UPDATE SKID_CHARACTER_TB SET GOLD=GOLD-%s WHERE SERVERID=%s AND CID=%s AND GOLD>=%s;
 IF @@ROWCOUNT = 1 UPDATE SKID_CAR_TB SET MITRON=%s WHERE SERVERID=%s AND CID=%s AND CARID=%s;
@@ -225,7 +227,12 @@ async def fuel_charge(session, frame):
     for owners of team channels: none here). Pay 0 asks the price. A
     purchase needs fuel <= pay / (price x factor) + 0.1, pay <= money (else error 20121), Mitron + fuel
     <= capacity + 1; then the money is taken and the fuel added (car and money saved at once; the 2008
-    server also paid a tax to the channel owners)."""
+    server also paid a tax to the channel owners).
+    **Auto Fill-Up** (drift item i_automitron, category 34, 2011): the client (0x5361b0, every 2 s) sends (car, 0, 0.0,
+    u32 1) when the tank is below 20 %, it holds i_automitron (opts +0x1b12, set by 0x5dd) and has Mito; again after
+    10 s, after 30 s with no Mito. Its item text: refuels with 20 % discounted Mittron, only as much as the Mito
+    pays for. The answer carries 1 @0x32 so the client's handler (0x520290) leaves the fuel window closed. The
+    discount does not add to the Fuel Booster's: the lower price counts (a guess)."""
     p = session.state.get('player')
     if not p or len(frame.payload) < 16:
         return
@@ -237,6 +244,16 @@ async def fuel_charge(session, frame):
     price = float(context.data.contents.get('Main.MitronUnitPrice', 15))
     from .items import FUEL_BOOSTER, holds
     factor, sale_flag = (0.5, 1) if holds(p, FUEL_BOOSTER) else (1.0, 0)
+    auto = len(frame.payload) >= 20 and struct.unpack_from('<I', frame.payload, 16)[0] == 1
+    if auto:
+        if not holds(p, AUTO_FILL_UP):
+            return
+        factor = min(factor, AUTO_FILL_UP_FACTOR)
+        fuel = max(0.0, (car.capacity or 0) - car.mitron)
+        pay = math.ceil(fuel * price * factor)
+        if pay > c.mito:                    # not enough Mito: what it pays for
+            pay = max(c.mito, 0)
+            fuel = pay / (price * factor)
     paid, added = 0, 0.0
     if pay > 0 and fuel <= pay / (price * factor) + 0.1 and car.mitron + fuel <= (car.capacity or 0) + 1.0:
         if pay > c.mito:
@@ -250,4 +267,7 @@ async def fuel_charge(session, frame):
             paid, added = pay, fuel
         c.mito = gold
     send(session, Frame(0x2d4, struct.pack('<Iqfqfffffi', car_id, paid, added, c.mito, car.mitron, price,
-                                           price * factor, car.capacity, car.efficiency, sale_flag) + bytes(4)))
+                                           price * factor, car.capacity, car.efficiency, sale_flag)
+                  + struct.pack('<I', int(auto))))
+    if auto:
+        session.log.note(f'auto fill-up car {car_id}: {added:.1f} Mitron for {paid} Mito')

@@ -221,12 +221,15 @@ def chunks(seq, n):
     return [seq[i:i + n] for i in range(0, len(seq), n)] or [[]]
 
 
+def quest_list_frame(quests):
+    """0x111: the client's handler (0x51adb0 -> 0x750c50) empties its quest lists and fills them again."""
+    return Frame(0x111, struct.pack('<I', len(quests)) + b''.join(struct.pack('<IIIH', *q) for q in quests))
+
+
 @on(SVC, C2S, 0x110)
 async def quest_list(session, frame):
     p = session.state.get('player')
-    quests = p.quests if p else []
-    send(session, Frame(0x111, struct.pack('<I', len(quests))
-                        + b''.join(struct.pack('<IIIH', *q) for q in quests)))
+    send(session, quest_list_frame(p.quests if p else []))
 
 
 @on(SVC, C2S, 0x190)

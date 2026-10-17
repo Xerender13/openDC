@@ -205,6 +205,58 @@ def reward_exp(row, level):
         return 0
 
 
+# Mission Battles (2011, user: "The item is used in battlezone and automatically creates a mission room and starts the
+# solo mission. Upon mission complete you receive Experience reward"): the items i_n_00122 Line Ball / 00123 Mecha Watch /
+# 00124 Exodus Quake Mission Battle (use kind instant, UseItemClient value 0 / 1 / 2) are right-clicked in the battle zone
+# lobby (client 0x600c06: refused while a mission runs, then lobby window +0x14e8 = 1 and the item use 0x1a1). The mission
+# comes as an offer (0x3df) of the Instant_Client row of type Mission_Battle1..3 (column 10; the client's types 0x23-0x25,
+# 0x702914); the offer dialog accepts it (0x5f492d clears +0x14e8, 0x579b40 sends 0x3e0). Its 0x3e1 handler 0x51fb40 hands
+# the mission to the battle lobby object (0x782bd0), which switches Mission Battle on (object +0x54, +0x58 = 1 UFO for
+# Line Ball, 2 Ring for Mecha Watch, 3 Rock for Exodus Quake *(names from the client's debug command 0x5e4a88)*), sends
+# 0x1b8 for PvP channel 5 and creates a room itself: 0x1cc type 0x10000 (rooms.MISSION_ROOM), capacity 1, map flag
+# 0x2048 / 0x204a, a track from its list. That room races as a normal one-racer race (rooms.start_request), and the
+# client reports the mission (0x3eb: points / count / time) and then sends 0x3e2 with the TableIdx; the reward is the
+# row's column 14 formula (mission_battle_exp). No gates in a Mission Battle (user): rooms.MISSION_ROOM.
+MISSION_TYPES = ('Mission_Battle1', 'Mission_Battle2', 'Mission_Battle3')
+
+
+def offer_mission_battle(session, value):
+    rows = context.data.instants
+    kind = MISSION_TYPES[value] if 0 <= value < len(MISSION_TYPES) else None
+    found = [i for i, r in enumerate(rows) if r and len(r) > 10 and r[0] == 'instant' and r[10] == kind]
+    idx = next((i for i in found if rows[i][4] == 'Battle_Lobby'), found[0] if found else None)
+    if idx is None:
+        return session.log.note(f'mission battle item value {value}: no Instant_Client row')
+    offer(session, idx)
+
+
+@on(SVC, C2S, 0x3eb)
+async def mission_battle_result(session, frame):
+    """0x3eb (2011; sender 0x7ef150 from the battle lobby object 0x780f9e / 0x7828a6, just before 0x3e2): u32 TableIdx,
+    u32 kind (1 Line Ball, 2 Mecha Watch, 3 Exodus Quake), u32 value (Line Ball: its points, 144 recorded; Mecha Watch:
+    the object's +0x68, read as the times caught by the monitor *(guess)*; Exodus Quake 0), f32 time (s), u32 tries
+    (+0x4c). No answer is known; kept for the reward at 0x3e2."""
+    if len(frame.payload) < 20:
+        return
+    idx, kind, value, seconds, tries = struct.unpack_from('<IIIfI', frame.payload)
+    session.state['mission_result'] = dict(idx=idx, kind=kind, value=value, seconds=seconds, tries=tries)
+    session.log.note(f'mission battle result {idx}: kind {kind}, value {value}, {seconds:.2f} s, tries {tries}')
+
+
+def mission_battle_exp(row, level, result):
+    """Column 14 of a Mission_Battle row: INT[(((Level^2)/7+10)+(points-100))*(+30 % for 150 points or more)] (Line
+    Ball), INT[(((Level^2)/7+10)*3)*(+50 % for 3 collisions or fewer)] (Mecha Watch), INT[(((Level^2)/7+10)*5)*(+30 % for
+    3:30 or less)] (Exodus Quake). result: the client's 0x3eb (a missing one: no bonus, 100 points)."""
+    base = level * level / 7 + 10
+    kind, value, seconds = row[10], result.get('value', 0), result.get('seconds', 0.0)
+    if kind == 'Mission_Battle1':
+        points = value if 'value' in result else 100
+        return max(int((base + points - 100) * (1.3 if points >= 150 else 1.0)), 0)
+    if kind == 'Mission_Battle2':
+        return int(base * 3 * (1.5 if 'value' in result and value <= 3 else 1.0))
+    return int(base * 5 * (1.3 if 0 < seconds <= 210 else 1.0))
+
+
 @on(SVC, C2S, 0x3e0)
 async def instant_start(session, frame):
     p = session.state.get('player')
@@ -302,6 +354,11 @@ async def instant_complete(session, frame):
     row, c = context.data.instants[idx], p.char
     session.state.pop('instant', None)
     exp, money = reward_exp(row, c.level), _n(row, 13)
+    if row[10] in MISSION_TYPES:
+        result = session.state.pop('mission_result', None) or {}
+        if result.get('idx') != idx:
+            result = {}
+        exp = mission_battle_exp(row, c.level, result)
     if m['patrol'] and len(m['places']) >= _n(row, 16):
         exp += _n(row, 15)
     exp, money = play_bonus(p, exp, money, 'patrol' if m['patrol'] else None)

@@ -12,7 +12,7 @@ from the old device:
 | What | Where it is on the Deck | Notes |
 |---|---|---|
 | The code | GitHub, or `Drift City US 2011/Emulator` + `Launcher` | `git clone https://github.com/Xerender13/openDC` |
-| The 2011 client | `Drift City US 2011/Client/` | Not on GitHub (shared on Google Drive). **Copy the Deck's folder**: it has the text patches in `Client/Patch/Patch.006` (12215 license name, 12216 coupon, 11413 / 12214 crew logon) and `DriftCityLauncher.ini`. Put it next to `Emulator/` as `Client/`. |
+| The 2011 clients | `Drift City US 2011/Client US/` and `Client EU/` | Not on GitHub (shared on Google Drive). **Copy the Deck's folders**: `Client US/` has the text patches in `Patch/Patch.006` (12215 license name, 12216 coupon, 11413 / 12214 crew logon), `DriftCityUS.exe` and `DriftCityLauncher.ini`; `Client EU/` is the EU client (`DriftCityEU.exe` set by `Emulator/tools/eu_client.py`, `Data_EU_eng/`, the Km/h dial). Put them next to `Emulator/`. |
 | The game database | `Emulator/db/SKDBTW_2026-10-16.bak` (6 MB, 15:39) | All accounts and characters as of the handover. Make a newer one before moving: `./launch.sh backup-db`. Not in git (`db/*.bak` is ignored). |
 | `emulator.ini` | `Emulator/emulator.ini` | Is in git. Change `[database]` if your SQL Server differs; the ports and `[flags]` are set for this client. |
 | `.ticket_secret` | `Emulator/.ticket_secret` | Not needed: the server's key for login tickets, made again when missing (a client that is logged in at that moment logs in again). Not in git. |
@@ -21,10 +21,10 @@ from the old device:
 
 ## 2. Setting up
 
-Layout (folder names matter: the launcher looks for `../Client`):
+Layout (folder names matter: launch.sh / launch.bat look for `../Client US` and `../Client EU`):
 
 ```
-<anything>/Emulator/   <anything>/Launcher/   <anything>/Client/
+<anything>/Emulator/   <anything>/Launcher/   <anything>/Client US/   <anything>/Client EU/
 ```
 
 **Linux** (Python 3.10+, podman + podman-compose, or docker + compose):
@@ -49,8 +49,9 @@ launch.bat
 small things the first time. `./launch.sh restore-db` is new (2026-10-16) and was not run against the live
 database (`backup-db` was); it uses the same SQL as the Windows one, which was tested on a scratch database.
 
-The client: `Client/DriftCityLauncher` (Linux, runs DriftCity.exe with Proton; `DriftCityLauncher.ini [linux]`) or
-`Client/DriftCityLauncher.exe` (Windows; run it once as administrator for windowed mode). Its server address is
+The client: `Client US/DriftCityLauncher` (Linux, runs DriftCityUS.exe with Proton: `DriftCityLauncher.ini [client] exe`,
+`[linux]`; the EU client the same from `Client EU/`) or
+`Client US/DriftCityLauncher.exe` (Windows; run it once as administrator for windowed mode). Its server address is
 `DriftCityLauncher.ini [server] address` (127.0.0.1 for the same machine). Other players: their launcher ini gets
 your address, and `Emulator/server_data/serverlist.txt` too; open TCP 11005-11051.
 
@@ -90,30 +91,42 @@ rsync -a --files-from=/tmp/publish.txt ./ openDC/
 ```
 
 Then, in the clone, **replace the second test account's password in `Emulator/docs/EMULATOR_NOTES.md`** (the
-local notes keep it; three places) before committing. Never add `Client/`, `Server2008/`, `Handoff/`,
+local notes keep it; three places) before committing. Never add `Client US/`, `Client EU/`, `Server2008/`, `Handoff/`,
 `.ticket_secret`, `logs/`, `client_backup/`, client-derived `server_data/` files, or database backups other than
 `db/SKDBTW_clean.bak` (`.gitignore` covers most of these). Commit as `Xerender13 <sasuke8453@gmail.com>`; push with
 `gh` (logged in as Xerender13) or a personal access token.
 
 ## 5. State at the handover
 
-**Done on 2026-10-16 afternoon, not yet confirmed in game:**
-- Mitro City (Taipei) traffic: areas 62-75 are Taipei (area 68 seen); path traffic (0x21e) on
-  `path_taipei.chpath`, 400 cars (`emulator.ini cars.taipei`), stopping at the path signals on ZoneServer's 60 s
-  cycle. The client's lamps in Taipei cannot change colour (no .tcs there); only the cars follow the lights.
-- Mitro City missions can be taken again after failing (0x17c resent after 0x181).
-- Crew nameplate colour from the crew grade (`crews.crew_level`).
-- Parts: a part dropped on a filled slot goes to the free line first; Heat Treatment Kit only for normal H parts;
-  docking letters ranked A lowest. (The free-line change was confirmed.)
+Updated 2026-10-17 (end of session 15). Details of every item: the "Session 15" entry at the top of
+`docs/EMULATOR_NOTES.md`.
+
+**Confirmed in game on 2026-10-17:**
+- Mitro City mother quests: retaking after a failure (children reset, quest list 0x111 resent; Agent Riggs ran fine).
+- License gained text shows the license name.
+- Repeatable missions (rq_*) at Moon Palace.
+- Mito V-upgrade items (i_d_mu_v*_*per).
+- Mission Battles (Line Ball / Mecha Watch / Exodus Quake items): offer, mission room, practice-type race (no gates),
+  Rechallenge after a failure, EXP at the end (bonuses from the client's 0x3eb).
+
+**Done on 2026-10-17, not yet confirmed in game:**
+- Auto Fill-Up (i_automitron): automatic refuel at 80 % of the price (0x2d3 with u32 1).
+- Battle quick slots (flag BattleZone.BattleQuickSlot) and the six battle_quick items (effects in the client).
+- Battle EXP 25% / 50% up items: their % added to a battle's EXP, one used per battle (consumption is a guess).
+- Solo Start for non-GM accounts (flag BattleZone.PracticeMode).
+- From 2026-10-16: Mitro City traffic and signals (areas 62-75), crew nameplate colour, parts rules (Heat Treatment
+  Kit only for normal H parts, docking letters).
 
 **Open:**
 1. Confirm the items above in game.
-2. Repeatable missions (rq_*) and the Item Exchange Attendant (Mittron Crystal Powder -> TokenBook rows 5-9).
+2. The Item Exchange Attendant (Mittron Crystal Powder -> TokenBook rows 5-9).
 3. The rest of the Taipei main chain (mq_5th_*), the _m / _c branches and their reputations.
 4. Battle rooms: the Complete Bonus Reward panel ("Recommended by Duffy EXP +25%", probably 0x1e4).
 5. Other Taipei channels: check which areas the client joins from channels other than 0 (logs: `enters area`).
 6. The Windows launcher on real Windows.
-7. Older items listed under "Open, first things next time" in `docs/EMULATOR_NOTES.md` (session 12).
+7. EU version: the real EU parts tables, then the V-grade rules (see the "EU client" entry in the notes).
+8. Older items listed under "Open, first things next time" in `docs/EMULATOR_NOTES.md` (session 12).
+9. Nothing of sessions 14-15 is committed yet (EU client work + session 15). Commit / push only when the user asks.
 
 **Characters:** Xerander (cid 100000) is the user's main (Taipei chain in progress, faction OMD). Test characters:
 NewChar, Newbie, DCLoverN. The database backup above has them all.

@@ -27,7 +27,8 @@ start / end post, up to 4 rewards (exp, mito, reputation "GC_Reputation_0N amoun
         neutral, < 3000 4 somewhat friendly, < 9000 5 friendly, else 6 very friendly. Sent at login with change 0.
 
 Kept: SKID_QUEST_TB with QUESTID = the mother quest id (STATE 0 started, 2 done; a repeatable one goes back to started
-when taken again, its children's rows are reset so QuestStart takes them again), reputations as the license counters
+when taken again). The children's rows are dropped when the mother quest is given up / failed and when it is taken
+(again), so QuestStart takes them from the start; reputations as the license counters
 GC_Reputation_01..03 in SKID_PLAYMODE_TB (licenses.count; License_GC conditions read them).
 """
 import csv
@@ -40,7 +41,7 @@ from ...protocol import C2S
 from ...wire import Frame
 from .. import context
 from .items import add_money
-from .login import SVC, send
+from .login import SVC, quest_list_frame, send
 from .progress import add_exp, play_mode
 
 STARTED, DONE = 0, 2
@@ -154,6 +155,23 @@ def _child_rows(r):
     return [idx[c] for c in r['children'] if c in idx]
 
 
+async def _reset_children(p, r):
+    """Drop the child quests' rows: a failed / given-up mother quest starts over from its first child (user: the
+    objectives were not reset; the child rewarded last time was refused when the mother quest was taken again).
+    -> True if any was dropped: the client's own list still has them (it then starts a later child at once, its
+    previous one rewarded there: two markers, the patrol's time running), so 0x111 has to follow."""
+    from . import quests
+    db, c = context.db, p.char
+    dropped = False
+    for t in _child_rows(r):
+        k = quests.find(p, t)
+        if k is not None:
+            p.quests.pop(k)
+            dropped = True
+            await db.execute(DELETE_SQL, (db.server_id, c.cid, context.data.quests[t][0]))
+    return dropped
+
+
 @on(SVC, C2S, 0x17d)
 async def mother_start(session, frame):
     p = session.state.get('player')
@@ -180,14 +198,8 @@ async def mother_start(session, frame):
             return _message(session, 'Finish the previous mission first.')
         if r['rep'] in REPUTATIONS and await reputation(p, r['rep']) < r['rep_min']:
             return _message(session, f'Your reputation is too low for this mission (at least {r["rep_min"]}).')
-    if r['repeat']:                         # its children may be rewarded from last time: QuestStart takes them again
-        from . import quests
-        for t in _child_rows(r):
-            k = quests.find(p, t)
-            if k is not None:
-                p.quests.pop(k)
-                db = context.db
-                await db.execute(DELETE_SQL, (db.server_id, c.cid, context.data.quests[t][0]))
+    if await _reset_children(p, r):         # left from an earlier try (rewarded ones: QuestStart refused them, 20241)
+        send(session, quest_list_frame(p.quests))
     await _save(p, i, STARTED)
     session.log.note(f'mother quest start {r["id"]} (row {i}), children {r["children"]}')
     send(session, Frame(0x17e, struct.pack('<I', i)))
@@ -243,6 +255,8 @@ async def mother_give_up(session, frame):
         db, c = context.db, p.char
         held.pop(i)
         await db.execute(DELETE_SQL, (db.server_id, c.cid, rows()[i]['id']))
+        if await _reset_children(p, rows()[i]):
+            send(session, quest_list_frame(p.quests))
         session.log.note(f'mother quest given up: {rows()[i]["id"]} ({frame.payload[4:8].hex()})')
     send(session, Frame(0x182, struct.pack('<I', i)))
     send(session, list_frame(held))         # the client keeps a given-up / failed one held otherwise
