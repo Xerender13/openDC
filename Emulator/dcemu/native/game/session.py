@@ -14,7 +14,7 @@
     if there is none; i64 mileage).
 No answer (as the 2008 server in this setup): 0x7a CheckOutGame, 0x86 GetMail (a friend invitation
     web call), 0x87 CheckEvent (VIP event check), 0x12e LeaveArea (the game side forgets the area),
-    and the 2011-only 0x466 (u32), 0xc28 (u32), which the 2008 server did not know either (0x32d: licenses.py)
+    and the 2011-only 0x466 (u32), which the 2008 server did not know either (0xc28: partypatrol.py) (0x32d: licenses.py)
     (0x327 SetMyDeliveryItem: jobs.py).
 """
 import math
@@ -109,7 +109,7 @@ async def no_answer(session, frame):
     pass
 
 
-for _t in (0x7a, 0x87, 0x12e, 0x466, 0xc28):
+for _t in (0x7a, 0x87, 0x12e, 0x466):
     on(SVC, C2S, _t)(no_answer)
 
 

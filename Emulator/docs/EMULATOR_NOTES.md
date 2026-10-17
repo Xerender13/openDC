@@ -4,9 +4,40 @@ Hand-off for a new Claude session. Goal: make the **2011 client** playable again
 version (`../../Client US`) and, since session 14, the European version (`../../Client EU`). Everything below was measured, unless marked *(guess)*.
 
 **The emulator project is `Emulator/`** (this file is `Emulator/docs/EMULATOR_NOTES.md`; started 2026-10-12, see
-`Emulator/README.md`). **Start with "Session 14 hand-off" right below**, then "Current state and where to continue"
+`Emulator/README.md`). **Start with the newest session right below**, then "Current state and where to continue"
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
+
+## Session 16 (2026-10-17): Party Patrol and its solo test mode
+
+- **Party Patrol** (user request, with the Japanese wiki page ゲームモード/パトロール for the rules): new module
+  `dcemu/native/game/partypatrol.py`; its docstring has every message layout. The 2008 server had no party patrol, so
+  everything comes from the 2011 client:
+  - Instant_Client rows 91-123, types party_move / party_move_ROO = client mission types 0x20 / 0x21 (type names at
+    0x7027xx, UTF-16). The pillar shows them only with the content flag **InstantMission.PartyPatrol** (bit 5 of
+    [net+0x280], tested at 0x62f95d) and a party of 2+: the flag was missing from the 2008 Contents.ini -> NEW_FLAGS.
+  - 0x3e1 to every member starts it (0x51fb40: party patrol object 0x72d4d0, slots @0, limit ms @0x10, start @0x14,
+    asked @0x18, state @0x1c). Shared posts: 0x3ea to all (0x70b750 marks the place). New 2011 messages:
+    0xc27 (cid, posts, time limit) S>C, 0xc28 (post) C>S = the client's emergency post every minute (0x7475b0;
+    session.py had swallowed it), 0xc24 (4 slots) S>C, 0xc25 (slot, post) C>S, 0xc26 (slot, post, exp, exp info,
+    level, limit) S>C, 0xc1e result window (0x514560 / 0x569ae0). End: 0x3e5 + 0x3e3 + 0xc1e; fail 0x3e6
+    (time up, member leaves the party or the game); give-up 0x3e8 to all ("Party Leader has quit", 11159).
+  - **0x3e6 InstantFail from the client** is now answered (0x3e6 back, the mission dropped) also for solo missions;
+    it was ignored before.
+  - Rewards: the client's RewardGroup rw_patrol_moon / koi / cras / oros_omd / oros_roo (Mittron Enhancers via
+    rw_patrol_trans, Mysterious Gift Box i_n_00085); Etc_Value 15/30/45/60 read as the seconds left at the end
+    *(guess)*. patrol_rewards.txt still applies.
+  - Time rules in emulator.ini **[partypatrol]**: 60 s start (wiki), +4 s per 5 party posts, emergency post 20 s
+    down to 5 s by waiting, exp 10x per post *(guesses: the wiki gives no numbers)*. No parts every 50 posts in a
+    party patrol *(guess)*. All members get the starter's row (the wiki says factions run their own routes).
+  - Which result-window number is which (posts / emergency posts / exp, total = exp) is a *guess*.
+- **Party patrol test mode** (user: "check the party patrol by myself and be able to complete it within the time
+  limits"): GM chat command **gmpartytest on | off** (per character until logout) or [partypatrol] test = 1 (all).
+  Alone, accepting a solo patrol at a pillar starts that city's party row (same faction / level band / giver post
+  when there is one) with test_start_seconds (600) to start. The client builds the mission from the 0x3e1 TableIdx,
+  so it runs as a party patrol (timer, emergency posts, result window).
+- Script-tested with stub sessions (start, shared posts, bonuses, emergency post, completion and 0xc1e size, time
+  out, member leaving, give-up, refusal, test mode on / off). **Not yet confirmed in game.**
 
 ## Session 15 (2026-10-17 morning; repo CLAUDE.md added, HANDOVER.md §5 updated)
 

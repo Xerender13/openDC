@@ -102,6 +102,10 @@ class Context:
     auction_drift_fee = 10   # [auction] drift_fee: % (Main.AuctionVSCommission)
     daymission_reset_hour = 0  # emulator.ini [daymission] reset_hour: the hour (local) a new mission day starts
     instant_city_minutes = 5    # emulator.ini [instant] city_offer_minutes: a City instant mission offered this often (0: off)
+    # emulator.ini [partypatrol] (game/partypatrol.py): the party patrol's time rules (guesses: the wiki gives only the
+    # 60 s start) and its solo test mode
+    partypatrol = dict(start_seconds=60, bonus_posts=5, bonus_seconds=4, quick_max_seconds=20, quick_min_seconds=5,
+                       quick_decay_seconds=3, quick_exp=10, grace_seconds=2, test=False, test_start_seconds=600)
     gotcha_enabled = True    # emulator.ini [gotcha] enabled: the Gotcha machine (main menu button)
     gotcha_season = 13       # [gotcha] season: the newest season offered (Etc.GotchaSeason; client GotchaViewSeason 13)
     gotcha_mito_price = 0    # [gotcha] mito_price / coin_price: 0 = the client's prices (gotcha.py)

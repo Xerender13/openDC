@@ -338,6 +338,8 @@ def leave_party(session, banished=False):
     party = parties.get(session.state.pop('party', None))
     if not party or session not in party.members:
         return
+    from .partypatrol import member_gone       # a party patrol fails when a member leaves (the wiki)
+    member_gone(session)
     # 0xf5 PartyBanish (serial) when the leader removed him: the client then says he was kicked, not that
     # he left (user, 2026-10-13; the 2008 Cmd_PartyBanish sends 0xf5 too)
     gone = Frame(0xf5 if banished else 0xf4, struct.pack('<I', session.state.get('serial', 0)))

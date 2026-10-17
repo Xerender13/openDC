@@ -110,6 +110,7 @@ Updated 2026-10-17 (end of session 15). Details of every item: the "Session 15" 
   Rechallenge after a failure, EXP at the end (bonuses from the client's 0x3eb).
 
 **Done on 2026-10-17, not yet confirmed in game:**
+- Party Patrol (partypatrol.py, flag InstantMission.PartyPatrol) and its solo test mode (gmpartytest on).
 - Auto Fill-Up (i_automitron): automatic refuel at 80 % of the price (0x2d3 with u32 1).
 - Battle quick slots (flag BattleZone.BattleQuickSlot) and the six battle_quick items (effects in the client).
 - Battle EXP 25% / 50% up items: their % added to a battle's EXP, one used per battle (consumption is a guess).

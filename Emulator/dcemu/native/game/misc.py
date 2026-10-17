@@ -247,6 +247,11 @@ async def game_stream(session, frame):
             reply = f'{len(got)} set parts given ({len({r[1] for r in rows})} sets)'
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
+    if cmd == 'gmpartytest':                    # gmpartytest on | off: party patrol test mode alone (partypatrol.py)
+        from .partypatrol import gm_test
+        reply = gm_test(session, args)
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
     if cmd == 'gmgate':                         # gmgate 0-7: every gate gives that reward; gmgate off
         from . import rooms
         rooms.forced_reward = int(args[0]) if args and args[0].isdigit() and int(args[0]) < rooms.REWARDS else None

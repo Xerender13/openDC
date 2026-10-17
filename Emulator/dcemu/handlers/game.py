@@ -103,7 +103,11 @@ NEW_FLAGS = {'Etc.InventoryReform': 2, 'Main.NeoCityMainUI': 1, 'Etc.VShopSeason
              # a room's Start button with one player (client 0x5a3435): enabled with PracticeMode, else only for GM accounts
              # (PType < 'N', char +0x7c); the 2008 Contents.ini has 0 (user, 2026-10-17: Newbie could not start alone,
              # Xerander on the admin account could). The server runs it as a practice run (rooms.practice_alone).
-             'BattleZone.PracticeMode': 1}
+             'BattleZone.PracticeMode': 1,
+             # party patrol pillars (byte [net+0x280] bit 5, client 0x62f95d): with it a party of 2+ sees the party_move /
+             # party_move_ROO rows at the patrol pillars instead of the solo ones (native/game/partypatrol.py); missing
+             # from the 2008 Contents.ini (user request 2026-10-17: Party Patrol)
+             'InstantMission.PartyPatrol': 1}
 
 
 def _flag_table(name):

@@ -86,6 +86,12 @@ def native_setup(cp):
         context.daymission_reset_hour = int(cp['daymission'].get('reset_hour', '0') or 0) % 24
     if cp.has_section('instant'):
         context.instant_city_minutes = int(cp['instant'].get('city_offer_minutes', '5') or 0)
+    if cp.has_section('partypatrol'):
+        pp = cp['partypatrol']
+        for k, v in list(context.partypatrol.items()):
+            raw = pp.get(k, '').strip()
+            if raw:
+                context.partypatrol[k] = raw not in ('0', 'no', 'off') if isinstance(v, bool) else int(float(raw))
     if cp.has_section('gotcha'):
         g = cp['gotcha']
         context.gotcha_enabled = g.get('enabled', '1').strip() == '1'

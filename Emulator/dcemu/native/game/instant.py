@@ -32,6 +32,8 @@ first new row ("Cannot find a Courier service request" for a recorded patrol).
     client sends no 0x3e2 for it. Day missions (category day_mission: token events, BS_PktDayMissionCompleteAck)
     are kept apart (session 'day_mission') and completed in daymission.py.
 0x3e7 InstantGiveUp (TableIdx) -> 0x3e8 (TableIdx).
+0x3e6 InstantFail (TableIdx) from the client -> 0x3e6 (TableIdx).
+Party patrols (types party_move / party_move_ROO) and their test mode: partypatrol.py.
 
 **Offers (2011, GlobalContent NewInstant = 1).** 0x3df InstantRequestAck (u32 TableIdx, u32 a, u32 b; client
 0x513c50): the client keeps the mission as offered (with the player's "Show instant messages" option on: the call-sign
@@ -268,6 +270,13 @@ async def instant_start(session, frame):
     if not row or (c.ptype != 'A' and not _n(row, 1) <= c.level <= (_n(row, 2) or 1000)):
         session.log.note(f'instant start {idx}: refused')
         return error(session, '20020')
+    from . import partypatrol
+    test = partypatrol.test_row(session, row)       # test mode: a solo patrol alone -> the party patrol
+    if test is not None:
+        session.log.note(f'instant start {idx}: party patrol test mode -> {test}')
+        idx, row = test, rows[test]
+    if partypatrol.is_party_row(row):               # Party Patrol: the whole party (partypatrol.py)
+        return await partypatrol.start(session, idx, row, solo=partypatrol.test_mode(session))
     if row[0] == 'day_mission':     # today's day mission (the client starts it at login): kept apart from the
         session.state['day_mission'] = idx      # instant mission, which may run at the same time (daymission.py)
     else:
@@ -284,6 +293,9 @@ async def instant_goal_place(session, frame):
         return
     idx, place = struct.unpack_from('<II', frame.payload)
     m = current(session, idx)
+    if m and m.get('party'):                        # Party Patrol: shared places (partypatrol.py)
+        from .partypatrol import goal_place
+        return await goal_place(session, m['party'], place)
     row = context.data.instants[idx] if m else None
     if not m or place >= max(_n(row, 16), 1) or place in m['places']:
         return error(session, '20020')
@@ -382,7 +394,30 @@ async def instant_give_up(session, frame):
     if len(frame.payload) < 4:
         return
     idx, = struct.unpack_from('<I', frame.payload)
-    if not current(session, idx):
+    m = current(session, idx)
+    if not m:
         return error(session, '20020')
+    if m.get('party'):                              # Party Patrol: over for every member (the leader quit: 11159)
+        from .partypatrol import end
+        session.log.note(f'party patrol {idx}: given up')
+        return end(m['party'], 0x3e8)
     session.state.pop('instant', None)
     send(session, Frame(0x3e8, struct.pack('<I', idx)))
+
+
+@on(SVC, C2S, 0x3e6)
+async def instant_fail(session, frame):
+    """0x3e6 InstantFail (TableIdx; 2008 BS_PktInstantFail, 6 bytes): the client fails a mission itself (sender
+    0x7eeea0, e.g. from 0x70b6a0 for missions with a fail condition) -> 0x3e6 back (client 0x50ee10 drops the mission);
+    a party patrol fails for every member. (Ignored until 2026-10-17.)"""
+    if len(frame.payload) < 4:
+        return
+    idx, = struct.unpack_from('<I', frame.payload)
+    m = current(session, idx)
+    session.log.note(f'instant fail {idx} from the client' + ('' if m else ' (not running)'))
+    if m and m.get('party'):
+        from .partypatrol import end
+        return end(m['party'], 0x3e6)
+    if m:
+        session.state.pop('instant', None)
+    send(session, Frame(0x3e6, struct.pack('<I', idx)))
