@@ -65,7 +65,7 @@ The emulator recognises each client's nation and applies the EU rules only to EU
 keep the US level requirements for now. `eu_client.py us` writes `Client US/DriftCityUS.exe`, the same exe as
 a US client without GameGuard (choose it with `exe =` in `DriftCityLauncher.ini`).
 
-**Current emulator progress (16.10.2026):** 
+**Current emulator progress (17.10.2026):** 
 
 **Game features that haven't been done yet:**
 - Channels and Channel Battle
@@ -78,7 +78,5 @@ a US client without GameGuard (choose it with `exe =` in `DriftCityLauncher.ini`
 
 **Features that still require testing and might work with issues:**
 - Crew management
-- Mitro City Missions
-- Repeatable Missions
 
 If you find a bug, something not working not listed above or something working wrongly (not like it was on official servers), creating an issue describing the issue will help the project to improve.
