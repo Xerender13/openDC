@@ -28,8 +28,9 @@ first new row ("Cannot find a Courier service request" for a recorded patrol).
     "Instant Mission Complete" banner and the result window (0x73ca10), and 0x3e3 (0x70d7c0) frees it. Sent the other
     way round until 2026-10-14: no banner (user). XiCsCharInfo::InstantComplete 0x5cb190: the
     current mission; reward exp and Mito of the row ("INSTANT" play mode). A patrol ends at its last
-    post instead (0x3e9 above): 0x3ea, then 0x3e5 with the final exp, as the 2008 server did; the
-    client sends no 0x3e2 for it. Day missions (category day_mission: token events, BS_PktDayMissionCompleteAck)
+    post instead (0x3e9 above): 0x3ea, then 0x3e5 with the final exp (as the 2008 server did; no items listed:
+    patrol_rewards.txt items go to the inventory only), then 0x3e3 (the 2008 server sent none: the 2011 client
+    then kept the mission on the HUD at 40/40); the client sends no 0x3e2 for it. Day missions (category day_mission: token events, BS_PktDayMissionCompleteAck)
     are kept apart (session 'day_mission') and completed in daymission.py.
 0x3e7 InstantGiveUp (TableIdx) -> 0x3e8 (TableIdx).
 0x3e6 InstantFail (TableIdx) from the client -> 0x3e6 (TableIdx).
@@ -67,7 +68,8 @@ from .progress import add_exp, play_mode
 PATROL_TYPES = {'move', 'party_move', 'move_ROO', 'party_move_ROO', 'move_event'}
 DROP_AT = {50: 1, 100: 2, 150: 3, 160: 4}       # places reached -> InstantDrop_Server column
 # Items for completing a patrol: the client's tables have none; Emulator/server_data/patrol_rewards.txt (rewards.py; user,
-# 2026-10-14; was emulator.ini [patrol] prize / prize_count). Listed in 0x3e5 by **TableIdx** (at most 3) (u16 count, u32 TableIdx each; client 0x514120
+# 2026-10-14; was emulator.ini [patrol] prize / prize_count). Since 2026-10-17 only put in the inventory (user: no
+# message box), no longer listed in 0x3e5. 0x3e5's list, for reference: by **TableIdx** (at most 3) (u16 count, u32 TableIdx each; client 0x514120
 # looks each up with 0x7172f0 as 0x2e5 does, then 0x739f70(item, 1): chat line + pick-up icon, and a notice; the count
 # shown is always 1, so each item is listed once and the inventory gets its count). The first version sent the
 # InvenIdx: the client showed TableIdx 1065 (Ch 03. Battle Ghost Ticket).
@@ -329,13 +331,17 @@ async def instant_goal_place(session, frame):
         gains, given = await give(p, patrol_rewards(idx))
         if gains.items:
             send(session, mod_list(*gains.items))
-        prizes = [i.table_idx for i, _ in given][:3]
+        # the items only go to the inventory (0x192 above): not listed in 0x3e5, whose list makes the client
+        # show a notice per item (user, 2026-10-17: the reward without a message box)
         session.log.note(f'patrol {idx} done: {len(m["places"])} posts, final {final} exp,'
                          f' items {[(i.item_id, n) for i, n in given]}')
         for f in stat_frames(p):
             send(session, f)
         send(session, Frame(0x3e5, struct.pack('<III3IHH3I', idx, final, 0, c.exp, c.exp_next, c.exp_base, c.level,
-                                               len(prizes), *(prizes + [0, 0, 0])[:3])))
+                                               0, 0, 0, 0)))
+        # then 0x3e3: only its handler (0x513ed0 -> 0x70d7c0) frees the client's mission; without it the patrol
+        # stayed on the HUD at 40/40 (user, 2026-10-17). The 2008 server sent only 0x3e5 here.
+        send(session, Frame(0x3e3, struct.pack('<I', idx)))
 
 
 async def count_patrol(session, row):

@@ -630,28 +630,36 @@ PRO_CHANNEL = 12
 # MaxBattle*SpeedLimit by itself, 0x489165, when the room has map flag 0x4000) -> name, low, high, exp x, level min, max
 PRO_TIERS = {0x20000: ('Pro 4X', 1, 5, 4, 11, 1000), 0x40000: ('Pro 6X', 1, 7, 6, 31, 1000),
              0x80000: ('Pro 8X', 1, 9, 8, 51, 1000), 0x100000: ('Pro 16X', 1, 9, 16, 71, 1000)}
+# EU players (user, 2026-10-17): the tiers by V grade only (no levels: nation rule battle_levels), as set in the EU
+# client's GlobalContent.xlt Value_EU_eng (*Grade11New); the sections from emulator.ini eu.section.<channel>
+PRO_TIERS_EU = {0x20000: ('Pro 4X', 4, 5, 4, 0, 9999), 0x40000: ('Pro 6X', 6, 6, 6, 0, 9999),
+                0x80000: ('Pro 8X', 7, 8, 8, 0, 9999), 0x100000: ('Pro 16X', 9, 9, 16, 0, 9999)}
 
 
-def section_rule(channel, room_type=0):
-    """emulator.ini's section line, or for a Pro room the rules of its EXP tier (a room type bit)."""
+def section_rule(channel, room_type=0, x=None):
+    """emulator.ini's section line, or for a Pro room the rules of its EXP tier (a room type bit); x (a session or
+    player) an EU player: the EU lines (eu.section.<channel>, PRO_TIERS_EU) where there are some."""
+    from .. import nation
+    eu = x is not None and nation.is_eu(x)
     if channel == PRO_CHANNEL:
-        tier = next((r for bit, r in PRO_TIERS.items() if room_type & bit), None)
+        tier = next((r for bit, r in (PRO_TIERS_EU if eu else PRO_TIERS).items() if room_type & bit), None)
         if tier:
             return tier
-    return context.sections.get(channel)
+    return (eu and context.sections_eu.get(channel)) or context.sections.get(channel)
 
 
 def car_allowed(session, channel, room_type=0):
     """The section's rules (emulator.ini [battlezone]: the grade of the car driven, V1-V9, and optional
     level limits, none by default; Pro rooms: their tier's). The 2008 server had no such check on its side. -> True, or False after telling the player."""
-    rule = section_rule(channel, room_type)
+    rule = section_rule(channel, room_type, session)
     p = session.state.get('player')
     car = p.car if p else None
     if not rule or not car:
         return True
     name, low, high, _, min_level, max_level = rule
     level = p.char.level
-    if not min_level <= level <= max_level:
+    from .. import nation
+    if nation.rule(session, 'battle_levels') and not min_level <= level <= max_level:   # EU: V grades only
         session.log.note(f'section {name} (PvP channel {channel}): level {level} is outside {min_level}-{max_level}')
         admin.message(session, f'{name} section: only for levels {min_level} to {max_level}. Your level is {level}.')
         return False
@@ -1138,14 +1146,16 @@ def invitees(channel, me):
     the 2011 sections are separate lobbies, so a player in another section never showed (user, 2026-10-16: Newbie
     in the Newbie section, the room in Real Match)."""
     room = rooms.get(me.state.get('room'))
-    rule = section_rule(room.channel, room.type) if room else None
     out = []
     for s in list(sessions.values()):
         obs, p = s.state.get('room_observer'), s.state.get('player')
         if s is me or not p or not obs or s.state.get('room') is not None:
             continue
+        rule = section_rule(room.channel, room.type, s) if room else None      # the invitee's nation's rules
         grade = p.car.shown_grade() if p.car else 0
-        if rule and not (rule[4] <= p.char.level <= rule[5] and rule[1] <= grade <= rule[2]):
+        from .. import nation
+        level_ok = not nation.rule(s, 'battle_levels') or rule and rule[4] <= p.char.level <= rule[5]
+        if rule and not (level_ok and rule[1] <= grade <= rule[2]):
             continue
         out.append((obs['channel'] != channel, s.state.setdefault('serial', s.id & 0xffff), p.char.name,
                     p.char.level, grade))

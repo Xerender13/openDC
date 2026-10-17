@@ -111,7 +111,8 @@ def enter(session, p):
         return
     grade = max(1, min(car.grade, 9))
     limit = table().get(grade, (9999,))[0]
-    if context.laptime_level_limit and player.char.level > limit:
+    from .. import nation
+    if context.laptime_level_limit and nation.rule(session, 'battle_levels') and player.char.level > limit:
         return admin.message(session, f'V{grade} arena: level {limit} or lower.')
     room = arena(grade, struct.unpack_from('<I', p)[0])
     direct_join(session, p, room)

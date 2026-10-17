@@ -98,8 +98,8 @@ local notes keep it; three places) before committing. Never add `Client US/`, `C
 
 ## 5. State at the handover
 
-Updated 2026-10-17 (end of session 15). Details of every item: the "Session 15" entry at the top of
-`docs/EMULATOR_NOTES.md`.
+Updated 2026-10-17 (end of session 17). Details of every item: the "Session 17" / "Session 16" / "Session 15"
+entries at the top of `docs/EMULATOR_NOTES.md`.
 
 **Confirmed in game on 2026-10-17:**
 - Mitro City mother quests: retaking after a failure (children reset, quest list 0x111 resent; Agent Riggs ran fine).
@@ -109,8 +109,19 @@ Updated 2026-10-17 (end of session 15). Details of every item: the "Session 15" 
 - Mission Battles (Line Ball / Mecha Watch / Exodus Quake items): offer, mission room, practice-type race (no gates),
   Rechallenge after a failure, EXP at the end (bonuses from the client's 0x3eb).
 
-**Done on 2026-10-17, not yet confirmed in game:**
-- Party Patrol (partypatrol.py, flag InstantMission.PartyPatrol) and its solo test mode (gmpartytest on).
+- Party Patrol (partypatrol.py, flag InstantMission.PartyPatrol): countdown, posts, emergency posts, result window
+  (tested alone with the test mode, gmpartytest on; [partypatrol] test = 0 again).
+
+**Done on 2026-10-17 (session 17), not yet confirmed in game:**
+- Solo patrol end (0x3e3 after the last post; it stuck at 40/40), patrol rewards without the item notice box.
+- US stat points 1 per level (nation rule half_level_points).
+- EU rules (nation.py, EU clients only): drop groups by the car's V grade (drop_by_grade), part / option / docking
+  requirements by V grade (part_grade, data.Tables.part_req_grade), battle zone without level limits
+  (battle_levels) and EU V tiers (Newbie V1-3, Pro 4X V4-5 / 6X V6 / 8X V7-8 / 16X V9: eu.section lines,
+  rooms.PRO_TIERS_EU; the same in Client EU's GlobalContent.xlt Value_EU_eng, tools/global_content.py --column).
+- [nation] allow = all (both clients; the user tests a decompilation project).
+
+**Done on 2026-10-17 (sessions 15-16), not yet confirmed in game:**
 - Auto Fill-Up (i_automitron): automatic refuel at 80 % of the price (0x2d3 with u32 1).
 - Battle quick slots (flag BattleZone.BattleQuickSlot) and the six battle_quick items (effects in the client).
 - Battle EXP 25% / 50% up items: their % added to a battle's EXP, one used per battle (consumption is a guess).
@@ -127,7 +138,7 @@ Updated 2026-10-17 (end of session 15). Details of every item: the "Session 15" 
 6. The Windows launcher on real Windows.
 7. EU version: the real EU parts tables, then the V-grade rules (see the "EU client" entry in the notes).
 8. Older items listed under "Open, first things next time" in `docs/EMULATOR_NOTES.md` (session 12).
-9. Nothing of sessions 14-15 is committed yet (EU client work + session 15). Commit / push only when the user asks.
+9. EU parts: the real EU World.agt (ItemClient column 8) would replace the part grade rule's tiers if it differs.
 
 **Characters:** Xerander (cid 100000) is the user's main (Taipei chain in progress, faction OMD). Test characters:
 NewChar, Newbie, DCLoverN. The database backup above has them all.

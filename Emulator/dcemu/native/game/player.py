@@ -11,7 +11,7 @@ Derived values (2008 server -> here):
   item TableIdx    the 2011 item tables (data.Tables); ExpireTick = CTIME, or the server tick
                    (SKID_SERVER_TB.SERVERPTICK) when 0
 Stats (XiStrStatInfo): based = the car grade's stats, equip = the parts on the current car (part
-value + its random bonus) and the drift shop items on it (VShopItem Bonus columns), char = level / 2 each (Contents.ini Main.HalfLevelPoint, else level; 0 for EU players: nation rule level_points).
+value + its random bonus) and the drift shop items on it (VShopItem Bonus columns), char = level each (level / 2 with nation rule half_level_points, the 2008 Contents.ini Main.HalfLevelPoint; 0 for EU players: nation rule level_points).
 """
 from .. import context, time_t
 from .records import Car, Character, Item, Stats, VisualItem
@@ -155,7 +155,7 @@ class Player:
                         equip[k] += n
             s.equip = tuple(equip)
         from .. import nation
-        points = self.char.level // 2 if t.contents.get('Main.HalfLevelPoint') else self.char.level
+        points = self.char.level // 2 if nation.rule(self, 'half_level_points') else self.char.level
         s.char = (points if nation.rule(self, 'level_points') else 0,) * 4
         import time
         s.item_use = tuple(v if end > time.monotonic() else 0

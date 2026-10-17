@@ -27,12 +27,23 @@ Rules that differ by nation go through this module (`rule(x, name)`), so the han
                  GlobalText 11275, shown when column 7 is 0; client item record +0x120 level, +0x124 grade,
                  tooltip 0x657442). Which grade it means is not in the client (it only shows the number); the EU
                  texts call it the car's rank ("Your car's rank ...", 12140): read here as the car's V grade.
-On for EU only (EU changes never touch US clients: user, 2026-10-17). The US tables fill only column 7; the EU
-rules (parts by V grade) need column 8 filled: the EU client's tables.
+On for EU only (EU changes never touch US clients: user, 2026-10-17). The US tables fill only column 7; with
+column 8 empty the grade comes from the part's grade and tier (data.Tables.part_req_grade, user 2026-10-17: best N
+parts V3, best S V6, best H V9; options and docking parts N V1, S V4, H V7).
 emulator.ini [nation] us.<rule> / eu.<rule> = 0 / 1 overrides a rule for that group.
-    level_points the player's level adds points to the four stats (the "User" column of F2 / the garage: level / 2
-                 each with Contents.ini Main.HalfLevelPoint, else the level; player.stats). Off for EU: the EU
+    level_points the player's level adds points to the four stats (the "User" column of F2 / the garage: the level
+                 each, level / 2 with half_level_points; player.stats). Off for EU: the EU
                  version gives no stat bonus for the player's level (user, 2026-10-17).
+    half_level_points  level_points is the level / 2 instead of the level (the 2008 Contents.ini
+                 Main.HalfLevelPoint; read until 2026-10-17). Off for US: 1 point per level (user, 2026-10-17).
+    drop_by_grade the traffic / combo / rush drop groups (ItemDropServer.tdf) follow the current car's V grade
+                 instead of the player's level: V<n> = the table's n-th level (1, 5, 11, ... 71: nine levels for
+                 V1-V9; data.Tables.drop_rates_of_grade). On for EU (user, 2026-10-17: "EU groups items depending
+                 on the car V grade level"); the mapping of grade to row is ours.
+    battle_levels the battle zone's level limits (sections, the Pro EXP tiers 11 / 31 / 51 / 71, room invites,
+                 Lap Time arenas with laptime_level_limit); off for EU: only the car's V grade counts (user,
+                 2026-10-17). The EU client's own limits are its GlobalContent.xlt Value_EU_eng column
+                 (tools/global_content.py --column Value_EU_eng, Client EU only).
 Client behaviour found so far that differs for the EU nations, for reference (tools/eu_client.py has the rest):
 login password UTF-8, the start token, data folder Data_EU_<lang>, no GameGuard, the drift item swap special case
 for i_d_u_11..18 is US only (client 0x602441).
@@ -51,8 +62,10 @@ NAMES = {0: 'KR', 1: 'US', 2: 'JP', 3: 'TW', 4: 'INI', 5: 'TH thai', 6: 'TH eng'
 
 # rules per nation group (group(): 'us' or 'eu'); emulator.ini [nation] us.<rule> / eu.<rule> overrides
 RULES = {
-    'us': dict(part_level=True, part_grade=False, level_points=True),
-    'eu': dict(part_level=True, part_grade=True, level_points=False),
+    'us': dict(part_level=True, part_grade=False, level_points=True, half_level_points=False, drop_by_grade=False,
+               battle_levels=True),
+    'eu': dict(part_level=True, part_grade=True, level_points=False, half_level_points=False, drop_by_grade=True,
+               battle_levels=False),
 }
 
 
@@ -194,8 +207,9 @@ def part_allowed(x, player, info, car):
     """-> None if the part may go on the car, else why not (for the log). x: the session or the player."""
     if rule(x, 'part_level') and info.req_level and player.char.level < info.req_level:
         return f'level {player.char.level} < {info.req_level}'
-    if rule(x, 'part_grade') and info.req_grade and car is not None and car.grade < info.req_grade:
-        return f'car V{car.grade} < V{info.req_grade}'
+    need = context.data.part_req_grade(info) if rule(x, 'part_grade') else 0
+    if need and car is not None and car.grade < need:
+        return f'car V{car.grade} < V{need}'
     return None
 
 

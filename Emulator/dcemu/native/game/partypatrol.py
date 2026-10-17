@@ -14,10 +14,12 @@ party_move_ROO; every member's level at least GlobalContent MinPatrolGrade). Acc
     wiki says), the party patrol object (0x72d4d0: u32 slots[4] @0, u32 time limit ms @0x10, u32 start tick @0x14,
     u32 emergency posts asked @0x18, u32 state @0x1c: 0 none, 1 starting, 2 running), "Party Patrol Start!" (11156).
     Posts are not reported in state 1 (0x742a41); the HUD (0x652440) goes to 2 once the time left (start + limit -
-    now) is 60 s or less, so 0xc27 with the first limit follows the 0x3e1. Every member must be in the starter's city
-    and channel, not in a room / chase / patrol, and in the row's level range (the wiki: all members at the same
-    pillar), else the start is refused with the client's 10999 text. Members of the other faction get the starter's
-    row too (the wiki: different routes per faction; not done).
+    now) is 60 s or less (0x6524ac; posts are drawn only from state 2, 0x62f6ec / 0x6336b8), so 0xc27 with the first
+    limit follows the 0x3e1: start_seconds + COUNTDOWN (the 0x3e1 handler's 7.5 s start effect, 0x51fce0), at
+    most 60 + COUNTDOWN; a longer one (the test mode's) is sent RAISE_AFTER s later. Every member must be
+    in the starter's city and channel, not in a room / chase / patrol, and in the row's level range (the wiki: all
+    members at the same pillar), else the start is refused with the client's 10999 text. Members of the other
+    faction get the starter's row too (the wiki: different routes per faction; not done).
 0x3e9 InstantGoalPlace (TableIdx, place) from any member: a place not passed before -> 0x3ea to every member (the
     client's 0x70b750 marks the place in its mission: the post goes away for all), the passer with the row's exp per
     post, the others 0. A place passed twice (two members at once) is ignored (the official server failed the
@@ -28,18 +30,18 @@ party_move_ROO; every member's level at least GlobalContent MinPatrolGrade). Acc
     when the limit changed and the count is not 0 it shows the time added (sound 0x4ece).
 0xc28 C2S (u32 post): the client picks the emergency posts itself (0x7475b0): 64 s after the start and every minute
     after, a random post of its city's quick post table near the car (0x72f280 / 0x72d0a0) -> the member's slot (his
-    place in the party, 4 slots) gets that post, unless his slot still has one, and
+    place in the party, 4 slots) gets that post (the client asks only with its own slot empty), and
 0xc24 S>C (18 bytes; client 0x514340): i32 slots[4] (the post per member, -1 none) to every member: shown on the map
     with Officer Amy's / Member Min's call (11001 / 11002) when one is set.
 0xc25 C2S (u32 slot, u32 post; client 0x742b1d): a member's car reached the post of a slot (any member may take any
-    slot) -> bonus time by how fast (quick_max_seconds less one per quick_decay_seconds since it appeared, at least
+    slot; the post is always -1: the client clears the slot before it reads it, 0x742b0a) -> bonus time by how fast (quick_max_seconds less one per quick_decay_seconds since it appeared, at least
     quick_min_seconds) and quick_exp x the row's exp per post to the taker (*guess*: the wiki only says faster
     pick-ups give more time), then
 0xc26 S>C (32 bytes; client 0x514410): u32 slot, u32 post, u32 exp, XiStrExpInfo, u16 level, u32 time limit (s) to
     every member (exp 0 to the others): "Exp. %d" for the taker, the slot cleared, the new limit.
 The end:
   - the last post (the party's places = the row's post count): to every member the row's final exp (column 15),
-    the rewards, 0x3e5 InstantRewardAck (final exp, the items), 0x3e3 (client 0x513ed0: the car's stats back, state
+    the rewards, 0x3e5 InstantRewardAck (final exp; no items: they would each pop a notice), 0x3e3 (client 0x513ed0: the car's stats back, state
     0, "You've completed a Party Patrol." 11157), then
     0xc1e S>C (10 + n x 60 bytes; client 0x514560): u32 total, u32 n, n x (name 0x2a, u32 posts, u32 emergency
     posts, u16 item count, u32 item TableIdx, u32 exp): the result window (0x569ae0: the three numbers per member
@@ -72,6 +74,9 @@ from .records import name_bytes
 
 PARTY_TYPES = ('party_move', 'party_move_ROO')
 SLOTS = 4
+RUN_AT = 60             # the HUD (0x652440) goes from state 1 (starting) to 2 (running) at 60 s left or less
+COUNTDOWN = 8           # the start countdown: the 0x3e1 handler's start effect 0x12 runs 7.5 s (0x51fce0)
+RAISE_AFTER = COUNTDOWN + 1.5   # seconds before a first limit above RUN_AT + COUNTDOWN is sent (test mode)
 NOT_NOW = 'You cannot accept the Party Patrol mission in current state.'      # client GlobalText 10999
 CITY_GROUP = {1: 'rw_patrol_moon', 2: 'rw_patrol_koi', 3: 'rw_patrol_cras', 4: 'rw_patrol_oros_omd'}
 
@@ -114,8 +119,9 @@ class PartyPatrol:
     def left(self):
         return self.limit - (time.monotonic() - self.start)
 
-    def time_frame(self, s):
-        return Frame(0xc27, struct.pack('<qII', s.state['player'].char.cid, self.posts.get(id(s), 0), int(self.limit)))
+    def time_frame(self, s, limit=None):
+        return Frame(0xc27, struct.pack('<qII', s.state['player'].char.cid, self.posts.get(id(s), 0),
+                                        int(self.limit if limit is None else limit)))
 
     def slot_frame(self):
         return Frame(0xc24, struct.pack('<4i', *[(x[0] if x else -1) for x in self.slots]))
@@ -160,15 +166,31 @@ async def start(session, idx, row, solo=False):
     pp = PartyPatrol(idx, row, members[:SLOTS])
     if solo:
         pp.limit = context.partypatrol['test_start_seconds']
+    pp.limit += COUNTDOWN               # the posts and the timer start after the countdown
     for s in pp.members:
         s.state['instant'] = dict(idx=idx, places=pp.places, patrol=True, party=pp)
         s.state.pop('instant_offer', None)
         s.log.note(f'party patrol {idx} starts ({row[10]}: {len(pp.members)} members, {pp.total} posts,'
                    f' {pp.limit} s)')
         send(s, Frame(0x3e1, struct.pack('<IIB', idx, 0, 0)))
+    # the HUD runs (timer, posts shown and reported) only once 60 s or less are left (RUN_AT): the first limit is
+    # 60 s + the start countdown, so it runs when the countdown ends (user, 2026-10-17: posts before the countdown
+    # finished); a longer one (test mode) is sent as that, then raised once running (user: the test patrol had no
+    # posts and no timer with 600 s at once)
+    first = min(pp.limit, RUN_AT + COUNTDOWN)
     for s in pp.members:
-        send(s, pp.time_frame(s))
+        send(s, pp.time_frame(s, first))
     pp.task = asyncio.ensure_future(clock(pp))
+    if pp.limit > first:
+        asyncio.ensure_future(raise_limit(pp))
+
+
+async def raise_limit(pp):
+    """The real first limit, once the members' HUDs are running (they check it every frame)."""
+    await asyncio.sleep(RAISE_AFTER)
+    if not pp.over:
+        for s in pp.members:
+            send(s, pp.time_frame(s))
 
 
 async def clock(pp):
@@ -270,14 +292,14 @@ async def complete(pp):
         if items:
             send(s, mod_list(*items))
         t = context.data
-        shown = ([t.item_info(t.item_index[prize[0]]).table_idx] if prize else []) + [i.table_idx for i, _ in given]
-        shown = shown[:3]
         s.log.note(f'party patrol {pp.idx} done: {pp.posts.get(id(s), 0)} posts, {pp.quick.get(id(s), 0)} emergency,'
                    f' final {final} exp, {left} s left, items {prize} {[(i.item_id, n) for i, n in given]}')
         for f in stat_frames(p):
             send(s, f)
+        # no items in 0x3e5: its list pops a notice per item over the result window (user, 2026-10-17); the
+        # result window 0xc1e shows the prize
         send(s, Frame(0x3e5, struct.pack('<III3IHH3I', pp.idx, final, 0, c.exp, c.exp_next, c.exp_base, c.level,
-                                         len(shown), *(shown + [0, 0, 0])[:3])))
+                                         0, 0, 0, 0)))
         send(s, Frame(0x3e3, struct.pack('<I', pp.idx)))
         item_idx = t.item_info(t.item_index[prize[0]]).table_idx if prize else 0
         units.append(name_bytes(c.name) + struct.pack('<IIHII', pp.posts.get(id(s), 0), pp.quick.get(id(s), 0),
@@ -315,8 +337,8 @@ async def quick_post_request(session, frame):
         return
     post, = struct.unpack_from('<I', frame.payload)
     k = pp.members.index(session)
-    if pp.slots[k]:
-        return session.log.note(f'party patrol {pp.idx}: emergency post {post} asked, slot {k} still has one')
+    if pp.slots[k]:         # the client asks only with its own slot empty (0x7475b0): its slot wins
+        session.log.note(f'party patrol {pp.idx}: emergency post {post} replaces {pp.slots[k][0]} in slot {k}')
     pp.slots[k] = (post, time.monotonic())
     session.log.note(f'party patrol {pp.idx}: emergency post {post} in slot {k}')
     pp.cast(pp.slot_frame())
@@ -332,8 +354,11 @@ async def quick_post_taken(session, frame):
     if not pp or pp.over or len(frame.payload) < 8:
         return
     k, post = struct.unpack_from('<II', frame.payload)
-    if k >= SLOTS or not pp.slots[k] or pp.slots[k][0] != post:
-        return session.log.note(f'party patrol {pp.idx}: emergency post {post} slot {k} not set')
+    # the client clears its slot (-1) before it reads the post to send (0x742b0a / 0x742b11): the post is always
+    # -1, so the slot alone says which (user, 2026-10-17: one emergency post only)
+    if k >= SLOTS or not pp.slots[k]:
+        return session.log.note(f'party patrol {pp.idx}: emergency post slot {k} not set')
+    post = pp.slots[k][0]
     cfg = context.partypatrol
     waited = time.monotonic() - pp.slots[k][1]
     pp.slots[k] = None

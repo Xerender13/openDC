@@ -138,9 +138,10 @@ def native_setup(cp):
         context.realmatch_effect = int(cp['battlezone'].get('realmatch_effect', '1'))
         for key, value in cp['battlezone'].items():
             f = [v.strip() for v in value.split(',')]
-            if key.startswith('section.') and len(f) >= 4:
+            if key.startswith(('section.', 'eu.section.')) and len(f) >= 4:
                 levels = (int(f[4]), int(f[5])) if len(f) >= 6 else (0, 9999)
-                context.sections[int(key.split('.', 1)[1])] = (f[0], int(f[1]), int(f[2]), float(f[3]), *levels)
+                to = context.sections_eu if key.startswith('eu.') else context.sections
+                to[int(key.rsplit('.', 1)[1])] = (f[0], int(f[1]), int(f[2]), float(f[3]), *levels)
     w = n.get('delete_wait_days', '').strip()
     context.delete_wait_days = int(w) if w else None
     context.ranking_port = int(cp['services']['ranking'].split()[0]) if 'ranking' in cp['services'] else 0

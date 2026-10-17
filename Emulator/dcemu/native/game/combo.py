@@ -12,7 +12,8 @@
         exp, u32 money 0, XiStrExpInfo, u16 level, f32 the exp of this combo; recorded: 1, 0,
         (1, 100, 0), 1, 0.6) when it is at least 1, and the "COMBO" play mode.
 Drops (PickupTrafficItem 0x6900f0, PickUpItem, XiCsLevelDropGroup::DropItemOfMode 0x5a2f00): the
-    ItemDropServer.tdf rows for the character's level (the highest table level not above it), a roll
+    ItemDropServer.tdf rows for the character's level (the highest table level not above it; EU players: the
+    current car's V grade, nation rule drop_by_grade, V<n> = the n-th table level), a roll
     in 0-100% (0-10% in mode 1) against the groups' rates of the mode added up; the first group past
     the roll gives one of its items at random (TakeItem: onto a stack or a new item -> 0x192). One
     roll (two with the double-drop item, not here) -> 0x2e5 TrafficItemEventAck (u32 count, u32 item
@@ -71,14 +72,22 @@ def parts_group(group):
     return bool(infos) and all(i and i.kind in PART_KINDS for i in infos)
 
 
+def drop_rates(p):
+    """The drop groups of the player: by level, or by the current car's V grade (nation rule drop_by_grade, EU)."""
+    from .. import nation
+    t, car = context.data, p.car
+    if nation.rule(p, 'drop_by_grade') and car is not None:
+        return t.drop_rates_of_grade(car.grade)
+    return t.drop_rates(p.char.level)
+
+
 async def drop(p, mode, parts_only=False):
     """One roll of a drop mode (1 traffic, 2 combo, 3 rush hit) -> (0x2e5 frame, [(item, state)]). parts_only
     (rush bosses, user 2026-10-15: a part on every hit): one of the level's part groups, weighted by their
     rates of this mode (equal weights when they are all 0)."""
     t = context.data
     if parts_only:
-        groups = [(g, rates[mode] if mode < len(rates) else 0.0) for g, rates in t.drop_rates(p.char.level)
-                  if parts_group(g)]
+        groups = [(g, rates[mode] if mode < len(rates) else 0.0) for g, rates in drop_rates(p) if parts_group(g)]
         if groups:
             weights = [w for _, w in groups] if any(w > 0 for _, w in groups) else None
             group = random.choices([g for g, _ in groups], weights=weights)[0]
@@ -92,7 +101,7 @@ async def drop(p, mode, parts_only=False):
     total = 0.0
     from .licenses import drop_bonus
     more = drop_bonus(p)                        # mounted licenses: parts drop chance + % (ME_PartDropRate, ...)
-    for group, rates in t.drop_rates(p.char.level):
+    for group, rates in drop_rates(p):
         rate = rates[mode] if mode < len(rates) else 0.0
         total += rate * (100 + more) / 100 if more and parts_group(group) else rate
         if total > roll:

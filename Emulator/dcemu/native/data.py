@@ -65,6 +65,13 @@ def _stations(rows):
 # server (its fallback 10); here type 11.
 PART_TYPES = {'speed': 0, 'crash': 1, 'accel': 2, 'boost': 3, 'op_S': 4, 'op_C': 6, 'op_A': 7, 'op_B': 8, 'op_F': 9}
 USE_TYPE, DOCK_TYPE = 5, 11
+# EU part requirements (nation rule part_grade; user, 2026-10-17): the car's V grade a part needs when ItemClient
+# column 8 is empty. Parts: their grade's first V grade (N 1, S 4, H 7) + 0 / 1 / 2 by tier: the normal parts
+# (speed / accel / crash / boost, no set) have five levels per grade (N 1 7 13 19 25, S 31 .. 55, H 60 .. 80) ->
+# + 0 0 1 1 2 (best N V3, best S V6, best H V9); set / shop / rental parts take the tier of the highest normal level
+# not above their own. Options (FN / FS / FH) and docking parts (ON / OS / OH): the grade's first V grade.
+GRADE_BASE = {'N': 1, 'S': 4, 'H': 7}
+BASE_PARTS = ('speed', 'accel', 'crash', 'boost')
 USE_STACK = 99           # usable items stack to UseItem column 5, 99 when empty (the 2008 loader)
 
 
@@ -287,6 +294,15 @@ class Tables:
         lv = max((l for l, _, _ in self.drops if l <= level), default=None)
         return [(g, r) for l, g, r in self.drops if l == lv]
 
+    def drop_rates_of_grade(self, grade):
+        """-> [(group, rates)] for a car's V grade (nation rule drop_by_grade): the table's levels in order, V1 the
+        first (1, 5, 11, 21, 31, 41, 51, 61, 71 for V1-V9); a grade past the last level takes the last."""
+        levels = sorted({l for l, _, _ in self.drops})
+        if not levels:
+            return []
+        lv = levels[max(1, min(grade, len(levels))) - 1]
+        return [(g, r) for l, g, r in self.drops if l == lv]
+
     def _p(self, *parts):
         return os.path.join(self.root, *parts)
 
@@ -312,6 +328,27 @@ class Tables:
         self._use_rows = read_tdf(os.path.join(self.server_data, 'UseItemClient.tdf'))
         for i, r in enumerate(self._use_rows):
             self.item_index.setdefault(r[0], len(parts) + i)
+
+    def part_req_grade(self, info):
+        """-> the car V grade a part, option or docking part needs (0: none): ItemClient column 8, else the EU rule
+        above (GRADE_BASE)."""
+        if info.req_grade:
+            return info.req_grade
+        g = info.grade or ''
+        if len(g) == 2 and g[0] in 'FO' and g[1] in GRADE_BASE:        # options, docking parts
+            return GRADE_BASE[g[1]]
+        if info.kind not in BASE_PARTS or g not in GRADE_BASE:
+            return 0
+        tiers = getattr(self, '_part_tiers', None)
+        if tiers is None:
+            tiers = {}
+            for r in self._part_rows:
+                if r[0] in BASE_PARTS and r[1] == 'n/a' and r[6] in GRADE_BASE:
+                    tiers.setdefault(r[6], set()).add(_num(r[7]))
+            tiers = self._part_tiers = {k: sorted(v) for k, v in tiers.items()}
+        levels = tiers.get(g) or [info.req_level]
+        pos = max((k for k, lv in enumerate(levels) if lv <= info.req_level), default=0)
+        return GRADE_BASE[g] + pos * 3 // len(levels)
 
     def item_info(self, table_idx):
         """-> ItemInfo of an item by its TableIdx (ItemClient.tdf rows, then UseItemClient.tdf), or None."""

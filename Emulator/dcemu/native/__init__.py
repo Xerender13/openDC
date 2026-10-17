@@ -74,6 +74,7 @@ class Context:
     race_traffic = None      # native.race.RaceTraffic, when barea is native
     city_traffic = None      # native.city_traffic.CityTraffic: the city's traffic cars ([traffic] city = native)
     sections = {}            # battle zone: PvP channel id -> (name, lowest car grade, highest, exp multiplier)
+    sections_eu = {}         # the same for EU players (emulator.ini eu.section.<channel>), where set
     practice_alone = True    # battle zone: a room with one member starts a practice run, not a race
     realmatch = 'always'     # Real Match open hours: always, schedule (realmatchtable.txt) or off
     realmatch_minutes = 60   # schedule: how long each opening lasts

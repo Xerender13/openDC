@@ -8,6 +8,97 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 17 (2026-10-17 evening): solo patrol end, silent patrol rewards, US stat points, party patrol test on
+
+- **Solo patrol stuck at 40/40** (user, Xerander, Officer Heather's patrol TableIdx 5; log 20261017-163318 18:26:07):
+  the server ended it (0x3ea, 0x3e5 with the final exp, mission dropped), but the client kept it on the HUD. In the
+  2011 client only the 0x3e3 handler (0x513ed0 -> 0x70d7c0) frees a mission object; the 0x3e5 handler (0x514120)
+  only adds the exp, lists the items and opens the result window (0x73ca10). The 2008 server sent no 0x3e3 for a
+  patrol (Cmd_InstantGoalPlace 0x6065dd). instant.instant_goal_place now sends 0x3e3 after the 0x3e5 (the order
+  INSTANT_ORDER keeps for other missions). The 10-14 patrol had the same flow; the user probably did not notice.
+- **Patrol reward without a message box** (user): patrol_rewards.txt items now go into the inventory only (0x192);
+  0x3e5's item list (each item = chat line, pick-up icon and a notice, 0x739f70 / 0x69f200) is sent empty. The
+  "Instant Mission Complete" result window with the exp stays (it is the 0x3e5 itself). Every patrol row in
+  patrol_rewards.txt is still `-` (no item): fill it in to give one.
+- **US stat points 1 per level** (user; was level / 2 from the 2008 Contents.ini Main.HalfLevelPoint): new nation
+  rule half_level_points (emulator.ini [nation] us. / eu.half_level_points = 0); player.stats no longer reads the
+  Contents.ini flag. EU unchanged (level_points off).
+- **Party patrol test mode on for everyone** (user): emulator.ini [partypatrol] test = 1 (a solo patrol accepted
+  alone at a pillar starts that city's party patrol). Turn it back to 0 to get normal solo patrols again.
+- Script-tested with a stub session (patrol to the last post: 0x3ea, 0x3e5 with 0 items, 0x3e3; the US rule gives
+  30 points at level 30). **Not yet confirmed in game.**
+- **Test party patrol: no posts and no timer** (user, log 20261017-183125 18:32:02, row 91): the client's HUD
+  (0x652440) keeps a party patrol in state 1 (starting: no timer, posts not reported, 0x742a41) until the time left
+  (start tick + limit - now) is 60 s or less (0x6524ac), then sets state 2. The test mode's first limit of 600 s
+  kept it in state 1 for 9 minutes. partypatrol.start now sends the first 0xc27 with at most 60 s (RUN_AT) and a
+  longer limit 1.5 s later (raise_limit; 0xc27 sets the limit at any time, 0x523560). Normal party patrols (60 s)
+  are unchanged. Script-tested (frames and timing); **not yet confirmed in game.**
+- **Party patrol, second test run** (user, log 20261017-183357 19:21-19:30, screenshot of the result):
+  - *Yellow "1 Mittron Enhancer(s) have been issued" box over the Party Patrol Result*: 0x3e5's item list (client
+    0x514120 -> 0x69f200 notice per item). partypatrol.complete now sends 0x3e5 with no items; the items go to the
+    inventory (0x192) and the result window 0xc1e still shows the prize.
+  - *Checkpoints before the start countdown ended*: posts are drawn only in state 2 (0x62f6ec / 0x6336b8), which
+    comes at 60 s left (0x6524ac); with a 60 s first limit that was at once. The 0x3e1 handler plays a 7.5 s start
+    effect (0x51fce0: effect 0x12, 7.5f), so the first limit is now start_seconds + COUNTDOWN (8): the posts and
+    the timer (60 s) come when the countdown ends. The test mode's limit is raised 9.5 s after the start.
+  - *One emergency post only*: the client clears its slot to -1 before it reads the post it sends (0x742b0a /
+    0x742b11), so 0xc25 always carries post -1; the server compared the post, refused ("not set"), kept its slot
+    and refused every later 0xc28 ("still has one", every minute). 0xc25 now goes by the slot alone; 0xc28 always
+    takes the new post (the client asks only with its own slot empty).
+  - Script-tested (start frames and timing, emergency post ask / replace / take -> 0xc26). **User-confirmed
+    2026-10-17**: party patrols work correctly (countdown, posts, emergency posts, result window).
+- After that (user): [partypatrol] test = 0 again, and the server set to EU: [nation] allow = eu (US clients get
+  "Authentication system abnormal.(99)"; allow = all lets both in again).
+- **EU reference tables** (user, ~/Downloads/Init.agt, two identical copies): a 7-Zip archive (not a NayaPack) of 24
+  Init/*.xlt from 2009-12-28 of an older EU client. No ItemClient (the parts' Required Grade, column 8, is in
+  World.agt), no part / grade rule columns in any table. EU VehicleUpgrade has 87 cars with other stats, prices and
+  required levels; **not used: the user wants the US stats and costs kept**. Kept in the scratchpad only.
+- **Drop chances** (user question): only the server has them: server_data/tables/ItemDropServer.tdf = the 2008
+  **TW** table (Server2008/server/Data_TW). The 2008 US table has the same 83 rows, but 62 rows have other combo
+  chances (TW 3-5x higher, e.g. level 1 ig_n_A 93.85 % vs 19.7 %); crash (traffic, mode 1, rolled in 0-10) chances
+  are the same. DropLimit_Server.tdf (per-item caps) is not read. Nothing changed there.
+- **EU drop groups by the car's V grade** (user: "EU groups item depending on the car V grade level"): nation rule
+  drop_by_grade (eu 1, us 0): combo.drop_rates takes data.Tables.drop_rates_of_grade(current car's grade) for EU
+  players: the table has nine levels (1, 5, 11, 21, 31, 41, 51, 61, 71), V<n> = the n-th (the mapping is ours).
+  Traffic, combo and rush-hit drops; patrol drops stay by level. Script-tested (V1 / V3 / V5 / V9 rows; US level 30
+  -> row 21, EU V5 -> row 41). **Not yet confirmed in game.**
+- **EU part requirements by the car's V grade** (user: "the better the part, the more grade it requires; best N parts
+  V3, best S V6, best H V9"; then "options and docking parts: N V1, S V4, H V7"): data.Tables.part_req_grade, used by
+  nation.part_allowed (rule part_grade, EU only) when ItemClient column 8 is empty (always, in our tables). Parts
+  (speed / accel / crash / boost): the grade's first V grade (N 1, S 4, H 7) + 0 0 1 1 2 over the five normal tiers
+  (N 1/7/13/19/25 -> V1 V1 V2 V2 V3, S 31-55 -> V4 V4 V5 V5 V6, H 60-80 -> V7 V7 V8 V8 V9); set / shop / rental
+  parts take the tier of the highest normal level not above their own (e.g. H set level 71 -> V8, level 1 rentals
+  the grade's first). Options FN / FS / FH and docking parts ON / OS / OH: V1 / V4 / V7. The tier split (2-2-1) is
+  ours. Refused in items.equip_item (0x199, which also carries options and docking): 0x0001 "Your car must be V<n>
+  or higher to equip this item." in place of 20027 ItemEquipFail. Parts already on a car stay. The client's own
+  tooltip ("Required Grade", column 8 of its copy) shows nothing. Script-tested over the whole ItemClient table and
+  part_allowed (EU V5 car refused an H level-60 part, US allowed). **Not yet confirmed in game.**
+- **EU battle zone: no level limits, V grades only** (user; "make sure everything works in the reworked battle
+  zone UI too"). The 2011 lobby (BattleZoneReform = 1: Newbie 11, Pro 12 with the room EXP tiers, Real Match 6)
+  takes its limits from GlobalContent.xlt in the 0x1b9 handler (switch 0x52a19c on the channel, table 0x52a490:
+  6 -> 0x52a2c7 Real Match keys, 11 -> 0x52a31e Newbie, 12 -> 0x52a38a Pro) and for the tiers 0x5a6950 (the
+  *11New keys); the EU client reads the Value_EU_eng column. Its level limits there were the US ones (Newbie max 30,
+  Pro min 11, tiers 11 / 11 / 31 / 51 / 71, Real Match min 30 (US 1)); the old sections' caps were 1000 already.
+  - Client EU only (user's request; the US pack unchanged): tools/global_content.py got `--column NAME` and a
+    backup per client folder (client_backup/Patch.000_ClientEU.orig, the EU pack as it was, header bytes 20-31
+    kept); set in Value_EU_eng: MaxBattleNEWBIELevel 1000, MinBattlePROLevel 1, MinBattle2X/4X/6X/8X/16XLevel11New 1,
+    MinBattleRealMatchLevel 1. The grade limits stay (Newbie V1-5, Pro tiers V1-5 / 1-7 / 1-9 / 1-9, the same in
+    both columns). Channel 7's fixed "level >= 71" (0x52a30e) is not a button in the reformed lobby: left.
+    The EU client reads the pack at start: restart it.
+  - Server: nation rule battle_levels (us 1, eu 0): rooms.car_allowed (create / join, the Pro tiers), the invite
+    list and Lap Time (with laptime_level_limit) skip the level check for EU players; the V grade checks stay.
+  - The EU column also has other V limits for the old 2X-8X sections (2X V2-4 ...), which the reformed lobby does
+    not show: the server keeps the [battlezone] section lines there.
+  - Script-tested: car_allowed for US / EU (Newbie level 50, Pro 4X level 5 V5 / V6, 6X level 20, 16X level 30);
+    the pack rewrite read back. **Not yet confirmed in game.**
+- [nation] allow = all again (user: for testing the decompilation project, both nations for now).
+- **EU battle zone V tiers** (user): Newbie V1-3; Pro V4-9 with the room tiers 4X V4-5, 6X V6, 8X V7-8, 16X V9.
+  Client EU Value_EU_eng: MaxBattleNEWBIEGrade 3, MinBattlePROGrade 4, Min/MaxBattle4XGrade11New 4/5, 6X 6/6,
+  8X 7/8, 16X 9/9 (global_content.py; header bytes kept; the US pack unchanged). Server: rooms.section_rule takes the
+  player (EU: emulator.ini eu.section.11 / .12, rooms.PRO_TIERS_EU), in car_allowed and per invitee in the invite
+  list. Script-tested (every grade x section / tier, EU and US). **Not yet confirmed in game**; the EU client must
+  be restarted to read the pack.
+
 ## Session 16 (2026-10-17): Party Patrol and its solo test mode
 
 - **Party Patrol** (user request, with the Japanese wiki page ゲームモード/パトロール for the rules): new module
