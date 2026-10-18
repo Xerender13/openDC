@@ -59,11 +59,10 @@ The emulator recognises each client's nation and applies the EU rules only to EU
 
 **Game features that haven't been done yet:**
 - Channels and Channel Battle
-- Virtual HUV
 - Undercity
 - GT Tournament
 - Seasonal Events
-- Some drift shop items and specific consumable items
+- Some of the items that are not activated in the current version
 
 **Features that still require testing and might work with issues:**
 - Crew management
