@@ -75,9 +75,12 @@ Result (UnderChaseEnd): 0xc1 HuvResult (i32 result, u32 item InvenIdx) to each, 
     3 x i32 item TableIdx (-1 none) @0x4e, u8 @0x5a, u8 @0x5b (2011: two icons per row, 0x6b1ee0; sent 0)) to all.
     Class: the mean of six marks (HUBs evenly shared, red HUBs, Mission 2 tries and time left, HUVs left over and time
     saved, boss time left, closeness of the run to 2150 s): 92+ S, 82+ A, 72+ B, 62+ C, else D. Rank point = 0.55 boss
-    % + 0.35 HUVs / 28 + 0.05 red / 10 + 0.05 HUBs / 100. Items: cleared -> a Mittron Ore of the city (gi_<c>_001, the
-    beta 002 at 10-20 %) to each and an enhancer by party size, rank place and class (s_UCNewItemTable: H i_n_00045 /
-    S i_n_00044); failed -> the ore alpha to all but the last place by a level chance; Mission 2 failed -> an N Mittron
+    % + 0.35 HUVs / 28 + 0.05 red / 10 + 0.05 HUBs / 100. Items: cleared -> (user, 2026-10-18, instead of the 2008
+    Mittron Ore gi_<c>_001 / beta 002 at 10-20 % and one enhancer by party size, rank place and class,
+    s_UCNewItemTable / RANK_ITEMS) one random part of the city's set (SET_PARTS: the set the ore makes), the Beta
+    set (H) from class [undercity] beta_class (4 = A, shown for A and S), else Alpha (S), and [undercity] enhancer
+    (i_n_00003 Mittron Enhancer) x 1-3 by the class ([undercity] enhancers = D, C, B, A, S: 1, 1, 2, 3, 3) to each; failed -> the ore alpha to all but the last
+    place by a level chance; Mission 2 failed -> an N Mittron
     Enhancer (i_n_00043).
 Exp and Mito go through items.play_bonus (drinks, Mita 500, license ME_UnderExpMito); a held Undercity 120% (i_n_00064,
     "Increases Mito and Exp. earned from Undercity by 20%") adds its 20 % and one is used up at the result *(guess:
@@ -85,7 +88,13 @@ Exp and Mito go through items.play_bonus (drinks, Mita 500, license ME_UnderExpM
 
 Test mode (emulator.ini [undercity] test = 1, or per character the GM chat command  gmuctest on | off): one player can
 enter alone with /ucm (/uck, /ucc, /uco), free (the 2008 solo party), and Mission 2 has a 2-player party's barrier
-HUBs (5 / 4 / 3). Not done: a member leaving in the middle (his HUVs end; 2008 handed them to another member,
+HUBs (5 / 4 / 3). Start phase (gmuctest on N, or [undercity] test_phase = N): 2 skips Mission 1 (0xbb8 answered
+with 0xbb9 and at once 0xbbe result 1: the client's 0xbbe handler 0x517bc0 -> 0x7651a0 -> state 7, Mission 2 3 s
+later), 3 also Mission 2 (the client's stage (1, 7) after 0xbc3 answered with 0xbc8 result 1 instead of 0xfb 7, which
+would start Mission 2 (client state 8): 0x5181f0 -> 0x766c90 -> state 0xb -> 0xbe HuvReq), 4 also the escort waves
+(the HuvReq list cut to its BossHUVs, released at once). Skipped missions give nothing and count as done for the
+rating. Client stage machine 0x7677b0: 1-5 ready / start animation / HUB accept / countdown, 6 Mission 1 (0xbb8), 7
+Mission 2 (0xbc2), 8-10 its start, 0xb HuvReq, 0xc / 0xd waves / boss, 0xe / 0xf the result. Not done: a member leaving in the middle (his HUVs end; 2008 handed them to another member,
 DelegateHuvControl), Undercity Direct (vc_UC_Direct, Korea only).
 """
 import asyncio
@@ -117,6 +126,9 @@ ESCORT_LAST, BOSS = 4, 5                               # XiHuvInfo stages
 ORE_LEVEL = {1: 30, 2: 35, 3: 40, 4: 45}               # TakeUnderCityFailItem
 S_ENHANCER, H_ENHANCER, N_ENHANCER = 'i_n_00044', 'i_n_00045', 'i_n_00043'
 UC_120 = 'i_n_00064'
+# a cleared run's ready part (user, 2026-10-18: instead of the city's Mittron Ore, whose text is "Combine 3 of these
+# ores to get <name>'s Set Parts"): one of the four parts of the ore's set, Alpha (S grade) or Beta (H) by the class
+SET_PARTS = {1: ('si_s01', 'si_s02'), 2: ('si_a01', 'si_a02'), 3: ('si_c01', 'si_c02'), 4: ('si_b01', 'si_b02')}
 # s_UCNewItemTable[party size % 4][place][(5 - class) % 5] (2008 ZoneServer 0x6ff068; Main.NewUpgrade on)
 H, S = H_ENHANCER, S_ENHANCER
 RANK_ITEMS = (
@@ -138,6 +150,17 @@ def ms():
 
 def test_mode(session):
     return context.undercity['test'] or session.state.get('uc_test', False)
+
+
+PHASES = {1: 'Mission 1 (HUB destruction)', 2: 'Mission 2 (barrier HUBs and the main HUB)',
+          3: 'Mission 3 (the HUV waves)', 4: 'Mission 4 (the BossHUV)'}
+
+
+def test_phase(session):
+    """The mission a test run starts at (gmuctest on N, emulator.ini [undercity] test_phase), 1 outside the test mode."""
+    if not test_mode(session):
+        return 1
+    return session.state.get('uc_phase') or context.undercity.get('phase', 1)
 
 
 def serial(s):
@@ -183,6 +206,7 @@ class Run:
         self.agree_mode = 0
         self.agree_timeout = 0
         self.uc_stage = 0
+        self.start_phase = 1                           # test mode: the mission the run starts at (test_phase)
         self.init()
         self.task = asyncio.ensure_future(self.tick())
 
@@ -403,8 +427,9 @@ class Run:
             got = 0
             p = m.session.state.get('player')
             if result > 0 and p:
-                ore = f'gi_{CITY_LETTERS.get(self.city, "m")}_00{2 if random.uniform(0, 100) < chance else 1}'
-                info = t.item_info(t.item_index[ore]) if ore in t.item_index else None
+                alpha, beta = SET_PARTS.get(self.city, SET_PARTS[1])
+                part = f'{beta if cls >= context.undercity.get("beta_class", 4) else alpha}_00{random.randint(1, 4)}'
+                info = t.item_info(t.item_index[part]) if part in t.item_index else None
                 if info:
                     it, state = await take(p, info)
                     send(m.session, mod_list((it, state)))
@@ -422,12 +447,14 @@ class Run:
                 d = abs(ORE_LEVEL.get(self.city, 30) - p.char.level)
                 if random.uniform(0, 100) <= (100 if d < 21 else 80 if d < 31 else 60 if d < 41 else 40):
                     item = f'gi_{CITY_LETTERS.get(self.city, "m")}_001'
-            elif result > 0:
-                item = RANK_ITEMS[n % 4][place % 4][(5 - cls) % 5]
+            elif result > 0:                            # user, 2026-10-18: Mittron Enhancers (not RANK_ITEMS' one)
+                item = context.undercity.get('enhancer', 'i_n_00003')
             info = t.item_info(t.item_index[item]) if item and item in t.item_index else None
             if info:
-                it, state = await take(p, info)
-                send(m.session, mod_list((it, state)))
+                by_class = context.undercity.get('enhancers', (1, 1, 2, 3, 3))      # class 1 D .. 5 S
+                count = by_class[min(max(cls, 1), len(by_class)) - 1] if result > 0 else 1
+                got = [await take(p, info) for _ in range(max(count, 1))]
+                send(m.session, mod_list(*{id(it): (it, state) for it, state in got}.values()))
                 m.items[1 if result == 0 else 2] = info.table_idx
             if m.uc120:
                 await use_uc120(m.session, p)
@@ -586,6 +613,7 @@ async def suggest(session, frame):
         if old:
             drop_run(old)
         r = runs[party.id] = Run(party, city, solo=True)
+        r.start_phase = test_phase(session)
         r.agree_mode = 2
         return await load(r, session, time_, 0)
     r = runs.get(party.id)
@@ -598,6 +626,7 @@ async def suggest(session, frame):
     if r:
         drop_run(r)
     r = runs[party.id] = Run(party, city, solo=False)
+    r.start_phase = test_phase(session)
     r.agree_mode = 1
     r.agree_timeout = ms() + int(AGREE_SECONDS * 1000)
     r.member(session).agree = True
@@ -681,6 +710,8 @@ async def stage(session, frame):
     elif st == 1:
         r.init()
     elif st == 7:
+        if r.start_phase >= 3:                         # test: Mission 2 skipped (no 0xfb 7: it would start it)
+            return skip_mission_2(r)
         limit = 120 + (r.boss_try - 1) * 10 + (20 if r.city == 1 else 0)
         r.chase_base = ms() + 12600 + limit * 1000
     r.uc_stage = st
@@ -712,6 +743,20 @@ async def patrol_start(session, frame):
                 angle = math.atan2(t.icons[j][2] - y, t.icons[j][1] - x)
     r.cast(Frame(0xbb9, struct.pack('<II4f', patrol, slot, x, y, z, angle)))
     session.log.note(f'undercity: Mission 1 (patrol {patrol}) starts')
+    if r.start_phase >= 2:                             # test: Mission 1 skipped
+        r.patrol = None
+        for x in r.sessions:
+            send(x, Frame(0xbbe, struct.pack('<IIIIiq', patrol, 1, 0, 0, 0, x.state['player'].char.mito)))
+        r.note(f'test: Mission 1 skipped (start at {PHASES[r.start_phase]})')
+
+
+def skip_mission_2(r):
+    """Test: Mission 2 answered as done at its stage 7 (0xbc8 result 1, no exp or item): the client goes on to
+    the HUV waves (0x766c90 -> state 0xb, 0xbe HuvReq)."""
+    r.boss_try = -1
+    for x in r.sessions:
+        send(x, Frame(0xbc8, struct.pack('<IIIiq', 1, 0, 0, 0, x.state['player'].char.mito)))
+    r.note(f'test: Mission 2 skipped (start at {PHASES[r.start_phase]})')
 
 
 @on(SVC, C2S, 0xbba)
@@ -832,6 +877,10 @@ async def huv_req(session, frame):
     r.boss_try = -1
     r.chase_start = start
     r.stack = [struct.unpack_from('<7H', frame.payload, 8 + 14 * i) for i in range(n)]
+    if r.start_phase >= 4:                             # test: the escort waves skipped, the BossHUV at once
+        r.stack = [h for h in r.stack if h[0] == BOSS]
+        r.chase_stage = BOSS
+        r.note('test: Mission 3 skipped (the BossHUV comes out at once)')
     r.bosses = []
     stages = {}
     for h in r.stack:
@@ -926,7 +975,19 @@ async def undercity_on_close(session):
 
 
 def gm_test(session, args):
-    on_ = not args or args[0].lower() not in ('off', '0', 'no')
+    """gmuctest on [phase] | off | phase N: the test mode; phase 1-4 = the mission a run starts at."""
+    words = [a.lower() for a in args]
+    if words[:1] == ['phase']:
+        words = ['on'] + words[1:]
+    on_ = not words or words[0] not in ('off', '0', 'no')
+    phase = words[1] if len(words) > 1 else ''
+    if on_ and phase:
+        if not phase.isdigit() or int(phase) not in PHASES:
+            return 'usage: gmuctest on [phase 1-4] | off  (1 Mission 1, 2 Mission 2, 3 HUV waves, 4 BossHUV)'
+        session.state['uc_phase'] = int(phase)
     session.state['uc_test'] = on_
-    return ('Undercity test mode on: alone, chat /ucm /uck /ucc /uco (Moon Palace, Koinonia, Cras, Oros) to enter'
-            if on_ else 'Undercity test mode off')
+    if not on_:
+        session.state.pop('uc_phase', None)
+        return 'Undercity test mode off'
+    return (f'Undercity test mode on, runs start at {PHASES[test_phase(session)]}: alone, chat /ucm /uck /ucc /uco '
+            f'(Moon Palace, Koinonia, Cras, Oros) to enter')

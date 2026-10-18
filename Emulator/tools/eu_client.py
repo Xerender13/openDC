@@ -69,6 +69,10 @@ Speed unit texts (user, 2026-10-17: "any MPH changed to KPH"): `kph` (part of se
 Data_EU_<lang>/gameui/game.nui (six controls, T1="MPH" / "mph", NM "..._km/h") to KPH / kph (first original:
 client_backup/game_<folder>.nui.orig). GlobalText 11874 "mph" (the only speed unit in the EU text column):
 tools/global_text.py "../Client EU" --column EU_eng set 11874=kph (Patch.006, a shared pack: not part of setup).
+`assists` (part of setup; user, 2026-10-18): Data_EU_<lang>/World.agt's Assist_Client.tdf, whose values are km/h
+(column 6) while the English texts say mph: column 4 rewritten with the value in km/h ("Increase speed by 3.6 mph"
+-> "by 6 km/h"; 451 rows: speed up, party speed, booster max speed, the battle / chasing speed assists; the three
+test options of value 0 stay).
 
 The client dir defaults to ../Client EU (../Client US for `us`).
 
@@ -78,6 +82,7 @@ usage: python3 Emulator/tools/eu_client.py [client dir] setup [de|eng|fr|es]   (
        python3 Emulator/tools/eu_client.py [client dir] speedo [TW client dir | mph]   the dial with Km/h
        python3 Emulator/tools/eu_client.py [client dir] grades        part tooltips with the required V grade
        python3 Emulator/tools/eu_client.py [client dir] kph           the HUD speed labels KPH instead of MPH
+       python3 Emulator/tools/eu_client.py [client dir] assists       the assist texts (converts, options) in km/h
        python3 Emulator/tools/eu_client.py [client dir] status
        python3 Emulator/tools/eu_client.py [client dir] reset         the original exe back (the data folder stays)
 """
@@ -441,6 +446,54 @@ def set_kph(client):
         print(f'{folder}/gameui/game.nui: {n} speed labels KPH')
 
 
+MPH_TEXT = __import__('re').compile(r'(\+?)\s*[0-9.]+\s*mph', __import__('re').I)
+
+
+def set_assist_kph(client):
+    """Data_EU_<lang>/World.agt: Assist_Client.tdf texts in km/h. The value (column 5) is km/h in both clients
+    (column 6 says so; Speed Up 6 = 6 km/h), the English texts (column 4) print it as mph: "Increase speed by
+    3.6 mph" -> "Increase speed by 6 km/h", "Max Battle Speed +0.06mph" -> "+0.1 km/h" (454 rows)."""
+    sys.path.insert(0, os.path.join(HERE, '..'))
+    from dcemu.native.data import read_tdf
+    for folder in FOLDER.values():
+        path = os.path.join(client, folder, 'World.agt')
+        if not os.path.exists(path):
+            continue
+        backup = os.path.join(HERE, '..', 'client_backup', f'World_{folder}.agt.orig')
+        if not os.path.exists(backup):
+            shutil.copy2(path, backup)
+            print(f'{folder}/World.agt: original kept as {os.path.normpath(backup)}')
+        header, files = agt.read(path)
+        k = next(i for i, (name, _) in enumerate(files) if name.lower() == 'world\\data\\assist_client.tdf')
+        tmp = os.path.join(client, folder, 'Assist_Client.tdf.tmp')
+        open(tmp, 'wb').write(files[k][1])
+        rows = read_tdf(tmp)
+        os.remove(tmp)
+        changes = {}
+        for r, row in enumerate(rows):
+            if len(row) < 7 or row[6] != 'km/h' or not MPH_TEXT.search(row[4]):
+                continue
+            try:
+                value = float(row[5])
+            except ValueError:
+                continue
+            if not value:               # a_11111-11113 "Test Option Speed Up": value 0, left as they are
+                continue
+            shown = f'{value:g}'
+            changes[(r, 4)] = MPH_TEXT.sub(lambda m: f'{m.group(1) or " "}{shown} km/h'.replace('  ', ' '), row[4], 1)
+        if not changes:
+            print(f'{folder}/World.agt: Assist_Client.tdf texts already km/h')
+            continue
+        files[k] = (files[k][0], tdf_set(files[k][1], changes))
+        tmp = path + '.new'
+        agt.write(tmp, header, files)
+        raw = bytearray(open(tmp, 'rb').read())
+        raw[20:32] = header[20:32]
+        open(tmp, 'wb').write(bytes(raw))
+        os.replace(tmp, path)
+        print(f'{folder}/World.agt: Assist_Client.tdf: {len(changes)} texts in km/h')
+
+
 def make_us(client):
     """Client/DriftCityUS.exe: the original unpacked exe (the backup, else DriftCityEU.exe while unchanged), nation 1,
     GameGuard class 0, the dname.chk data file check skipped."""
@@ -473,7 +526,7 @@ def main():
         client, args = args[0], args[1:]
     elif args and args[0] == 'us':
         client = os.path.join(HERE, '..', '..', 'Client US')
-    if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2', 'speedo', 'grades', 'kph'):
+    if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2', 'speedo', 'grades', 'kph', 'assists'):
         sys.exit(__doc__)
     if args[0] == 'status':
         n = nation_of(open(os.path.join(client, EXE), 'rb').read())
@@ -502,6 +555,8 @@ def main():
         return set_grades(client)
     if args[0] == 'kph':
         return set_kph(client)
+    if args[0] == 'assists':
+        return set_assist_kph(client)
     if args[0] == 'reset':
         if not os.path.exists(BACKUP):
             sys.exit('no backup: the exe was never changed by this tool')
@@ -514,6 +569,7 @@ def main():
     make_folder(client, lang)
     set_grades(client)
     set_kph(client)
+    set_assist_kph(client)
     set_nation(client, NATIONS[lang])
     set_filecheck(client, True)
     set_f2(client, True)

@@ -172,7 +172,7 @@ def _num(args, k, default):
 async def command(cmd, args):
     """One GM command -> (done, text). kick NAME [days] | block NAME days | unblock NAME |
     chatblock NAME minutes (0 lifts it) | ban ACCOUNT-or-NAME | unban ACCOUNT-or-NAME | who |
-    item NAME ITEM-ID [count] (as the chat command gmitem) | drift NAME DRIFT-ITEM-ID [days] (as gmdrift; 0 days
+    item NAME ITEM-ID [count] [+LEVEL] [A|B|C [TIER]] (as the chat command gmitem) | drift NAME DRIFT-ITEM-ID [days] (as gmdrift; 0 days
     = for good); both for a character online | realmatch open | close | in MINUTES | auto | status"""
     if cmd == 'who':
         names = who()
@@ -193,7 +193,7 @@ async def command(cmd, args):
         ok = await block_chat(name, _num(args, 1, 10.0))
     elif cmd == 'item':
         from .game.misc import gm
-        ok = len(args) >= 2 and await gm(None, 'gmitem', args)
+        return await gm(None, 'gmitem', args)
     elif cmd == 'drift':
         session = find(name)
         if not session or len(args) < 2 or args[1] not in context.data.visual_index:

@@ -49,7 +49,7 @@ STAT_KINDS = {'bonusspeed': 0, 'bonuscrash': 1, 'bonusaccel': 2, 'bonusboost': 3
 ASSIST_SQL = ("UPDATE SKID_ITEM_TB SET ASSIST_A=%s, ASSIST_B=%s, BELONGING=%s WHERE SERVERID=%s AND CID=%s"
               " AND INVENIDX=%s")
 
-_rows = _assists = None
+_rows = _assists = _names = None
 
 
 def rows():
@@ -76,15 +76,36 @@ def assists():
     return _assists
 
 
+def assist_name(assist_id):
+    """Assist_Client.tdf column 3, the shown name ("Speed Up 6"), or the id."""
+    global _names
+    if _names is None:
+        from ..data import read_tdf
+        _names = {r[1]: r[3] for r in read_tdf(os.path.join(context.data.server_data, 'Assist_Client.tdf')) if len(r) > 3}
+    return _names.get((assist_id or '').strip(), assist_id)
+
+
 def assist_index(assist_id):
     a = assists().get((assist_id or '').strip())
     return a[0] if a else 0
 
 
+def option_assist(it):
+    """An option part's own assist (ItemClient.tdf column 20: Engine Speeder A a_00031 "Speed Up 1", Lucky A
+    a_00026 "Chance 1", ...), or ''. The client takes an equipped item's assists only from the record's slots
+    (0x72c8a0 -> 0x729330 / 0x722320), not from its table, so the record carries it (2008: ItemServer.tdf column
+    21, the same ids) while the option has not been converted (a convert replaces it, as 2008 ChangeAssist)."""
+    t = context.data
+    if it.assist_a or not it.item_id.startswith('op_') or not 0 <= it.table_idx < len(t._part_rows):
+        return ''
+    r = t._part_rows[it.table_idx]
+    return r[20] if len(r) > 20 and r[20] in assists() else ''
+
+
 def assist_bonus(it):
-    """-> [(stat index, points)] of a part's converted assists."""
+    """-> [(stat index, points)] of a part's converted assists (an option: its own assist until converted)."""
     out = []
-    for aid in (it.assist_a, it.assist_b):
+    for aid in (it.assist_a, it.assist_b, option_assist(it)):
         a = assists().get((aid or '').strip())
         if a and a[1] in STAT_KINDS:
             out.append((STAT_KINDS[a[1]], int(a[2])))

@@ -112,7 +112,7 @@ class Context:
     vchase = dict(seconds_4=300, seconds_8=600, hits=3, catch_points=20, drain=5, traffic_points=3, traffic_heal=5,
                   win_rate=30, lose_rate=10, test=False)
     # emulator.ini [undercity] (game/undercity.py): the test mode (one player alone, with the /ucm .. chat commands)
-    undercity = dict(test=False)
+    undercity = dict(test=False, phase=1, beta_class=4, enhancer='i_n_00003', enhancers=(1, 1, 2, 3, 3))
     gotcha_enabled = True    # emulator.ini [gotcha] enabled: the Gotcha machine (main menu button)
     gotcha_season = 13       # [gotcha] season: the newest season offered (Etc.GotchaSeason; client GotchaViewSeason 13)
     gotcha_mito_price = 0    # [gotcha] mito_price / coin_price: 0 = the client's prices (gotcha.py)

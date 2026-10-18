@@ -118,6 +118,7 @@ class Player:
 
     def stats(self):
         t = context.data
+        from ..data import OPTION_STAT
         s = Stats()
         car = self.car
         if car:
@@ -125,6 +126,15 @@ class Player:
             equip = [0, 0, 0, 0]
             for it in self.items:
                 p = t.part_stat(it.item_id) if it.car_id == car.car_id else None
+                if it.car_id == car.car_id and not p and (it.state & 0xffff) == 1:
+                    info = t.item_info(it.table_idx)
+                    k = OPTION_STAT.get(info.type) if info else None
+                    if k is not None:               # an option part: its value + random bonus, as the client
+                        from .convert import assist_bonus   # (0x722320: types 6-9 count as speed / crash / accel /
+                        equip[k] += t.option_value(it.item_id) + it.random   # boost, op_F 10 nothing), and its assists
+                        for j, points in assist_bonus(it):
+                            equip[j] += points
+                    continue
                 if p:
                     from .setparts import expired, expired_value
                     if expired(self, it):           # a run-out set part: its expired form, no enhancement

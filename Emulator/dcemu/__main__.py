@@ -107,6 +107,12 @@ def native_setup(cp):
     if cp.has_section('undercity'):
         uc = cp['undercity']
         context.undercity['test'] = uc.get('test', '0').strip() not in ('0', 'no', 'off', '')
+        phase = uc.get('test_phase', '1').strip()
+        context.undercity['phase'] = int(phase) if phase in ('1', '2', '3', '4') else 1
+        context.undercity['beta_class'] = int(uc.get('beta_class', '4').strip() or 4)
+        context.undercity['enhancer'] = uc.get('enhancer', 'i_n_00003').strip() or 'i_n_00003'
+        counts = [int(x) for x in uc.get('enhancers', '1, 1, 2, 3, 3').replace(',', ' ').split() if x.isdigit()]
+        context.undercity['enhancers'] = tuple(counts) or (1, 1, 2, 3, 3)
     if cp.has_section('gotcha'):
         g = cp['gotcha']
         context.gotcha_enabled = g.get('enabled', '1').strip() == '1'

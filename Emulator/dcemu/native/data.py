@@ -62,9 +62,13 @@ def _stations(rows):
 
 # XiStrItem.Type (2008 ItemTypeStrToVar 0x59ae40 for the part kind in column 0; usable items are type 5).
 # 2011 adds the docking parts (dock_A/B/C/S/D: "docking onto the ... Parts"), unknown to the 2008
-# server (its fallback 10); here type 11.
-PART_TYPES = {'speed': 0, 'crash': 1, 'accel': 2, 'boost': 3, 'op_S': 4, 'op_C': 6, 'op_A': 7, 'op_B': 8, 'op_F': 9}
-USE_TYPE, DOCK_TYPE = 5, 11
+# server (its fallback 10); here type 11. The 2011 client's ItemTypeStrToVar (0x7012d0) counts the parts from 1
+# (speed 1 .. boost 4) and has op_S 6, op_C 7, op_A 8, op_B 9, op_F 10, dock_S/C/A/B/D 11-15, neo_* 16-19; here
+# the parts stay 0-3 and the options are the client's 6-10 (items.OPTION_TYPES; op_S was 4 until 2026-10-18 and
+# would have gone on as a part). Other kinds: OTHER_TYPE (none in the 2011 ItemClient.tdf).
+PART_TYPES = {'speed': 0, 'crash': 1, 'accel': 2, 'boost': 3, 'op_S': 6, 'op_C': 7, 'op_A': 8, 'op_B': 9, 'op_F': 10}
+USE_TYPE, DOCK_TYPE, OTHER_TYPE = 5, 11, 12
+OPTION_STAT = {6: 0, 7: 1, 8: 2, 9: 3}     # option type -> stat index (speed, crash, accel, boost; client 0x722320)
 # EU part requirements (nation rule part_grade; user, 2026-10-17): the car's V grade a part needs when ItemClient
 # column 8 is empty. Parts: their grade's first V grade (N 1, S 4, H 7) + 0 / 1 / 2 by tier: the normal parts
 # (speed / accel / crash / boost, no set) have five levels per grade (N 1 7 13 19 25, S 31 .. 55, H 60 .. 80) ->
@@ -365,7 +369,7 @@ class Tables:
         parts, use = self._part_rows, self._use_rows
         if 0 <= table_idx < len(parts):
             r = parts[table_idx]
-            return ItemInfo(table_idx, r[2], r[0], PART_TYPES.get(r[0], DOCK_TYPE if r[0].startswith('dock_') else 10),
+            return ItemInfo(table_idx, r[2], r[0], PART_TYPES.get(r[0], DOCK_TYPE if r[0].startswith('dock_') else OTHER_TYPE),
                             _num(r[12]), _num(r[13]), r[15] == 'True', 1, r[6], _num(r[7]), req_grade=_num(r[8]), name=r[4],
                             tradeable=len(r) > 17 and r[17] == 'True')
         k = table_idx - len(parts)
@@ -394,6 +398,11 @@ class Tables:
         if not r or r[0] not in self.PART_STAT:
             return None
         return self.PART_STAT[r[0]], _num(r[9])
+
+    def option_value(self, item_id):
+        """An option part's points (ItemClient.tdf column 9; the client's item value 0x72c9c0 adds the record's)."""
+        r = self.items.get(item_id)
+        return _num(r[9]) if r and len(r) > 9 else 0
 
     def exp_bounds(self, level):
         """-> (exp at this level, exp at the next): LevelServer.tdf holds the exp for each level."""

@@ -170,6 +170,9 @@ class Item:
         if not dock and (self.assist_a or self.assist_b):   # converted options (convert.py)
             from .convert import assist_index
             assist, second = assist_index(self.assist_a), assist_index(self.assist_b)
+        elif self.item_id.startswith('op_'):        # an option part's own assist (convert.option_assist)
+            from .convert import assist_index, option_assist
+            assist = assist_index(option_assist(self))
         assists_ = struct.pack('<II', assist, second) + bytes(32)
         box = 0 if dock else self.box             # a docking item's BOX column holds its white points
         tail = struct.pack('<IIiiIIII4x', box, 0, self.upgrade, bonus_points, expire, self.belonging, self.table_idx,

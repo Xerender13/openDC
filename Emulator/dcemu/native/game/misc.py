@@ -10,10 +10,12 @@
 0x387 CBattleInstance (act, ..) -> 0x388 (act, u32 0 battles; 2011 10 bytes).
 0xf4 PartyLeave: social.py.
 0x82 GameStream (u16 byte length, chat text; PacketParser::Cmd_GameStream): GM commands of accounts
-    with PType 'A' or in the admin list, answered with 0x0001 "cmd(arg1,arg2,arg3)=[1 or 0]" (recorded
-    "gmlevel(Xerender,50,0)=[1]"): gmlevel [name] level, gmexp [name] exp, gmmoney [name] Mito,
-    gmitem [name] item id [count]. The character changed gets 0x169 CharUpdate (XiStrCharInfo) and its
-    stats. Without a name the command is for the sender. (2008 also had gmcar, gmmove, gmeventitem.)
+    with PType 'A' or in the admin list: gmlevel [name] level, gmexp [name] exp, gmmoney [name] Mito,
+    gmitem [name] item id [count] [+level] [A|B|C [tier]] (a part enhanced to +level, up to +20, and converted
+    with that type's PartModify_Client.tdf row, 1-34, no tier = 34; a docking item: [+purple] [white] points:
+    gm_part_args). The 2008 server answered them
+    with 0x0001 "cmd(arg1,arg2,arg3)=[1 or 0]"; here 0x0001 carries a line of text saying what was done or why
+    not (user, 2026-10-18). The character changed gets 0x169 CharUpdate (XiStrCharInfo) and its stats. Without a name the command is for the sender. (2008 also had gmcar, gmmove, gmeventitem.)
     Kick / block / ban (native/admin.py; the 2008 server had them on its GM console only): gmkick name
     [days], gmblock name days, gmunblock name, gmchatblock name minutes, gmban account-or-name, gmunban
     account-or-name, gmwho; answered with a line of text. gmgate N (0-7) makes every gate of every
@@ -273,50 +275,162 @@ async def game_stream(session, frame):
         ok, reply = await admin.command(cmd[2:], args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
-    ok = await gm(session, cmd, args)
-    session.log.note(f'GM {text!r}: {ok}')
-    shown = (args * 2 if len(args) == 1 else args) + ['0'] * 3
-    msg = f'{cmd}({",".join(shown[:3])})=[{int(ok)}]'.encode('utf-16-le') + b'\0\0'
-    send(session, Frame(0x0001, struct.pack('<H', len(msg)) + msg))
+    ok, reply = await gm(session, cmd, args)
+    session.log.note(f'GM {text!r}: {reply}')
+    admin.message(session, reply)
+
+
+GM_PART_MAX_LEVEL = 20          # ItemUpgradeClient.tdf has 20 steps (players enhance up to upgrade.MAX_LEVEL 15)
+GM_DOCK_MAX_PURPLE = 25         # the client's largest "Docking Bonus" (docking.purple_assist)
+GM_DOCK_MAX_WHITE = 99
+
+
+def gm_part_args(info, extra):
+    """gmitem's part words after the count: [+LEVEL] [A|B|C TIER] (convert type and PartModify_Client.tdf row
+    1-34, as convert.py: A speed, B acceleration, C booster time + durability); for a docking item [+PURPLE]
+    [WHITE] (purple 0-25 = its docking_b assist, white = its base points, docking.py) -> () none given,
+    (level, assist A, assist B, belonging, white), or None when they are wrong or the item is neither."""
+    if not extra:
+        return ()
+    from .combo import PART_KINDS
+    from .convert import UNTRADEABLE_ROWS, rows
+    from .docking import PART_OF_DOCK, purple_assist
+    if info.kind in PART_OF_DOCK:
+        purple, white = 0, 0
+        if extra[0].startswith('+'):
+            if not extra[0][1:].isdigit() or not 0 <= int(extra[0][1:]) <= GM_DOCK_MAX_PURPLE:
+                return None
+            purple, extra = int(extra[0][1:]), extra[1:]
+        if extra:
+            if len(extra) > 1 or not extra[0].isdigit() or int(extra[0]) > GM_DOCK_MAX_WHITE:
+                return None
+            white = int(extra[0])
+        return 0, purple_assist(purple), '', 0, white
+    if info.kind not in PART_KINDS and not info.kind.startswith('op_'):
+        return None
+    level, a, b, belonging = 0, '', '', 0
+    if extra[0].startswith('+'):
+        if not extra[0][1:].isdigit() or not 0 <= int(extra[0][1:]) <= GM_PART_MAX_LEVEL:
+            return None
+        level, extra = int(extra[0][1:]), extra[1:]
+    if extra:
+        pair = {'a': 0, 'b': 1, 'c': 2}.get(extra[0].lower())
+        tier = int(extra[1]) if len(extra) > 1 and extra[1].isdigit() else len(rows())     # no tier: the best row
+        if pair is None or not 1 <= tier <= len(rows()) or len(extra) > 2:
+            return None
+        a, b = rows()[tier - 1][pair * 2], rows()[tier - 1][pair * 2 + 1]
+        belonging = 1 if tier - 1 < UNTRADEABLE_ROWS else 0
+    return level, a, b, belonging, 0
+
+
+async def gm_part(p, info, level, a, b, belonging, white):
+    """A new part with an enhancement level and converted options, or a docking item with its purple and white
+    points (gmitem) -> (item, NEW)."""
+    from .convert import ASSIST_SQL
+    from .docking import POINTS_SQL
+    from .items import NEW, new_item
+    from .upgrade import UPGRADE_SQL
+    db = context.db
+    it = await new_item(p, info, 1)
+    if info.item_id.startswith('dock_'):
+        it.box, it.assist_a = white, a
+        await db.execute(POINTS_SQL, (it.random, white, a, db.server_id, p.char.cid, it.inven_idx))
+        return it, NEW
+    it.upgrade, it.assist_a, it.assist_b, it.belonging = level, a, b, max(it.belonging, belonging)
+    await db.execute(UPGRADE_SQL, (level, db.server_id, p.char.cid, it.inven_idx))
+    await db.execute(ASSIST_SQL, (a, b, it.belonging, db.server_id, p.char.cid, it.inven_idx))
+    return it, NEW
+
+
+GM_USAGE = {'gmitem': 'gmitem [name] item-id [count] [+level] [A|B|C [tier]] (docking: [+purple] [white])', 'gmlevel': 'gmlevel [name] level (1-200)',
+            'gmexp': 'gmexp [name] exp', 'gmmoney': 'gmmoney [name] Mito (below 0 takes it)'}
+
+
+def part_text(info, part):
+    """What gm_part_args asked for, for the reply: "+20, converted tier 34 (Speed Up 6 + Speed Up 6)", or a
+    docking item's "purple 25, white 35"."""
+    from .convert import assist_name, tier_of
+    from .records import Item
+    level, a, b, _, white = part
+    if info.item_id.startswith('dock_'):
+        from .docking import purple_points
+        d = Item(0, 0, info.item_id, 0, 1, 0, 0, 0, 0, a, '', white, 0)
+        return f'purple {purple_points(d)}, white {white}'
+    out = [f'+{level}'] if level else []
+    if a:
+        it = Item(0, 0, info.item_id, 0, 1, 0, 0, level, 0, a, b, 0, 0)
+        names = ' + '.join(assist_name(x) for x in (a, b))
+        out.append(f'converted tier {tier_of(it) + 1} ({names})')
+    return ', '.join(out)
+
+
+def like_items(word):
+    """'; like: i_s_000015 Enigma, ...': items whose id or shown name has the word."""
+    t, word = context.data, word.lower()
+    infos = (t.item_info(i) for i in t.item_index.values())
+    close = [f'{i.item_id} {i.name}'.strip() for i in infos if i and (word in i.item_id.lower() or word in i.name.lower())]
+    return f'; like: {", ".join(close[:5])}' if close else ''
 
 
 async def gm(session, cmd, args):
-    from .combo import take
+    """The 2008 GM commands gmitem / gmlevel / gmexp / gmmoney -> (done, the reply shown to the GM)."""
+    from .combo import PART_KINDS, take
     from .items import add_money, mod_list
+    if cmd not in GM_USAGE:
+        return False, (f'unknown GM command {cmd!r}: gmitem, gmlevel, gmexp, gmmoney, gmdrift, gmsets, gmgate, '
+                       f'gmpartytest, gmvchasetest, gmuctest, gm' + ', gm'.join(ADMIN_COMMANDS))
     target = session
     if args and not args[0].lstrip('-').isdigit() and args[0] not in context.data.item_index:
         target = online(args[0])
+        if not target:
+            return False, f'no character {args[0]} online and no item {args[0]!r}' + like_items(args[0])
         args = args[1:]
     if not target or not args:
-        return False
+        return False, f'usage: {GM_USAGE[cmd]}'
     p, t, db = target.state['player'], context.data, context.db
     c = p.char
     if cmd == 'gmitem':
         info = t.item_info(t.item_index.get(args[0], -1))
-        count = int(args[1]) if len(args) > 1 and args[1].isdigit() else 1
-        if not info or count < 1:
-            return False
-        send(target, mod_list(*[await take(p, info) for _ in range(min(count, 99))]))
-        return True
+        if not info:
+            return False, f'no item {args[0]!r}' + like_items(args[0])
+        has_count = len(args) > 1 and args[1].isdigit()
+        count = min(int(args[1]) if has_count else 1, 99)
+        if count < 1:
+            return False, f'usage: {GM_USAGE[cmd]}'
+        part = gm_part_args(info, args[1 + has_count:])
+        if part is None:
+            return False, (f'{info.item_id} is not a part: only the count can be given' if args[1 + has_count:]
+                           and info.kind not in PART_KINDS and not info.kind.startswith(('op_', 'dock_'))
+                           else f'usage: {GM_USAGE[cmd]} (level up to +{GM_PART_MAX_LEVEL}, tier 1-34; purple up '
+                                f'to {GM_DOCK_MAX_PURPLE}, white up to {GM_DOCK_MAX_WHITE})')
+        if part:
+            send(target, mod_list(*[await gm_part(p, info, *part) for _ in range(count)]))
+        else:
+            send(target, mod_list(*[await take(p, info) for _ in range(count)]))
+        what = f' {part_text(info, part)}' if part else ''
+        return True, f'{c.name} got {count} x {info.name or info.item_id} ({info.item_id}){what}'
     try:
         value = int(args[0])
     except ValueError:
-        return False
+        return False, f'usage: {GM_USAGE[cmd]}'
     if cmd == 'gmlevel':
         if not 1 <= value <= 200:
-            return False
+            return False, f'usage: {GM_USAGE[cmd]}'
         c.level = value
         c.exp_base, c.exp_next = t.exp_bounds(value)
         c.exp = c.exp_base
         await db.execute(CHAR_EXP_SQL, (c.level, c.exp, db.server_id, c.cid))
+        reply = f'{c.name} is now level {c.level}'
     elif cmd == 'gmexp':
         if value < 0:
-            return False
+            return False, f'usage: {GM_USAGE[cmd]} (0 or more)'
+        before = c.level
         await add_exp(c, value)
-    elif cmd == 'gmmoney':
-        if not await add_money(c, value):
-            return False
+        reply = f'{c.name} got {value} exp' + (f', level {before} -> {c.level}' if c.level != before else
+                                                f' (level {c.level})')
     else:
-        return False
+        if not await add_money(c, value):
+            return False, f'{c.name} has {c.mito} Mito: cannot take {-value}'
+        reply = f'{c.name} {"got" if value >= 0 else "lost"} {abs(value)} Mito (now {c.mito})'
     char_update(target)
-    return True
+    return True, reply

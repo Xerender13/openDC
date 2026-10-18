@@ -9,6 +9,8 @@ usage (from Emulator/): python3 -m tools.gmctl [-c emulator.ini] COMMAND ...
     chatblock NAME minutes       0 lifts it
     ban ACCOUNT-or-NAME          block the account (login: "blocked") and kick it
     unban ACCOUNT-or-NAME
+    item NAME ITEM-ID [count] [+LEVEL] [A|B|C [TIER]]   as gmitem: a part at +LEVEL (up to 20), converted
+                                 with type A / B / C row TIER (1-34, none = 34)
     realmatch open|close|in MINUTES|auto|status   Real Match opening, over emulator.ini (in: opening notices, then open)
 """
 import socket

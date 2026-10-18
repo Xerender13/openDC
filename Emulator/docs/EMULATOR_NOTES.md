@@ -8,6 +8,128 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 20 hand-off (2026-10-18 ~18:40)
+
+**In short:** DriftBooster bought from the drift shop acts at once; converts match the 2011 client's table;
+`gmitem` gives enhanced / converted parts and docking items, and the 2008 GM commands answer with real text; option
+parts fixed (type numbers, stats, own assists; still off); EU assist texts in km/h (client pack rewritten); EU
+physics difference found (NEWVEHICLESTAT); Undercity start phase for tests, new Undercity rewards (set part by class
++ 1-3 Mittron Enhancers), **confirmed in game**. State and the open list: `docs/HANDOVER.md` §5 (item 0).
+
+**Rules / choices the user made this session:** EU assist texts in km/h (client change approved); Undercity rewards
+= a random part of the city's Alpha / Beta set + Mittron Enhancers. Our choices, to confirm: Beta from class A,
+enhancers 1 / 1 / 2 / 3 / 3 for D-S (`emulator.ini [undercity]`), "rank" read as the class.
+
+**Reading the running client:** with `ptrace_scope` 0 (the user set it) `/proc/<pid>/mem` of DriftCityUS.exe can be
+read; App = [0x948844], UI = [App+0x158], the Undercity manager App+0x164 (see the UC icons entry below). The watcher
+script (`ucwatch.py`) lives in the session scratchpad only.
+
+## Session 20 (2026-10-18): DriftBooster bought from the shop, converts checked, gmitem parts, GM replies
+
+- **PassiveAssist(DriftBooster) did nothing when bought** (user: "not working when bought from the drift shop";
+  log 20261018-163134 16:34:37: bought for 90 days, on car 1). Cause: vshop.grant put it on the car, but the 0x4b2
+  that adds it was built before Player.apply_paints set VisualItem.on_current_car, so records.assist_slots sent no
+  assist (the frame's 48-byte tail was all 0) and nothing sent it again until the next login. grant now calls
+  apply_paints first (buying and taking a gift). Script-tested (stub: assist slot 0 = 146, a_00118). **Not yet
+  confirmed in game.**
+- **Converts against the 2011 client** (user: check that the part converts match the client's): the server reads
+  `server_data/tables/PartModify_Client.tdf`, which is byte-identical to Client US Data_US/World/Data's (Client EU's
+  copy differs in one trailer byte; all 34 rows are the same). The client loads it in XiItemTable::LoadFile
+  (0x725cc7, 0x725d42 loop): per row 3 pairs of assist ids, stored as 0x7c-byte rows at item table +0x4c (+0 a
+  number from 34 down to 1, pairs @4 / @0x2c / @0x54), so the client also has the A / B / C pairs. The columns'
+  assist kinds match convert.py: A (cols 0-1) speed (bonusspeed / speedup), B (2-3) bonusaccel, C (4-5) overturbo
+  + bonuscrash; row 34 is the best (A Speed Up 6 x 2; B +40 / +30 accel; C 1.2 s booster + 150 durability).
+  Assist indices come from the same Assist_Client.tdf (identical to the client's). The 0x1ab handler (0x515420)
+  shows only the two assist names. Not found: where the client reads the +0x4c rows back (no tier list shown in
+  the convert tab was found); the odds remain the 2008 server's (the client has none).
+- **gmitem gives enhanced and converted parts** (user): `gmitem [name] item [count] [+level] [A|B|C [tier]]`,
+  level up to +20 (ItemUpgradeClient.tdf's 20 steps; players still enhance to MAX_LEVEL 15), tier 1-34 (no tier =
+  34); also `gmctl item NAME ...` (misc.gm_part_args / gm_part). Script-tested (stub: +20 Enigma record @0x40 = 20,
+  @0x44 = 58 bonus, slots 196 / 196).
+- **GM command replies** (user: the 2008 commands only echoed "cmd(args)=[1]"): gmitem / gmlevel / gmexp / gmmoney
+  now answer with a line saying what was done or why not (no such item, with close ids / names; not online;
+  usage; not enough Mito; unknown command with the list). Script-tested with stubs; **not yet seen in game.**
+- **gmitem for docking items** (user: give the best docking parts): `gmitem [name] dock_X_Hnnn [count] [+purple]
+  [white]` (purple 0-25 = the docking_b assist, white = BOX, as docking.combine stores them; a lone number after
+  the id is the count). Script-tested (stub: record @0x10 = 117, @0x44 = 35). Given to Xerender: 2 x
+  dock_S / A / B / C_H012 (Hyper letter L, the best a seed can make here; the client also has M-O, H013-H015)
+  with purple 25 and white 35 (the white_hyper top for 3 x base-45 H parts).
+- **Option parts checked** (user: "check if the emulator has all of the game's option parts working in general",
+  not to switch them on; `emulator.ini [items] option_parts` stays 0). 316 options: op_S 93, op_C 84, op_A 54,
+  op_B 67, op_F 18; points in ItemClient column 9 (Speed Plus A 3) and/or an assist in column 20 (Engine Speeder A
+  a_00031 Speed Up 1, Lucky A a_00026 Chance 1, ...). Fixed (script-tested with stubs, **not yet in game**):
+  - type numbers: the client's ItemTypeStrToVar (0x7012d0) is speed 1, crash 2, accel 3, boost 4, op_S 6, op_C 7,
+    op_A 8, op_B 9, op_F 10, dock_S/C/A/B/D 11-15. data.PART_TYPES had op_S 4 (in the emulator's part range 0-3 +
+    4, outside items.OPTION_TYPES 6-10): a speed option would have gone on as a part. Now op_S..op_F = 6..10;
+    unknown kinds 12 (was 10, an option type).
+  - stats: the client's stat sum (0x722320) counts types 6 / 7 / 8 / 9 as speed / crash / accel / boost with the
+    item value (0x72c9c0: table value + record @0x44 + random); Player.stats counted parts only. Now options on
+    the car add column 9 + random and their stat assists (data.OPTION_STAT, Tables.option_value).
+  - assists: the client takes an equipped item's assists only from the record's ten slots (0x72c8a0 builds them,
+    0x729330 / 0x722320 apply them), never from column 20; the record had none. convert.option_assist sends the
+    option's own assist in slot 0 until it is converted (2008: ItemServer.tdf column 21, the same ids).
+  - Not done (no server code for these assist kinds at all, for any item): chance (parts drop %), exp, saving
+    (fuel economy), gage (max fuel), partyspeedup / partycrashup, bonusdamage / criticalcrash (HUV damage);
+    the client-side ones (speedup, overturbo, qstart, stop, crashsaving, bonusreal) should work from the slot.
+    Equip rules (a part in the slot, ItemGrade::CheckGrade, one option per slot), unequip with the part, and the
+    Change Solution N / S / H converts were already there.
+- **EU speed converts** (user: are they in km/h?): the EU client reads Data_EU_eng/World.agt first, whose
+  Assist_Client.tdf is byte-identical to the US one (the Korean table in Client EU Patch.010 is only the fallback;
+  it has 3 more rows, a_00264-266 booster charge, from row 72 on, which would have shifted every assist index:
+  not used). The values are km/h in both (column 6 unit "km/h": Speed Up 6 = 6 km/h); the English texts say mph
+  ("Increase speed by 3.6 mph"): 454 rows (speedup 29, partyspeedup 5, booster_max_speed 11, BA_BM / BA_MS /
+  BA_NS / CH_BM 409). User: rewrite them. New `eu_client.py assists` (part of setup): Data_EU_<lang>/World.agt's
+  Assist_Client.tdf column 4 with the row's own value in km/h ("Increase speed by 6 km/h", "Max Battle Speed +0.1
+  km/h"; 451 rows; a_11111-11113 "Test Option Speed Up", value 0, left), header bytes 20-31 kept, the original is
+  client_backup/World_Data_EU_eng.agt.orig (from `grades`). Applied to Client EU; a second run changes nothing.
+  **Restart the EU client; not yet seen in game.**
+- **Undercity start phase** (user: a testing option to choose the phase to start at): `gmuctest on N` (or
+  `gmuctest phase N`, emulator.ini [undercity] test_phase = N), N = 1 Mission 1 .. 4 BossHUV. The client drives
+  its stages (0x7677b0) and moves on when the server reports a mission done, so: 2 answers 0xbb8 with 0xbb9 and
+  0xbbe result 1 at once (0x517bc0 -> 0x7651a0 -> state 7); 3 also answers stage (1, 7) with 0xbc8 result 1
+  instead of 0xfb 7 (which starts Mission 2, client state 8; 0x5181f0 -> 0x766c90 -> state 0xb -> HuvReq); 4 also
+  cuts the HuvReq list to its BossHUVs, out at once. Skipped missions give nothing. Script-tested (stub session:
+  phase 4 -> 0xbb9 + 0xbbe, 0xbc3, 0xbc8 for stage 7, HUV list stage 5 only, boss out on the first tick; phase 1
+  unchanged). **Not yet tried in game.**
+- **Drift booster physics in EU** (user): the exes differ in 27 bytes only, all our own patches (eu_client.py:
+  0x4e4106 the nation, 0x4e1211 the US exe's protection class, 0x570013 the F2 panel table), so the code is the
+  same (it still branches on the nation in ~460 places, 0x4e9360; none traced to the booster); vehicles_eueng.agt = vehicles_us.agt, a_00118 the same in both tables. The
+  difference is GlobalContent **NEWVEHICLESTAT** (Value_US 1, Value_EU_eng 0): the client then loads
+  Vehicle/oldLevelModifier.dat instead of Vehicle/LevelModifier.dat (0x484840), reads 0x3e9 instead of 0x641
+  rows per stat curve (0x47d7d0, the dynamic data file layout 0x483eb0) and caps at 999 instead of 2500 / 1200
+  / 1600 (0x48xxxx init): the EU client turns stats into speed / acceleration / boost with the old curves. EU
+  design: not changed. Whether the drift booster's own strength reads these curves: not traced.
+- **The Undercity works** (user, 2026-10-18: "Undecity works correctly"; played alone with the test mode).
+- **Undercity rewards** (user: "the undercity rewards should be alpha or beta ready part instead of ore (random part
+  out of 4 from the set) depending on the performance grade and 3 mittron enhancers"): a cleared run now gives each
+  member one random part (_001-_004: B / C / S / A) of the set the city's ore makes (UseItemClient text "Combine 3 of
+  these ores to get <name>'s Set Parts": Moon Palace Kayla si_s01 / Yuki si_s02, Koinonia Hyeyoung si_a01 / Erina
+  si_a02, Cras Duffy si_c01 / Mr. H si_c02, Oros Yahn si_b01 / Branton si_b02), Beta (H) from class
+  [undercity] beta_class = 4 (A; S too), else Alpha (S) (*the threshold is our choice*), and enhancers = 3 x
+  enhancer = i_n_00003 Mittron Enhancer (*which enhancer: our choice*), instead of the ore and RANK_ITEMS' one
+  enhancer. Result window: the part @0x4e+4, the enhancer @0x4e+8. Failed runs unchanged (an Alpha ore by level
+  chance). Script-tested (stub: 5 runs, cities 1-4, classes 1-5). **Confirmed in game** (user, 2026-10-18 18:27, a
+  phase-4 run: Kayla's Alpha C + 3 Mittron Enhancers, icons shown: "All good now, it works properly").
+  Then (user: "make the mittron enhancers being from 1-3 depending on rank"): 1-3 by the class, [undercity]
+  enhancers = 1, 1, 2, 3, 3 for D, C, B, A, S (*read "rank" as the class, as the Alpha / Beta rule; a solo run is
+  always place 1*). Script-tested; **not yet confirmed in game.**
+- **UC result window icons** (user: "the UC result menu didn't properly show the icons of the items recieved"; log
+  20261018-171425 18:12:49, a solo run started at phase 4: items sent (-1, 969 gi ore, -1)). Open; checked so far:
+  0x100 (0x531870 -> 0x7688d0) keeps only the packet pointer (manager +0x90) and draws 6 s later (state 0xe -> 0xf
+  -> 0x764b50); the three i32 @unit+0x4e go through 0x7172f0 (the same TableIdx lookup as 0x2e5 / 0x5ad, whose
+  icons work) to 0x6b1f30 (window +0x384 + row x 0xc), drawn by 0x6b1980 -> 0x5c2ed0 (a table row); 0x6b1ee0's two
+  bytes @0x5a / @0x5b only show two per-row pictures (window +0x17c / +0x18c). The frames after the 0x100 were
+  8-12 bytes (they cannot reach the items @0x60 of the reused buffer). The decomp's port of 0x531870 matches.
+  Read from the running client (ptrace_scope 0 set by the user; /proc/<pid>/mem: App [0x948844], manager App+0x164
+  (state +0xc, packet +0x90), window [App+0x158]+0x384, item slots window +0x384 + row x 0xc, rows: type @0, ASCII
+  name @0xe4, TableIdx @0x2fc): with the new rewards row 0 held Kayla's Alpha C (101) and the Mittron Enhancer
+  (1001), and the user saw the icons. The earlier run's only item was a Mittron Ore (969), found as well (the
+  window still held it at the next run's state 0xe): its icon did not show, so the ores' icon is what is missing
+  *(not checked further: the ores are no longer a reward)*. Solved by the reward change; script
+  ucwatch.py (session scratchpad) does the reading.
+- For the Undercity tests: Xerender gets 2 x each of Enigma / Goldwing / Mittren / Plasma (i_?_000015) at +20 with
+  convert row 34 (speed A, accel B, crash and boost C), given with gmctl item after the restart.
+
 ## Session 19 hand-off (2026-10-18 ~13:30)
 
 **In short:** (1) the decompilation (`../DriftCityEU-decomp`, private, the user's) now has every S>C handler; running

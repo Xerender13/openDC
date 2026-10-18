@@ -100,7 +100,7 @@ that change client files are in git, so those changes can be made again on anoth
 
 ## 5. State at the handover
 
-Updated 2026-10-18 ~13:30 (end of session 19; committed and pushed, 3293ef0 + this note). Details: the "Session 19
+Updated 2026-10-18 ~18:40 (session 20; session 19 ended ~13:30, committed and pushed, 3293ef0 + this note). Details: the "Session 19
 hand-off" at the top of `docs/EMULATOR_NOTES.md`, then "Session 19b" (Undercity), "Session 19" (size check), "Session 18".
 
 **Running state:** emulator and DB running (`./launch.sh restart-emu` after code changes), emulator.ini
@@ -152,6 +152,17 @@ now, user).
 xlt from 2009-12; other car stats and prices: **the user wants the US stats and costs kept**) and an older EU
 ItemClient.tdf (column 8 = 0 everywhere, same levels): no real EU grade data exists, the rule above is the user's.
 
+**Session 20 (2026-10-18; details: "Session 20" at the top of EMULATOR_NOTES.md):**
+- Confirmed in game: the Undercity (solo test mode), the new Undercity rewards (a random Alpha / Beta set part of
+  the city by class + Mittron Enhancers) with their result icons.
+- Not yet confirmed: DriftBooster bought from the drift shop acts at once (vshop.grant), gmitem parts / docking
+  items (`gmitem [name] item [count] [+level] [A|B|C [tier]]`, docking `[+purple] [white]`) and the GM replies,
+  option part fixes (types 6-10, stats, own assists; [items] option_parts still 0), the Undercity start phase
+  (`gmuctest on 1-4`), 1-3 enhancers by class, the EU assist texts in km/h (`eu_client.py assists`, applied).
+- Found, not changed: the EU client uses the old vehicle stat curves (GlobalContent NEWVEHICLESTAT 0 ->
+  Vehicle/oldLevelModifier.dat); option assist effects the server would have to apply (drop chance, exp, fuel,
+  party bonuses, HUV damage) are not done for any item.
+
 **Done in session 19, not yet confirmed in game:**
 - **The Undercity** (`dcemu/native/game/undercity.py`, new): the 2008 server's rules in the 2011 layouts (entry at
   Tatiana or `/ucm` `/uck` `/ucc` `/uco`, the four missions, HUV waves + BossHUV, rating, rewards); areas 100-103 one
@@ -177,8 +188,11 @@ ItemClient.tdf (column 8 = 0 everywhere, same levels): no real EU grade data exi
   when one runs (Proton's steam.exe hung). Both: the user started both clients afterwards.
 
 **Open (next session):**
-0. The Undercity (session 19b, `game/undercity.py`): play it in game, alone with `gmuctest on` (or `[undercity] test =
-   1`) and `/ucm` in a Moon Palace channel, then with a real party at Tatiana. Not confirmed in game at all yet.
+0. Session 20 leftovers: confirm in game the DriftBooster bought from the shop, `gmitem` parts / docking items and
+   the GM replies, the EU km/h assist texts (restart the EU client), 1-3 enhancers by class; the Undercity with a
+   real party at Tatiana (only solo test runs so far, `gmuctest on [1-4]`). Option parts: the server-side assist
+   effects (chance / exp / saving / gage / party* / bonusdamage) before `[items] option_parts` is turned on (user's
+   call). Decide whether the EU client keeps the old vehicle stat curves (NEWVEHICLESTAT, GlobalContent).
 1. Confirm the session 18 items above in game (the drift shop rows need a client restart).
 2. Virtual HUV: a real 4:4 / 8:8 needs 8 / 16 players (only the 2-player test was played); a party registering
    together (0x11c / 0x11d) is untested; rewards are our amounts (`[vchase] win_rate / lose_rate`); guessed fields

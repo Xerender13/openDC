@@ -267,6 +267,9 @@ async def grant(p, vis, table_idx, car, text, days):
         await db.execute(INSERT_SQL, (db.server_id, c.cid, c.name, gid, vis.item_id, inven, v.car_id, v.state, text,
                                       days, v.ctime, 0))
         await save_state(p, *[o for o in changed if o is not v])
+    # before the 0x4b2 is built: an equippable PassiveAssist (DriftBooster) put on the current car sends its assist
+    # slot only with on_current_car set (records.assist_slots); it went out empty at purchase until the next login
+    p.apply_paints()
     return v, held, changed, gone
 
 
