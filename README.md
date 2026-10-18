@@ -59,12 +59,12 @@ The emulator recognises each client's nation and applies the EU rules only to EU
 
 **Game features that haven't been done yet:**
 - Channels and Channel Battle
-- Undercity
 - GT Tournament
 - Seasonal Events
 - Some of the items that are not activated in the current version
 
 **Features that still require testing and might work with issues:**
 - Crew management
+- Undercity
 
 If you find a bug, something not working not listed above or something working wrongly (not like it was on official servers), creating an issue describing the issue will help the project to improve.
