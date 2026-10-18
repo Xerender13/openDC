@@ -53,7 +53,7 @@ To let other players join, put your address in their `DriftCityLauncher.ini` and
 The emulator recognises each client's nation and applies the EU rules only to EU clients (`emulator.ini` `[nation]`;
 `allow = eu` or `us` makes a server for one version only).
 
-## Current emulator progress (17.10.2026):
+## Current emulator progress (18.10.2026):
 
 **Game features that haven't been done yet:**
 - GT Tournament
