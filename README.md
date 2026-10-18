@@ -21,8 +21,6 @@ the rest itself.
 |---|---|
 | `Emulator/` | the server: `launch.sh` (Linux) / `launch.bat` (Windows), `docker-compose.yml`, the code in `dcemu/`. Start with [`Emulator/README.md`](Emulator/README.md); the detailed research notes are [`Emulator/docs/EMULATOR_NOTES.md`](Emulator/docs/EMULATOR_NOTES.md) |
 | `Launcher/` | source of `DriftCityLauncher` (Go): starts the client against your server; `build.sh` builds the Linux and Windows launchers into each client folder |
-| `Client US/` | **not in this repository**: the 2011 US client (with `DriftCityLauncher`) is shared separately. Put it here, next to `Emulator/` |
-| `Client EU/` | **not in this repository**, optional: the EU client (below) |
 
 ## Quick start
 
