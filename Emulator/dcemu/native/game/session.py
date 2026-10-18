@@ -204,7 +204,7 @@ async def drive_info(session, frame):
     car = next((c for c in p.char.cars if c.car_id == car_id), None)
     if not car:
         return
-    car.mitron, car.km = max(0.0, min(fuel, car.capacity or fuel)), distance
+    car.mitron, car.km = max(0.0, min(fuel, car.max_mitron() or fuel)), distance      # gage assists (assists.py)
     db = context.db
     await db.execute(CAR_SAVE_SQL, (car.mitron, car.km, max(step_fuel, 0.0), db.server_id, p.char.cid, car_id))
 
@@ -249,13 +249,13 @@ async def fuel_charge(session, frame):
         if not holds(p, AUTO_FILL_UP):
             return
         factor = min(factor, AUTO_FILL_UP_FACTOR)
-        fuel = max(0.0, (car.capacity or 0) - car.mitron)
+        fuel = max(0.0, car.max_mitron() - car.mitron)
         pay = math.ceil(fuel * price * factor)
         if pay > c.mito:                    # not enough Mito: what it pays for
             pay = max(c.mito, 0)
             fuel = pay / (price * factor)
     paid, added = 0, 0.0
-    if pay > 0 and fuel <= pay / (price * factor) + 0.1 and car.mitron + fuel <= (car.capacity or 0) + 1.0:
+    if pay > 0 and fuel <= pay / (price * factor) + 0.1 and car.mitron + fuel <= car.max_mitron() + 1.0:
         if pay > c.mito:
             return error(session, '20121')
         db = context.db
@@ -267,7 +267,7 @@ async def fuel_charge(session, frame):
             paid, added = pay, fuel
         c.mito = gold
     send(session, Frame(0x2d4, struct.pack('<Iqfqfffffi', car_id, paid, added, c.mito, car.mitron, price,
-                                           price * factor, car.capacity, car.efficiency, sale_flag)
+                                           price * factor, car.max_mitron(), car.mileage(), sale_flag)
                   + struct.pack('<I', int(auto))))
     if auto:
         session.log.note(f'auto fill-up car {car_id}: {added:.1f} Mitron for {paid} Mito')

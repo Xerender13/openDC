@@ -191,8 +191,8 @@ ItemClient.tdf (column 8 = 0 everywhere, same levels): no real EU grade data exi
 0. Session 20 leftovers: confirm in game the DriftBooster bought from the shop, `gmitem` parts / docking items and
    the GM replies, the EU km/h assist texts (restart the EU client), 1-3 enhancers by class; the Undercity with a
    real party at Tatiana (only solo test runs so far, `gmuctest on [1-4]`). Option parts: the server-side assist
-   effects (chance / exp / saving / gage / party* / bonusdamage) before `[items] option_parts` is turned on (user's
-   call). Decide whether the EU client keeps the old vehicle stat curves (NEWVEHICLESTAT, GlobalContent).
+   effects are done (session 21, `game/assists.py`: drops, exp, fuel capacity / mileage, party bonus 0x2f9);
+   confirm them in game, then `[items] option_parts` (user's call). Decide whether the EU client keeps the old vehicle stat curves (NEWVEHICLESTAT, GlobalContent).
 1. Confirm the session 18 items above in game (the drift shop rows need a client restart).
 2. Virtual HUV: a real 4:4 / 8:8 needs 8 / 16 players (only the 2-player test was played); a party registering
    together (0x11c / 0x11d) is untested; rewards are our amounts (`[vchase] win_rate / lose_rate`); guessed fields

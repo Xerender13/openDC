@@ -470,9 +470,11 @@ def fee_discount(p, kind):
 
 
 def drop_bonus(p):
-    """% more parts drop chance."""
+    """% more parts drop chance: the mounted licenses and the chance assists on the car (assists.py: Lucky options,
+    drift items' Bonus Assist "Parts drop chance increases by 5%", ...)."""
+    from .assists import totals
     e = effects(p)
-    return e.get('ME_PartDropRate', 0) + e.get('ME_MittronGuardian', 0)
+    return e.get('ME_PartDropRate', 0) + e.get('ME_MittronGuardian', 0) + totals(p)['chance']
 
 
 @on(SVC, C2S, 0x29a)

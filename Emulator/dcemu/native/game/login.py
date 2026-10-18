@@ -141,7 +141,25 @@ def game_setting(**overrides):
 
 
 def stat_frames(p):
-    return Frame(0x2f8, p.stats().encode() + enchant_bonus()), Frame(0x2f9, enchant_bonus())
+    """0x2f8 StatUpdate + 0x2f9 PartyEnChantUpdate (the other members' party assists), after a change of the car's
+    items; the other members get their 0x2f9 again, and the player a 0x425 when the car's gage / saving assists
+    changed its capacity or mileage (assists.py)."""
+    session = p.session
+    if session is None:
+        return Frame(0x2f8, p.stats().encode() + enchant_bonus()), Frame(0x2f9, enchant_bonus())
+    from .assists import party_bonus, send_party
+    from .social import party_of
+    car = p.car
+    before = (car.max_mitron(), car.mileage()) if car else None
+    p.apply_paints()
+    frames = [Frame(0x2f8, p.stats().encode() + enchant_bonus()), Frame(0x2f9, party_bonus(session))]
+    if car and before != (car.max_mitron(), car.mileage()):
+        from .cars import visual_update
+        frames.append(visual_update(session, car))
+    party = party_of(session)
+    if party and len(party.members) > 1:
+        send_party([s for s in party.members if s is not session])
+    return frames
 
 
 @on(SVC, C2S, 0x7b)
@@ -166,6 +184,7 @@ async def load_char(session, frame):
         session.log.note(f'load char {name!r}: blocked from the game')
         return error(session, '20089')
     session.state['player'] = p
+    p.session = session
     session.state['chat_block'] = chat_until
     from .. import nation
     p.nation = nation.of(session)

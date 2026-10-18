@@ -102,14 +102,16 @@ def bacchus_frame(p, kind, new=True):
 
 
 def play_bonus(p, exp=0, money=0, activity=None, city=None):
-    """Exp and Mito from play with the drinks held, a Bacchus running and the mounted licenses' effects (their
-    activity: licenses.bonus) -> (exp, money)."""
+    """Exp and Mito from play with the drinks held, a Bacchus running, the mounted licenses' effects (their
+    activity: licenses.bonus) and the exp assists on the car (assists.py) -> (exp, money)."""
     bacchus = BACCHUS_BONUS if bacchus_left(p) else 0
     from .licenses import bonus as license_bonus
     lic_exp, lic_money = license_bonus(p, activity, city)
     from .mita500 import bonus_rate                 # a running Mita 500 buff: x its rate (2008 ApplyMita500BonusMito, Mito
+    from .assists import totals                     # exp assists on the car (options, converts, drift items: assists.py)
+    assist_exp = int(totals(p)['exp'])
     if exp:                                         # only; here exp too, as the client's MITO/EXP label says: user)
-        exp += exp * ((context.drink_exp if holds(p, EXP_DRINK) else 0) + bacchus + lic_exp) // 100
+        exp += exp * ((context.drink_exp if holds(p, EXP_DRINK) else 0) + bacchus + lic_exp + assist_exp) // 100
         exp = exp * bonus_rate(p) // 100
     if money:
         money += money * ((context.drink_mito if holds(p, MITO_DRINK) else 0) + bacchus + lic_money) // 100
@@ -693,7 +695,7 @@ async def use_item(session, frame):
     if info.kind == 'fuel':
         car = p.car
         if car:
-            car.mitron = min(car.capacity, car.mitron + info.value * count)
+            car.mitron = min(car.max_mitron(), car.mitron + info.value * count)      # gage assists (assists.py)
             await db.execute("UPDATE SKID_CAR_TB SET MITRON=%s WHERE SERVERID=%s AND CID=%s AND CARID=%s",
                              (car.mitron, db.server_id, c.cid, car.car_id))
     elif info.kind in ('bacchus_f', 'bacchus_d'):

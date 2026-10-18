@@ -8,6 +8,33 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 21 (2026-10-18): server-side assist effects
+
+User: "Implement the server-side option part assist effects". New `dcemu/native/game/assists.py` (docstring = the
+whole finding). The client's assist kinds (UTF-16 list at 0x93da44, 0x74 bytes each; 1 stop .. 22 driftbooster)
+and what it does with each: 0x70f970 applies the driving ones to the car (stop, qstart, criticalcrash, untouchable,
+crashsaving, overturbo, bonusreal, bonusdamage, driftbooster, battle / field kinds), 0x720650 the stat ones and
+partycrashup 8 / partyspeedup 16; saving 4, gage 5, chance 13, exp 17 it ignores. The 2008 server did those
+(ZoneServer.pdb, Ghidra zone session: XiRealMatchStat::CalcAssist 0x59f0e0 / EnChantUpdate 0x59fe00, over assist A
+/ B of each item on the car and an option's own SetAssist; XiCsCharInfo::GetMitronCapacity 0x5c2060 / Efficiency
+0x5c2030; BS_Party::EnChantUpdate 0x5d9860 + PacketSend::Send_PartyEnChantUpdate = 0x2f9, XiStrEnChantBonus Speed,
+Crash, Accel, Boost, AddSpeed, Drop, Exp, MitronCapacity, MitronEfficiency; 2011: 40 bytes). Now, for the car being
+driven (items on it: converts, option assists; drift items on it and PassiveAssist ones: their slots):
+- chance -> licenses.drop_bonus (+ % on parts drop groups: combo / traffic / chase), exp -> items.play_bonus (+ %);
+- gage -> Car.max_mitron() (capacity x (100 + gage) / 100), saving -> Car.mileage() (efficiency x (100 + saving) /
+  100; efficiency is distance per Mitron, VehicleUpgrade V1 4.0 .. V9 0.2): sent in XiStrCarInfo / 0x425 / 0x2d4
+  and kept to for fuel bought, Mitron items and 0x2d1 drive info (Player.apply_paints sets them);
+- party: 0x2f9 to each member with the *other* members' partyspeedup (field 0) / partycrashup (field 1), at every
+  stat_frames and when a member joins or leaves (social.join / leave_party). *Guess:* 2008 sent one total with the
+  player in it; the 2011 client already counts its own (0x728700 -> 0x720650), so it is left out; the 2011 field
+  order of 0x2f9 beyond the first two is not checked.
+- stat_frames(p) now also sends a 0x425 when the car's capacity / mileage changed (Player.session, set at login).
+Note: option parts are still off ([items] option_parts = 0); the same effects work now for converts and drift items
+(e.g. Exclusive Shadow Decal+ row 20008, Bonus Assist a_00244 chance 20 %, now +20 % parts drops while on the car).
+Script-tested (stub players: Lucky A + Shadow Decal+ -> +23 % drops, Experient A 1000 -> 1010 exp, Extron A 96 ->
+97.92 Mitron, Duty A 4.0 -> 4.04 mileage, 0x425 with them; party: A gets B's (1, 5), B gets A's (1, 0)). **Not yet
+confirmed in game.**
+
 ## Session 20 hand-off (2026-10-18 ~18:40)
 
 **In short:** DriftBooster bought from the drift shop acts at once; converts match the 2011 client's table;
@@ -68,9 +95,9 @@ script (`ucwatch.py`) lives in the session scratchpad only.
   - assists: the client takes an equipped item's assists only from the record's ten slots (0x72c8a0 builds them,
     0x729330 / 0x722320 apply them), never from column 20; the record had none. convert.option_assist sends the
     option's own assist in slot 0 until it is converted (2008: ItemServer.tdf column 21, the same ids).
-  - Not done (no server code for these assist kinds at all, for any item): chance (parts drop %), exp, saving
-    (fuel economy), gage (max fuel), partyspeedup / partycrashup, bonusdamage / criticalcrash (HUV damage);
-    the client-side ones (speedup, overturbo, qstart, stop, crashsaving, bonusreal) should work from the slot.
+  - Then not done, since session 21 done (assists.py): chance, exp, saving, gage, partyspeedup / partycrashup;
+    bonusdamage / criticalcrash turned out to be client-side (0x70f970), like speedup, overturbo, qstart, stop,
+    crashsaving, bonusreal.
     Equip rules (a part in the slot, ItemGrade::CheckGrade, one option per slot), unequip with the part, and the
     Change Solution N / S / H converts were already there.
 - **EU speed converts** (user: are they in km/h?): the EU client reads Data_EU_eng/World.agt first, whose

@@ -295,6 +295,8 @@ def join(leader, joiner):
     joiner.state['party'] = party.id
     joiner.log.note(f'joins party {party.id} ({len(party.members)} members)')
     party.cast(party_state(party))
+    from .assists import send_party         # the party assists (partyspeedup / partycrashup) of the others
+    send_party(party.members)
 
 
 def other_side(session, frame):
@@ -353,6 +355,8 @@ def leave_party(session, banished=False):
         parties.pop(party.id, None)
     else:
         party.cast(party_state(party))
+    from .assists import send_party         # his party assists count no more (also the one left alone)
+    send_party(party.members + [session])
 
 
 @on(SVC, C2S, 0xf4)

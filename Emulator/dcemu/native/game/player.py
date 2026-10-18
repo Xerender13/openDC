@@ -72,6 +72,7 @@ class Player:
         self.coupon_vars = coupon_vars
         self.buffs = {}             # stat index -> (points, monotonic end): timed point-up items
         self.nation = 1             # the client's nation (native/nation.py), set at the game login
+        self.session = None         # its game session (login.load_char): 0x2f9 / 0x425 from stat_frames (assists.py)
 
     @property
     def tick(self):
@@ -89,6 +90,12 @@ class Player:
         visuals = context.data.visuals
         for v in self.vsitems:                  # equippable PassiveAssist items act only on the car being driven
             v.on_current_car = v.state == 1 and v.car_id == self.char.cur_car
+        from .assists import totals             # gage / saving assists: the car being driven's capacity and mileage
+        got = totals(self) if self.car else {}
+        for car in self.char.cars:
+            on = car is self.car
+            car.fuel_bonus = got.get('gage', 0.0) if on else 0.0
+            car.mileage_bonus = got.get('saving', 0.0) if on else 0.0
         for car in self.char.cars:
             car.paint = car.tint = car.boost_grade = 0
         from .items import active

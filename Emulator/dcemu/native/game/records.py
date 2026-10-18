@@ -40,6 +40,16 @@ class Car:
     tint: int = 0            # 0x82RRGGBB while a window tint is on the car, else 0 (the client's grey glass)
     on_auction: bool = False  # registered in the car auction (XiStrCarInfo AuctionOn; auction.py)
     boost_grade: int = 0     # a timed car upgrade drift item on the car (V4 car upgrade (7days)): the grade it gives
+    fuel_bonus: float = 0.0     # % more Mitron capacity: gage assists, the car being driven (assists.py, apply_paints)
+    mileage_bonus: float = 0.0  # % more efficiency (distance per Mitron): saving assists, the same
+
+    def max_mitron(self):
+        """The Mitron capacity with the gage assists (2008 GetMitronCapacity: capacity x (100 + bonus) / 100)."""
+        return self.capacity * (100 + self.fuel_bonus) / 100
+
+    def mileage(self):
+        """The efficiency with the saving assists (distance per Mitron: "Improves mileage by 1%")."""
+        return self.efficiency * (100 + self.mileage_bonus) / 100
 
     def shown_grade(self):
         """The grade the car counts as: its own, or a higher one from a timed upgrade item on it (Player.apply_paints)."""
@@ -57,7 +67,8 @@ class Car:
     def encode(self):
         # 2011 +0x24 (new): a colour the client applies after building the car with Color and the default
         # glass 0x82CCCCCC (client 0x708054..0x708086, with Etc.ColorSetReform): the window tint here.
-        return self.unit() + struct.pack('<II2f?', self.shown_color(), self.tint, self.capacity, self.efficiency, self.on_auction)
+        return self.unit() + struct.pack('<II2f?', self.shown_color(), self.tint, self.max_mitron(), self.mileage(),
+                                        self.on_auction)
 
 
 @dataclass
