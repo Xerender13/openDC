@@ -56,12 +56,12 @@ The emulator recognises each client's nation and applies the EU rules only to EU
 ## Current emulator progress (17.10.2026):
 
 **Game features that haven't been done yet:**
-- Channels and Channel Battle
 - GT Tournament
 - Seasonal Events
 - Some of the items that are not activated in the current version
 
 **Features that still require testing and might work with issues:**
+- Channels and Channel Battle
 - Crew management
 
 If you find a bug, something not working not listed above or something working wrongly (not like it was on official servers), creating an issue describing the issue will help the project to improve.
