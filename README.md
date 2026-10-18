@@ -65,6 +65,5 @@ The emulator recognises each client's nation and applies the EU rules only to EU
 
 **Features that still require testing and might work with issues:**
 - Crew management
-- Undercity
 
 If you find a bug, something not working not listed above or something working wrongly (not like it was on official servers), creating an issue describing the issue will help the project to improve.
