@@ -13,7 +13,7 @@ from the old device:
 |---|---|---|
 | The code | GitHub, or `Drift City US 2011/Emulator` + `Launcher` | `git clone https://github.com/Xerender13/openDC` |
 | The 2011 clients | `Drift City US 2011/Client US/` and `Client EU/` | Not on GitHub (shared on Google Drive). **Copy the Deck's folders**: `Client US/` has the text patches in `Patch/Patch.006` (12215 license name, 12216 coupon, 11413 / 12214 crew logon), `DriftCityUS.exe` and `DriftCityLauncher.ini`; `Client EU/` is the EU client (`DriftCityEU.exe` set by `Emulator/tools/eu_client.py`, `Data_EU_eng/`, the Km/h dial). Put them next to `Emulator/`. |
-| The game database | `Emulator/db/SKDBTW_2026-10-16.bak` (6 MB, 15:39) | All accounts and characters as of the handover. Make a newer one before moving: `./launch.sh backup-db`. Not in git (`db/*.bak` is ignored). |
+| The game database | `Emulator/db/SKDBTW_2026-10-18.bak` (6 MB, 22:52) | All accounts and characters as of the handover. Make a newer one before moving: `./launch.sh backup-db`. Not in git (`db/*.bak` is ignored). |
 | `emulator.ini` | `Emulator/emulator.ini` | Is in git. Change `[database]` if your SQL Server differs; the ports and `[flags]` are set for this client. |
 | `.ticket_secret` | `Emulator/.ticket_secret` | Not needed: the server's key for login tickets, made again when missing (a client that is logged in at that moment logs in again). Not in git. |
 | `client_backup/` | `Emulator/client_backup/` | The client's original packs before the text patches. Not in git; keep a copy. |
@@ -32,7 +32,7 @@ Layout (folder names matter: launch.sh / launch.bat look for `../Client US` and 
 ```sh
 cd Emulator
 ./launch.sh setup                               # .venv with python-tds, copies the client's tables to server_data/
-./launch.sh restore-db db/SKDBTW_2026-10-16.bak # your characters (or: ./launch.sh init-db for an empty database)
+./launch.sh restore-db db/SKDBTW_2026-10-18.bak # your characters (or: ./launch.sh init-db for an empty database)
 ./launch.sh                                     # database + emulator + client
 ```
 
@@ -41,7 +41,7 @@ cd Emulator
 ```bat
 cd Emulator
 launch.bat setup
-launch.bat restore-db db\SKDBTW_2026-10-16.bak
+launch.bat restore-db db\SKDBTW_2026-10-18.bak
 launch.bat
 ```
 
