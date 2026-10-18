@@ -167,6 +167,11 @@ async def city_offers(session):
         # position state 2 or more = past the tutorial (the client saves 3 in the city: 0xa2; checking == 2 here
         # offered nothing, user 2026-10-14)
         busy = [k for k in ('instant', 'room', 'chase') if session.state.get(k)]
+        from .vchase import group_of
+        if session.state.get('vchase') or group_of(session)[0]:
+            # registered for or in a Virtual HUV (user, 2026-10-18: an offer that came as the Tatiana Call Unit was
+            # used kept its window with the UI file's placeholder text: the 0x119 handler 0x5846b0 resets the others)
+            busy.append('vchase')
         if not busy and not in_field(session):       # not in the Driver Dome (user, 2026-10-15)
             busy = ['not in the field']
         if busy or p.char.pos_state < IN_CITY:

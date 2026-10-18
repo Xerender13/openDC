@@ -90,6 +90,7 @@ class Context:
     mita500 = dict(enabled=False, bottles=10, regen_sec=300, buff_sec=1800, fee=500, lucky_rate=10)   # [mita500]
     enhancer_plus = 1.5      # [items] enhancer_plus: x success % with a Mittron Enhancer PLUS (gauge fill 2)
     enhancer_deluxe = 2.0    # [items] enhancer_deluxe: x success % with a DELUXE (gauge fill 4)
+    vshop_hidden = frozenset()   # [vshop] hidden: drift shop rows (VShopItem UniqueId) not sold (tools/shop_hide.py)
     rename_days = 60         # [items] rename_days: days before a renamed character can be renamed again (kit text: 60)
     auto_register = True     # [auth] auto_register: logging in with an unknown ID creates that account
     mail_min_level = 1       # emulator.ini [mail] min_level: the lowest level that can send messages
@@ -107,6 +108,9 @@ class Context:
     # 60 s start) and its solo test mode
     partypatrol = dict(start_seconds=60, bonus_posts=5, bonus_seconds=4, quick_max_seconds=20, quick_min_seconds=5,
                        quick_decay_seconds=3, quick_exp=10, grace_seconds=2, test=False, test_start_seconds=600)
+    # emulator.ini [vchase] (game/vchase.py): Virtual HUV match rules (the wiki's; amounts are guesses) and the test mode
+    vchase = dict(seconds_4=300, seconds_8=600, hits=3, catch_points=20, drain=5, traffic_points=3, traffic_heal=5,
+                  win_rate=30, lose_rate=10, test=False)
     gotcha_enabled = True    # emulator.ini [gotcha] enabled: the Gotcha machine (main menu button)
     gotcha_season = 13       # [gotcha] season: the newest season offered (Etc.GotchaSeason; client GotchaViewSeason 13)
     gotcha_mito_price = 0    # [gotcha] mito_price / coin_price: 0 = the client's prices (gotcha.py)

@@ -38,7 +38,9 @@ with the Data_US tables of the patch packs folded in (the patches name them
 UseItemClient, Instant_Client). Run `setup` again after a client patch.
 
 `us` writes Client US/DriftCityUS.exe for the US client instead of the ASProtect DriftCity.exe: the unpacked exe as it
-came (nation 1, Data_US, the dname.chk check left on: the US folder is the one listed), with GameGuard off on disk:
+came (nation 1, Data_US), with the dname.chk check skipped as in the EU setup (user, 2026-10-18: it listed the
+original Data_US packs, so a rewritten Data_US/Init_us.agt (tools/shop_rows.py) gave "Invalid Files Detected."), and
+with GameGuard off on disk:
 the protection class of nation 1 (table 0x4e1210, byte 0x4e1211) 2 (GameGuard) -> 0 (the object whose checks all
 succeed, as the EU nations get). No ASProtect, so the launcher's code-checked workarounds are not needed for it
 (its breakpoint finds the class already 0). Select it with DriftCityLauncher.ini [client] exe = DriftCityUS.exe.
@@ -71,7 +73,7 @@ tools/global_text.py "../Client EU" --column EU_eng set 11874=kph (Patch.006, a 
 The client dir defaults to ../Client EU (../Client US for `us`).
 
 usage: python3 Emulator/tools/eu_client.py [client dir] setup [de|eng|fr|es]   (default eng)
-       python3 Emulator/tools/eu_client.py [client dir] us            DriftCityUS.exe: the unpacked US client
+       python3 Emulator/tools/eu_client.py [client dir] us            DriftCityUS.exe: the unpacked US client (no file check)
        python3 Emulator/tools/eu_client.py [client dir] f2 on|off     the F2 car panel for EU nations
        python3 Emulator/tools/eu_client.py [client dir] speedo [TW client dir | mph]   the dial with Km/h
        python3 Emulator/tools/eu_client.py [client dir] grades        part tooltips with the required V grade
@@ -441,7 +443,7 @@ def set_kph(client):
 
 def make_us(client):
     """Client/DriftCityUS.exe: the original unpacked exe (the backup, else DriftCityEU.exe while unchanged), nation 1,
-    GameGuard class 0."""
+    GameGuard class 0, the dname.chk data file check skipped."""
     src = BACKUP if os.path.exists(BACKUP) else os.path.join(client, EXE)
     if not os.path.exists(src):
         sys.exit(f'no unpacked exe: {os.path.normpath(BACKUP)} (or {EXE} in {client}) is needed')
@@ -452,12 +454,16 @@ def make_us(client):
     if exe[at] not in (0, 2):
         sys.exit(f'{src}: unknown protection class {exe[at]} at {GG_CLASS_AT:#x} (nothing written)')
     exe[at] = 0
+    at = file_offset(exe, FILECHECK_AT)
+    if exe[at:at + 3] not in (FILECHECK, FILECHECK_OFF):
+        sys.exit(f'{src}: unknown code at {FILECHECK_AT:#x} (nothing written)')
+    exe[at:at + 3] = FILECHECK_OFF
     dst = os.path.join(client, US_EXE)
     tmp = dst + '.tmp'
     open(tmp, 'wb').write(bytes(exe))
     shutil.copymode(src, tmp)
     os.replace(tmp, dst)
-    print(f'{US_EXE}: from {os.path.basename(src)}, nation 1 (US), GameGuard off')
+    print(f'{US_EXE}: from {os.path.basename(src)}, nation 1 (US), GameGuard off, data file check (dname.chk) skipped')
 
 
 def main():

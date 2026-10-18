@@ -97,6 +97,18 @@ def price_for(row, prefix, idx):
     return _n(row, prefix + PERIODS[idx]), (_n(row, f'Period {PERIODS[idx]}') if idx != 4 else 0)
 
 
+def row_changes(section):
+    """emulator.ini [vshop] -> (hidden UniqueIds, {UniqueId: {VShopItem column: value}} from the sell.<UniqueId> lines).
+    The server applies the changes to its rows at start (prices, period); tools/shop_rows.py writes both into the
+    clients' VShopItem (the shop lists a row only with SellStage <= Etc.VShopOpenStage, 1)."""
+    hidden = frozenset(int(x) for x in section.get('hidden', '').replace(',', ' ').split() if x.isdigit())
+    changes = {}
+    for key, value in section.items():
+        if key.startswith('sell.') and key[5:].strip().isdigit():
+            changes[int(key[5:])] = {k.strip(): v.strip() for k, v in (c.split('=', 1) for c in value.split(',') if '=' in c)}
+    return hidden, changes
+
+
 def item_text(raw, category):
     """The item's text from the client, kept as sent (ITEM_DATA varchar(20)): a colour, or a plate text."""
     return read_wstr(raw, 0, len(raw))[:20]
@@ -171,7 +183,7 @@ async def buy_visual_item(session, frame):
     period_idx, use_mileage = struct.unpack_from('<IB', frame.payload, 0x30)
     t, c, db = context.data, p.char, context.db
     row, vis = t.vshop.get(table_idx), t.visuals.get(table_idx)
-    if not row or not vis:
+    if not row or not vis or table_idx in context.vshop_hidden:     # off sale: emulator.ini [vshop] hidden
         return error(session, 'No such Item!')
     from .driftuse import GIVES_ITEMS, parse_value
     if vis.category in GIVES_ITEMS and not parse_value(vis.value, item_text(frame.payload[8:48], vis.category)):

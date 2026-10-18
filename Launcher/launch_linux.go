@@ -247,6 +247,43 @@ func clientPids() []int {
 	return out
 }
 
+// anyClientPids: running Drift City clients of any folder (US, EU or the packed exe), not only clientExe.
+func anyClientPids() []int {
+	var out []int
+	ents, _ := os.ReadDir("/proc")
+	for _, e := range ents {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		argv, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+		if err != nil {
+			continue
+		}
+		first := strings.ToLower(string(bytes.SplitN(argv, []byte{0}, 2)[0]))
+		for _, exe := range []string{"driftcityus.exe", "driftcityeu.exe", "driftcity.exe"} {
+			if strings.HasSuffix(first, exe) {
+				out = append(out, pid)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// withoutSteamIDs: env without the variables that make Proton's steam.exe act as a Steam game.
+func withoutSteamIDs(env []string) []string {
+	out := env[:0:0]
+	for _, e := range env {
+		k := strings.SplitN(e, "=", 2)[0]
+		if k == "SteamAppId" || k == "SteamGameId" || k == "SteamOverlayGameId" || k == "STEAM_COMPAT_APP_ID" {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 func setBreakpoint(tid int, addr uintptr) {
 	if addr != 0 {
 		ptrace(ptracePokeUser, tid, debugReg, addr)
@@ -428,6 +465,13 @@ func launch(dir, ip string, cfg Config) error {
 		mode = "1"
 	}
 	logf("display: %s", map[bool]string{true: "windowed", false: "fullscreen"}[windowed])
+	if others := anyClientPids(); len(others) > 0 {
+		// a second client: Proton's steam.exe wrapper started with Steam's game ids hangs (before running anything)
+		// when the prefix's running session was started outside Steam (user, 2026-10-18: the second launch stuck at
+		// this reg add). Without the ids it runs; this client then has no Steam overlay.
+		r.env = withoutSteamIDs(r.env)
+		logf("client(s) already running %v: starting this one without the Steam game ids", others)
+	}
 	r.command(dir, "reg", "add", `HKLM\SOFTWARE\DriftCity`, "/v", "EnableWindowMode", "/t", "REG_DWORD",
 		"/d", mode, "/f", "/reg:32").Run()
 	old := map[int]bool{}

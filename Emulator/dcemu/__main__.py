@@ -66,6 +66,12 @@ def native_setup(cp):
         context.rename_days = int(cp['items'].get('rename_days', context.rename_days) or 0)
         context.enhancer_plus = float(cp['items'].get('enhancer_plus', context.enhancer_plus) or 1)
         context.enhancer_deluxe = float(cp['items'].get('enhancer_deluxe', context.enhancer_deluxe) or 1)
+    if cp.has_section('vshop'):
+        from .native.game.vshop import row_changes
+        context.vshop_hidden, changes = row_changes(cp['vshop'])
+        for uid, cols in changes.items():
+            if uid in context.data.vshop:
+                context.data.vshop[uid].update(cols)
     if cp.has_section('auth'):
         context.auto_register = cp['auth'].get('auto_register', '1').strip() not in ('0', 'no', 'off')
     from .native import nation
@@ -92,6 +98,12 @@ def native_setup(cp):
             raw = pp.get(k, '').strip()
             if raw:
                 context.partypatrol[k] = raw not in ('0', 'no', 'off') if isinstance(v, bool) else int(float(raw))
+    if cp.has_section('vchase'):
+        vc = cp['vchase']
+        for k, v in list(context.vchase.items()):
+            raw = vc.get(k, '').strip()
+            if raw:
+                context.vchase[k] = raw not in ('0', 'no', 'off') if isinstance(v, bool) else float(raw)
     if cp.has_section('gotcha'):
         g = cp['gotcha']
         context.gotcha_enabled = g.get('enabled', '1').strip() == '1'

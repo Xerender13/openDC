@@ -8,7 +8,146 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
-## Session 17 (2026-10-17 evening): solo patrol end, silent patrol rewards, US stat points, party patrol test on
+## Session 18 hand-off (2026-10-18 ~09:10)
+
+**In short:** drift shop items (Manufacturing Enhancer, Fuel Booster checked, DriftBooster sold, harvest rows hidden:
+emulator.ini [vshop] + tools/shop_rows.py), lucky bag prize icons, **Virtual HUV** (game/vchase.py from the JP wiki and
+the 2011 client's ChasingBattle messages, with a 2-player test mode; user-confirmed with two clients), the Tatiana Call
+Unit in the parts shop, the US exe without the dname.chk check, the launcher's second-client fix. At the end: VHUV test
+mode off, Mita 500 bottles off. State and the open list: `docs/HANDOVER.md` §5.
+
+**Rules the user set this session:** test modes with two players, not solo ("solo is impossible" for VHUV); disabling
+the dname.chk check is fine; one HUV model per city is fine.
+
+## Session 18 (2026-10-18): drift shop items, shop rows from emulator.ini, Virtual HUV
+
+Client addresses in this entry are of the EU exe (../DriftCityEU-decomp, the same 2011-10-27 build).
+- **Mittron Fuel Booster** (drift item i_d_half, category 24 HalfMitronCharge; user: implement it): already done
+  (session.fuel_charge: price x 0.5 and sale flag 1 while held, 0x5dd bit 7). Checked the client side: the 0x2d4
+  handler (0x520290 -> 0x5759d0) puts the answer's unit price @0x1c and sale price @0x20 into the fuel window (+0x40 /
+  +0x44), and the window works out fuel = pay / sale price (0x575450), so the window shows the half price. No change;
+  **not yet confirmed in game.**
+- **Manufacturing Enhancer** (drift shop 20427 / 20428 = 50 / 10 x inventory item i_n_createup, UseItemClient kind
+  user_create_source (client kind 0x48), value 20; text "When you have this in your inventory, the ratio of
+  manufacturing will increase"): it did nothing. The client sends only the skill book id in 0x0e78
+  (Send_AlchemyCreate 0x8060a0, char[56]); a right-click on kind 0x48 only opens the manufacturing window
+  (0x61d190). alchemy.manufacture now adds the held enhancer's value to the chance (SuccessChance + license
+  ME_DoubleUserCreate + 20) and uses one up per try (alchemy.enhancer; Space Warp Engine, the same kind with no
+  value, is not one). Script-tested (stub: 45 % recipe -> 65 %, 50 -> 49 enhancers). **Not yet confirmed in game.**
+- **Harvest event items hidden from the drift shop** (user: "for now"): the client lists a VShopItem row only when
+  SellStage (% 1000, < 1 -> 100; row reader 0x846e10, field +0xf0) <= Etc.VShopOpenStage (1) and
+  Etc.VShopCloseStage < CloseStage (0x5c7196 and two more), so a content flag cannot pick out single rows (309 rows
+  have SellStage 1). New emulator.ini [vshop]: `hidden` = 20204-20210 (Delivery Box Recipe, Normal / Ice Box, Fresh
+  Vegetable / Fish / Fruit / Meat); the server refuses to sell or gift them (vshop.buy_visual_item, gifts); new
+  tools/shop_rows.py apply writes SellStage 99 into Client US Data_US/Init_us.agt and Client EU
+  Data_EU_eng/Init_eueng.agt (only VShopItem.xlt changed, header bytes 20-31 kept, originals in
+  client_backup/Init_us.agt.orig / Init_eueng_ClientEU.agt.orig; `reset` puts them back). Applied. **Restart the
+  clients; not yet confirmed in game.**
+- **PassiveAssist(DriftBooster) sold** (user: buyable in the drift shop; picked passive_a_00118 "Post-Drift Booster",
+  row 10820, and G Coin like the Fuel Booster): the row had SellStage 99 and no price. [vshop] `sell.10820` sets
+  SellStage 1, UseHancoin 1, 100 / 250 / 500 G Coin for 7 / 30 / 90 days; the server applies the sell.<id> lines to
+  its own rows at start (__main__, vshop.row_changes), shop_rows.py writes them into both clients. It goes on the car
+  as before (driftuse.EQUIP_PASSIVE). Script-tested (30 days for 250 G Coin, 0x4b4). **Not yet confirmed in game.**
+- **Mittron Big 4 Shopping Bag** (i_n_package_mitronbig4, luckybag; user: check and fix): the user's purchase and
+  opening (log 20261017-222331 07:38-07:41) worked on the server: rw_summerpackage_mitronbig4 rolled one row of each
+  of its four slots (10 Enhancer DELUXE, 99 Enhancement Formula, 3 Gold-Bar Boxes, PRIME V4 box), 0x5b5 with 4
+  cells of 10 bytes (the client's 0x61a270 reads them so), and the PRIME box gave the car. The client gives this
+  bag its own window layout (0x61a3f0, by the name prefix). The shop's own name for it is "mitron big4 Lucky Bag"
+  (VShopItem MarketName).
+  - User: the window showed no icons except the Enhancement Formula's. Cause: for an inventory prize (kind 1) the
+    window (0x61a270) does not use the item table; it searches the player's inventory list for an item of that
+    TableIdx (0x717d40: [+0x60] list, entry +0x2fc, state 0/2/3/5/6). The server sent 0x5b5 before the 0x192 that
+    adds the prizes, so only the Formula (a stack already held) was found. driftuse.use_lucky_bag now sends the
+    0x192 first. Every lucky bag had this. Scratch cards (0x5ad) look prizes up by table (0x7172f0): not affected.
+    Script-tested (order 0x192, 0x5b5). **Not yet confirmed in game.**
+- Emulator restarted 07:49 (log 20261018-074949), again after the lucky bag fix.
+- **Virtual HUV (Virtual Chasing)** (user: implement it from the JP wiki page ゲームモード/バーチャルチェイシング, and sell its
+  call unit in the parts shop; then "a testing mode with 2 players only, instead of solo"): new game/vchase.py, its
+  docstring has every message. Not in the 2008 server; the 2011 client still has it all: handlers 0x119 / 0x11b /
+  0x11c / 0x11f / 0x122 / 0x124 / 0x127-0x129 / 0x12b (0x512fe0 ... 0x5262b0), senders 0x118 / 0x11a / 0x11d / 0x11e /
+  0x120 / 0x123 / 0x12a (0x7e6100 ...); Dev Ed names ChasingBattle*. Found:
+  - The Tatiana Call Unit (i_n_00062, kind vc_T_callunit = 0x1e; not used up) sends 0x118 in a city other than Mitro
+    City (0x601cf0); 4:4 / 8:8 from Tatiana's dialog; a party's members get 0x11c and answer 0x11d.
+  - Start records (0x84 bytes at [net+0x3d584]): +0x20 max HP, +0x28 damage (gauge = (max - damage) / max, red under
+    30 %: 0x5ab770), +0x24 HP shown, +0x18 the HUV id for the model (0x73be70 -> 0x5e2130; per city O-Raid 10005,
+    V-Boxer 10011, B-Terror 10013, R-Trouble 10019). The per-city machine points of the wiki are in the client
+    (chaser 0x741350, HUV 0x73be70). The client counts down 7.5 s, runs the clock and warnings, lets only a non-HUV
+    hit an opposing HUV (0x488xxx -> 0x486690, damage roll 0x485440), sends 0x12a for the HUV's traffic hits (once
+    a car) and 0x120 every 10 s while the team's next HUV is >= 1500 m away (0x7469b1). Role timers 3 -> 1 (1.5 s)
+    and 4 -> 0 (3 s) are the client's. Content flag Main.VirtualChasing: never tested by the client.
+  - Server rules (wiki; emulator.ini [vchase]): 3 hits catch (33 %), 1-3 points a hit (3 critical), +20 a catch,
+    HUV HP -5 % every 10 s and per 0x120, traffic hit +3 points / +5 % HP, 300 / 600 s, more points win (draw:
+    both lose); a player leaving stops the match (result -1, VC_Cancel_Msg). Rewards: exp / Mito = HuvTable exp /
+    Mito at the player's level x win_rate 30 / lose_rate 10 (x 2 in 8:8; the wiki gives no amounts, ours);
+    winners: Undercity 120% x1, N / S Mittron Enhancers by city (10 / 30 / 1 / 3), Team ROO 10 HUV Call Units.
+  - Guesses: 0x124 @0xa (sent: the target's team) and @0x16 (sent: 1 when caught), 0x127 @2 (the team), 0x122 @6 and
+    the entry's +0x14 / +0x1c / +0x20 (0), 0x128 @2 (0), which team score field is which (team 0 first).
+  - **Test mode, two players** ([vchase] test = 1, or GM chat `gmvchasetest on` by one of them): a match starts with
+    two waiting in the same city and channel, one a team, one HUV at a time (with one HUV per team both would be
+    HUVs and nobody could ram); when it is out the other player becomes the HUV of his team.
+  - Script-tested with two stub players (test mode): registration, 0x122 (190 bytes for 2), traffic heal, three
+    hits -> caught (+20) -> 0x127 to the other team, HP drain, 0x128 for both (winner's items), cancel, a stopped
+    match. **User-confirmed 2026-10-18** in the 2-player test (two US clients): see the entries below.
+- **Tatiana Call Unit in the parts shop** (user): UseItemClient column 13 (shop) True for i_n_00062 (1000 Mito)
+  through tools/item_names.py (new CELLS table; written into Client US Patch.004, Client EU World.agt, header bytes
+  kept, and server_data/tables/UseItemClient.tdf; the HUV Call Unit i_n_00063 was already sold). Restart the clients.
+- Emulator restarted again after these (08:3x).
+- **"Invalid Files Detected." at the US client's start** (user, after the shop rows): the US exe's data file check
+  0x4ed620 compares Data_US with Client\dname.chk; tools/shop_rows.py had rewritten Data_US/Init_us.agt (the EU
+  client skips the check since its setup; packs in Patch/ are not listed). User: "Can we just disable dname.chk
+  checking?" -> `eu_client.py us` now also skips it (55 8b ec -> 31 c0 c3 at 0x4ed620, as the EU setup does);
+  Client US/DriftCityUS.exe rebuilt from client_backup/DriftCityEU.exe.orig: 4 bytes differ (the GameGuard class
+  0xe0611, the check 0xeca20-22). The shop_rows.py changes to Init_us.agt stay. **Not yet confirmed in game.**
+- **A second client did not start** (user: "before I was able to launch 2 clients at the same time"): the second
+  launcher (through Steam: SteamAppId 2857987919, overlay) hung in its first Wine command, Proton's steam.exe running
+  `reg add ... EnableWindowMode`, while the running client's session had been started outside Steam (launcher
+  parent systemd, no Steam ids). Reproduced: `proton run reg query ...` returns at once without SteamAppId and hangs
+  with it (25 s timeout) while that session runs. Launcher (launch_linux.go): when any Drift City client runs
+  (anyClientPids: DriftCityUS / EU / DriftCity.exe), the Wine commands run without SteamAppId / SteamGameId /
+  SteamOverlayGameId / STEAM_COMPAT_APP_ID (that client has no Steam overlay). Rebuilt (build.sh) into both client
+  folders. **Not yet confirmed.**
+- **VHUV: "wrong message window" for the 2nd player** (user, screenshot: Tatiana's VC_Enter and the waiting list
+  right, plus a yellow Accept / Abandon window with Korean placeholder text "테스트...내용입니다"; fine on the next
+  try): log 20261018-081805 08:32:31.324 a city instant mission offer (0x3df, mission 29) reached Newbie (#9) 90 ms
+  before his 0x118; the 0x119 handler's window reset (0x5846b0) cleared the offer window's texts while it stayed
+  open. Not a VHUV window. instant.city_offers now skips players registered for or in a VHUV (busy 'vchase'); an
+  offer arriving just before the unit is used can still collide. Not restarted yet (the user was testing).
+- **VHUV did not start with 2 players** (user: "with the test on"): log 20261018-081805: Xerander (#3) and Newbie (#9,
+  US client) both registered 4:4 (0x11b 1, 0x12b "2 waiting", 08:33:41 and 08:35:11), but emulator.ini [vchase] test
+  was 0 and no gmvchasetest in the log, so 8 were needed. Set test = 1; emulator restarted. Newbie's missing "status
+  window": he got the same 0x11b / 0x12b as Xerander; which window is meant is asked.
+- **VHUV: both clients crashed when the time ran out** (user): log 20261018-083652: the match ran (Start 08:37:47.6,
+  hits, catches, HUV changes, drain), 0x128 went out at 08:42:55.2 (7.5 + 300 s), but both clients' last messages
+  were at 08:42:53.5 (connections closed by timeout at 08:43:57): they died when their own clock reached 0, 1.6 s
+  earlier (the client counts frame times from its countdown, 0x745b00). That clock, [net+0x154]+0x3c, is also the
+  race clock: the battle race state machine (0x49d3d0) runs the race finish (0x500270, 0x44b800) when it is below 0;
+  the 0x128 handler resets that state ([net+0x154]+0x14 = 0). No message sets it for a VHUV. vchase.Match now ends 1 %
+  of the seconds, at least 3 s, early (END_MARGIN / END_MIN: 3 s in 4:4, 6 s in 8:8). The crash point is inferred
+  (no crash dump: the launcher log was overwritten by the next start). Script-tested; emulator restarted.
+  **User-confirmed 2026-10-18**: "the match now ended properly".
+- **End of the session** (user): [vchase] test = 0, [mita500] enabled = 0 (Mita bottles off for now); emulator
+  restarted. Committed and pushed.
+- **VHUV test run 2** (log 20261018-084657, 08:49): the 2-player test match started, hits and the catch worked
+  (HUV 2 -> 7). Newbie as the HUV had a full boost gauge but could not boost; the user then found that expected
+  ("Oh, I see ... it's all good"): no change. The HUV model id (entry +0x18, HuvTable id 10005) went to
+  GetVehicleInfo (0x4c9f30) without its "wrong id" message in the client logs.
+
+## Session 17 hand-off (2026-10-17 ~22:30)
+
+**In short:** solo patrol end fixed (0x3e3), party patrol finished and user-confirmed, US stat points 1 per level,
+then the EU version's rules: parts by car V grade (and the EU client's tooltips / refusal text showing the grade),
+drops by car V grade, battle zone without levels and with EU V tiers, KPH texts, Client EU without Data_US; content
+flag Main.AutoCarAssist on (garage functions); English name for the "Useless Skill Book". Commits b3b5506, aaf6da1
+(pushed). State and the open list: `docs/HANDOVER.md` §5. Everything below this point of session 17 is not yet
+confirmed in game unless marked.
+
+**Rules the user set this session:** keep the US car stats and costs (do not take the 2009 EU tables' values); the EU
+part tooltip must show "Required Grade" (written into Client EU's ItemClient.tdf), with the user's own wording for
+texts ("Grade %d required" - %d because the client passes a number - and "Your car grade is not high enough for this
+part"); client changes for EU go to Client EU only, through the tools (eu_client.py grades / kph, global_text.py /
+global_content.py --column), so `eu_client.py setup` can remake them.
+
+## Session 17 (2026-10-17 evening): solo patrol end, party patrol, US stat points, EU rules
 
 - **Solo patrol stuck at 40/40** (user, Xerander, Officer Heather's patrol TableIdx 5; log 20261017-163318 18:26:07):
   the server ended it (0x3ea, 0x3e5 with the final exp, mission dropped), but the client kept it on the HUD. In the

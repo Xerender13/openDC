@@ -79,71 +79,112 @@ SKID_ACCOUNT_TB.PTYPE 'A'; GM commands with
 
 ## 4. Publishing to GitHub
 
-The working folder is not a git repository: push from a separate clone.
+Since 2026-10-17 (session 14) the project folder (the one with `Emulator/` and `Launcher/`) **is the git working
+copy** of github.com/Xerender13/openDC (branch `main`). Commit and push only when the user asks ("commit to github").
 
 ```sh
-git clone https://github.com/Xerender13/openDC openDC
-cd "<project>"                                   # the folder with Emulator/ and Launcher/
-find Emulator Launcher -type f -not -path '*/__pycache__/*' | sort > /tmp/cand.txt
-git -C openDC check-ignore --stdin < /tmp/cand.txt | sort > /tmp/ign.txt
-comm -23 /tmp/cand.txt /tmp/ign.txt | grep -v '/.venv/' > /tmp/publish.txt
-rsync -a --files-from=/tmp/publish.txt ./ openDC/
+cd "<project>"
+git fetch origin && git log --oneline HEAD..origin/main   # the user sometimes edits README.md on GitHub
+git status --short                                        # only Emulator/ and Launcher/ files belong here
+git diff | grep -n -i -E '^\+.*(passw|secret|ticket|@gmail)'   # nothing sensitive in the changes
+git add -A Emulator Launcher
+git -c user.name=Xerender13 -c user.email=sasuke8453@gmail.com commit    # end with the Co-Authored-By line
+git rebase origin/main   # if GitHub had newer commits
+git push origin main
 ```
 
-Then, in the clone, **replace the second test account's password in `Emulator/docs/EMULATOR_NOTES.md`** (the
-local notes keep it; three places) before committing. Never add `Client US/`, `Client EU/`, `Server2008/`, `Handoff/`,
-`.ticket_secret`, `logs/`, `client_backup/`, client-derived `server_data/` files, or database backups other than
-`db/SKDBTW_clean.bak` (`.gitignore` covers most of these). Commit as `Xerender13 <sasuke8453@gmail.com>`; push with
-`gh` (logged in as Xerender13) or a personal access token.
+The local EMULATOR_NOTES.md is the redacted version (the second test account's password is not in it). Never add
+`Client US/`, `Client EU/`, `Server2008/`, `Handoff/`, `.ticket_secret`, `logs/`, `client_backup/`, client-derived
+`server_data/` files, or database backups other than `db/SKDBTW_clean.bak` (`.gitignore` covers these). The tools
+that change client files are in git, so those changes can be made again on another machine (see §5).
 
 ## 5. State at the handover
 
-Updated 2026-10-17 (end of session 17). Details of every item: the "Session 17" / "Session 16" / "Session 15"
-entries at the top of `docs/EMULATOR_NOTES.md`.
+Updated 2026-10-18 ~09:10 (end of session 18; committed and pushed in this session). Details: the "Session 18" entry
+at the top of `docs/EMULATOR_NOTES.md` (its hand-off summary first), then "Session 17".
+
+**Running state:** emulator and DB running (`./launch.sh restart-emu` after code changes), emulator.ini
+`[nation] allow = all` (US and EU clients both log in; the user tests a decompilation project of the EU exe in
+`../DriftCityEU-decomp`, not part of this repo: its proxy `version.dll` is in `Client US/` and loads when the client is
+started through Steam, whose launch options set `WINEDLLOVERRIDES="version=n,b"`; it replaces ~585 client functions,
+the VHUV handlers too). `[partypatrol] test = 0`, `[vchase] test = 0`, `[mita500] enabled = 0` (Mita bottles off for
+now, user).
+
+**Confirmed in game on 2026-10-18:**
+- Virtual HUV (game/vchase.py) in the 2-player test mode: registration, the Tatiana dialog / waiting list, start,
+  hits, catches, HUV changes, HP drain, the end at the time limit (after the early-end fix) with the result.
+- A HUV cannot boost while being the HUV (as the client does it; the user: "it's all good"). One HUV model per city
+  (the wiki's) is fine (user).
 
 **Confirmed in game on 2026-10-17:**
-- Mitro City mother quests: retaking after a failure (children reset, quest list 0x111 resent; Agent Riggs ran fine).
-- License gained text shows the license name.
-- Repeatable missions (rq_*) at Moon Palace.
-- Mito V-upgrade items (i_d_mu_v*_*per).
-- Mission Battles (Line Ball / Mecha Watch / Exodus Quake items): offer, mission room, practice-type race (no gates),
-  Rechallenge after a failure, EXP at the end (bonuses from the client's 0x3eb).
-
 - Party Patrol (partypatrol.py, flag InstantMission.PartyPatrol): countdown, posts, emergency posts, result window
-  (tested alone with the test mode, gmpartytest on; [partypatrol] test = 0 again).
+  (tested alone with the test mode, `gmpartytest on`).
+- Mitro City mother quests retaken after a failure; Agent Riggs.
+- License gained text with the license name; repeatable missions (rq_*); Mito V-upgrade items.
+- Mission Battles (Line Ball / Mecha Watch / Exodus Quake): offer, room, practice-type race, Rechallenge, EXP.
+- EU client HUD speed number is km/h (the KPH labels match it).
 
-**Done on 2026-10-17 (session 17), not yet confirmed in game:**
-- Solo patrol end (0x3e3 after the last post; it stuck at 40/40), patrol rewards without the item notice box.
-- US stat points 1 per level (nation rule half_level_points).
-- EU rules (nation.py, EU clients only): drop groups by the car's V grade (drop_by_grade), part / option / docking
-  requirements by V grade (part_grade, data.Tables.part_req_grade), battle zone without level limits
-  (battle_levels) and EU V tiers (Newbie V1-3, Pro 4X V4-5 / 6X V6 / 8X V7-8 / 16X V9: eu.section lines,
-  rooms.PRO_TIERS_EU; the same in Client EU's GlobalContent.xlt Value_EU_eng, tools/global_content.py --column).
-- [nation] allow = all (both clients; the user tests a decompilation project).
-- Client EU: no Data_US of its own (eu_client.py setup builds from Client US/Data_US); part tooltips "Grade %d
-  required" with the grades written into its ItemClient.tdf (eu_client.py grades; eu.part_level = 0); refusal text
-  11276; KPH texts (11874, game.nui labels: eu_client.py kph; global_text.py --column EU_eng).
-- Main.AutoCarAssist on for all (garage Function 1 / 2 = the car grade's assists; the EU placeholder gone).
-- tools/item_names.py: English names for Korean-named usable items (random_skb_bust so far; 75 more could follow).
+**Done in session 17, not yet confirmed in game:**
+- Solo patrol end: 0x3e3 after the last post (it stayed at 40/40); patrol reward items go to the inventory only.
+- US stat points 1 per level (nation rule `half_level_points` = 0).
+- Content flag `Main.AutoCarAssist` on for all clients: garage Function 1 / 2 list the car grade's assists
+  (VehicleUpgrade OptionID -> Assist_Client.tdf). Unknown: whether the client applies them in races by itself.
+- `tools/item_names.py`: English name for random_skb_bust ("Useless Skill Book") in both clients + server_data.
+- **EU rules** (`dcemu/native/nation.py`, EU clients only; US unchanged):
+  - `part_grade` on, `part_level` off: parts need the car's V grade (data.part_grade_rule: N V1-3 / S V4-6 / H V7-9
+    by tier 2-2-1, set / shop / rental parts by their level's tier; options and docking N V1 / S V4 / H V7).
+  - `drop_by_grade`: traffic / combo / rush drops by the car's V grade (V<n> = the n-th ItemDropServer level row).
+  - `battle_levels` off + EU tiers: Newbie V1-3, Pro V4-9 with 4X V4-5 / 6X V6 / 8X V7-8 / 16X V9
+    (emulator.ini `eu.section.11/12`, rooms.PRO_TIERS_EU), no level limits; invites checked per invitee's nation.
+  - `level_points` off (no stat points from level), UTF-8 passwords, EU login texts (earlier sessions).
+- **Client EU changes** (not in git; remade by the tools; originals in client_backup/):
+  - `Data_US` deleted (identical to Client US's); `eu_client.py setup` builds from `../Client US/Data_US`.
+  - `eu_client.py grades`: ItemClient.tdf in Data_EU_eng/World.agt with level 0 and the V grade (the tooltip then
+    shows "Required Grade"); `eu_client.py kph`: game.nui speed labels KPH. Both run by `setup`.
+  - GlobalText (Patch.006, `global_text.py "../Client EU" --column EU_eng`): 11275 "Grade %d required"
+    (must stay %d), 11276 "Your car grade is not high enough for this part" (the client's own refusal), 11874 kph.
+  - GlobalContent (Patch.000, `global_content.py "../Client EU" --column Value_EU_eng`): battle zone levels removed,
+    the EU V tiers above.
+- Earlier, still unconfirmed: Auto Fill-Up, battle quick slots and their items, Battle EXP up items, solo Start for
+  non-GM accounts, Mitro City traffic / signals, crew nameplate colour, parts rules (Heat Treatment Kit), docking.
 
-**Done on 2026-10-17 (sessions 15-16), not yet confirmed in game:**
-- Auto Fill-Up (i_automitron): automatic refuel at 80 % of the price (0x2d3 with u32 1).
-- Battle quick slots (flag BattleZone.BattleQuickSlot) and the six battle_quick items (effects in the client).
-- Battle EXP 25% / 50% up items: their % added to a battle's EXP, one used per battle (consumption is a guess).
-- Solo Start for non-GM accounts (flag BattleZone.PracticeMode).
-- From 2026-10-16: Mitro City traffic and signals (areas 62-75), crew nameplate colour, parts rules (Heat Treatment
-  Kit only for normal H parts, docking letters).
+**Reference data the user brought (scratchpad only, not kept in the project):** an older EU Init.agt (7-Zip, 24
+xlt from 2009-12; other car stats and prices: **the user wants the US stats and costs kept**) and an older EU
+ItemClient.tdf (column 8 = 0 everywhere, same levels): no real EU grade data exists, the rule above is the user's.
 
-**Open:**
-1. Confirm the items above in game.
-2. The Item Exchange Attendant (Mittron Crystal Powder -> TokenBook rows 5-9).
-3. The rest of the Taipei main chain (mq_5th_*), the _m / _c branches and their reputations.
-4. Battle rooms: the Complete Bonus Reward panel ("Recommended by Duffy EXP +25%", probably 0x1e4).
-5. Other Taipei channels: check which areas the client joins from channels other than 0 (logs: `enters area`).
-6. The Windows launcher on real Windows.
-7. EU version: the real EU parts tables, then the V-grade rules (see the "EU client" entry in the notes).
-8. Older items listed under "Open, first things next time" in `docs/EMULATOR_NOTES.md` (session 12).
-9. EU parts: the real EU World.agt (ItemClient column 8) would replace the part grade rule's tiers if it differs.
+**Done in session 18, not yet confirmed in game:**
+- Manufacturing Enhancer (i_n_createup): +20 % per try while held, one used up (alchemy.enhancer).
+- Drift shop rows from emulator.ini `[vshop]`: `hidden` (harvest event rows 20204-20210: the server refuses them),
+  `sell.10820` (PassiveAssist DriftBooster passive_a_00118 for 100 / 250 / 500 G Coin, 7 / 30 / 90 days);
+  `tools/shop_rows.py apply` writes them into Client US Data_US/Init_us.agt and Client EU Init_eueng.agt.
+- Tatiana Call Unit (i_n_00062) in the parts shop (`tools/item_names.py` CELLS, column 13).
+- Lucky bag prize icons (Big 4 Shopping Bag): 0x192 now before 0x5b5 (the window finds prizes in the inventory).
+- Fuel Booster: checked, it already worked (half price, the client shows the server's sale price).
+- City instant offers skipped while registered for / in a VHUV.
+- **Client US/DriftCityUS.exe without the dname.chk check** (`eu_client.py us` now writes it so; the check refused
+  the rewritten Init_us.agt: "Invalid Files Detected."). Launcher: a second client starts without the Steam game ids
+  when one runs (Proton's steam.exe hung). Both: the user started both clients afterwards.
 
-**Characters:** Xerander (cid 100000) is the user's main (Taipei chain in progress, faction OMD). Test characters:
-NewChar, Newbie, DCLoverN. The database backup above has them all.
+**Open (next session):**
+1. Confirm the session 18 items above in game (the drift shop rows need a client restart).
+2. Virtual HUV: a real 4:4 / 8:8 needs 8 / 16 players (only the 2-player test was played); a party registering
+   together (0x11c / 0x11d) is untested; rewards are our amounts (`[vchase] win_rate / lose_rate`); guessed fields
+   are listed in the notes (0x124 @0xa / @0x16, 0x127 @2, 0x128 @2). Newbie's "status window" question was left open.
+3. Confirm the session 17 items in game, EU client first (restart it: it reads the packs at start): grade
+   tooltips, refusal text, KPH, garage functions, drops by grade, battle zone tiers; US: patrol end, stat points.
+4. AutoCarAssist: check that a car with assists (e.g. Metro V2, Turbo Start cars) shows them and races normally;
+   find whether the client applies them itself (as part options) or the server must (0x2f9 assist info).
+5. 75 more Korean-named usable items (old events) could get English names in tools/item_names.py (user's call).
+6. The Item Exchange Attendant (Mittron Crystal Powder -> TokenBook rows 5-9).
+7. The rest of the Taipei main chain (mq_5th_*), the _m / _c branches and their reputations.
+8. Battle rooms: the Complete Bonus Reward panel ("Recommended by Duffy EXP +25%", probably 0x1e4).
+9. Other Taipei channels: which areas the client joins from channels other than 0 (logs: `enters area`).
+10. The Windows launcher on real Windows (and the second-client fix is Linux only).
+11. Drop tables: the server uses the 2008 **TW** ItemDropServer.tdf (combo chances 3-5x the 2008 US one);
+    DropLimit_Server.tdf is not read. The user has not decided whether to switch.
+12. Mita 500 bottles are off ([mita500] enabled = 0) until the user wants them back.
+13. Older items under "Open, first things next time" in `docs/EMULATOR_NOTES.md` (session 12).
+
+**Characters:** Xerander (cid 100000) is the user's main (level 81 now, Taipei chain in progress, faction OMD; holds a
+"Useless Skill Book"). Test characters: NewChar, Newbie, DCLoverN. Make a fresh DB backup before moving
+(`./launch.sh backup-db`).

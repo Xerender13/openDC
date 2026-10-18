@@ -17,7 +17,11 @@ Learning: the client's inventory right-click on a skill book (UseItemClient kind
     (items.use_item). (0x0e7b, the same layout, unmarks one: not sent.)
 0x0e78 Manufacture (C>S, char[56] skill book id; the manufacturing window 0x5c3cc7 -> 0x8060a0, once per item when
     a quantity is chosen) -> materials and kit taken, the success chance rolled: on success the result and (by
-    its chance) the bonus item; SuccessExp / FailExp added -> 0x0e79 AlchemyResult (char[56] id, u8 1 success / 0
+    its chance) the bonus item; SuccessExp / FailExp added. The chance: SuccessChance + a mounted license's
+    ME_DoubleUserCreate + a Manufacturing Enhancer's value (i_n_createup, UseItemClient kind user_create_source,
+    value 20; item text "When you have this in your inventory, the ratio of manufacturing will increase"; sold in the
+    drift shop as bundles of 50 / 10): one is used up per try. The client sends only the skill book id; right-
+    clicking an enhancer only opens the manufacturing window (EU exe 0x61d190, kind 0x48), so the server applies it -> 0x0e79 AlchemyResult (char[56] id, u8 1 success / 0
     failure (client 0x5c39b0: the completed count and the sound), u64 EXP, u32 0) + 0x192.
     Refused (not learned, level, missing materials, inventory full): a Send_Error text, no 0x0e79.
 Parts Grinder: 0x0e1a -> 0x0e1b, see grind_part below.
@@ -35,6 +39,7 @@ from .. import context
 from .login import SVC, error, send
 
 EXP_MODE, SKILL_PREFIX = 'ALCHEMY', 'SKB_'
+ENHANCER_KIND = 'user_create_source'        # Manufacturing Enhancer (client use kind 0x48)
 NAME = 56                                   # char[56] skill book id in 0x0e78 / 0x0e79 / 0x0e7b / 0x0e7c
 ENTRY = 0x78                                # one skill book id in 0x0e75
 STATE_SQL = ("SELECT MODEID, POINT FROM SKID_PLAYMODE_TB WHERE SERVERID=%s AND CID=%s AND"
@@ -173,6 +178,18 @@ async def take_count(p, item_id, count):
     return list(merged.values())
 
 
+def enhancer(p):
+    """The Manufacturing Enhancer held (UseItemClient kind user_create_source with a value: i_n_createup, 20) ->
+    (item, value %) or None. Space Warp Engine is the same kind with no value (a material)."""
+    t = context.data
+    best = None
+    for it in p.items:
+        info = t.item_info(it.table_idx) if not it.car_id and (it.state & 0xffff) != 4 else None
+        if info and info.kind == ENHANCER_KIND and info.value > 0 and (not best or info.value > best[1]):
+            best = (it, info.value)
+    return best
+
+
 @on(SVC, C2S, 0xe78)
 async def manufacture(session, frame):
     from .combo import free_slots
@@ -202,8 +219,15 @@ async def manufacture(session, frame):
     for item, count in need:
         changes += await take_count(p, item, count)
     from . import licenses
-    # a mounted license (ME_DoubleUserCreate): the basic production chance + its value %
-    ok = random.uniform(0, 100) < r['chance'] + licenses.effects(p).get('ME_DoubleUserCreate', 0)
+    from .driftuse import take_one
+    # a mounted license (ME_DoubleUserCreate): the basic production chance + its value %; a Manufacturing Enhancer
+    # held: + its value % more, one used up per try
+    chance = r['chance'] + licenses.effects(p).get('ME_DoubleUserCreate', 0)
+    boost = enhancer(p)
+    if boost:
+        chance += boost[1]
+        changes.append(await take_one(p, boost[0]))
+    ok = random.uniform(0, 100) < chance
     gains = Gains()
     if ok:
         await give_item(p, r['result'][0], r['result'][1], gains)
@@ -212,7 +236,8 @@ async def manufacture(session, frame):
             await give_item(p, bonus, n, gains)
     a['exp'] += r['exp_ok'] if ok else r['exp_fail']
     await save(p, EXP_MODE, a['exp'])
-    session.log.note(f'manufacture {name}: {"success" if ok else "failure"}, EXP {a["exp"]} (level {level_of(a["exp"])})')
+    session.log.note(f'manufacture {name}: {"success" if ok else "failure"} at {chance:g} %'
+                     + (f' ({boost[0].item_id} +{boost[1]})' if boost else '') + f', EXP {a["exp"]} (level {level_of(a["exp"])})')
     send(session, Frame(0xe79, name_bytes(name, NAME) + struct.pack('<BQI', 1 if ok else 0, a['exp'], 0)))
     if changes:
         send(session, mod_list(*changes))

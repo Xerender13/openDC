@@ -252,6 +252,11 @@ async def game_stream(session, frame):
         reply = gm_test(session, args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
+    if cmd == 'gmvchasetest':                   # gmvchasetest on | off: Virtual HUV with two players (vchase.py)
+        from .vchase import gm_test
+        reply = gm_test(session, args)
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
     if cmd == 'gmgate':                         # gmgate 0-7: every gate gives that reward; gmgate off
         from . import rooms
         rooms.forced_reward = int(args[0]) if args and args[0].isdigit() and int(args[0]) < rooms.REWARDS else None

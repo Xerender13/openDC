@@ -124,7 +124,7 @@ async def send_visual_item(session, frame):
     message = pl[0x5a:0x5a + 2 * MESSAGE].decode('utf-16-le', 'replace').split('\0')[0].strip()
     t, c, db = context.data, p.char, context.db
     row, vis = t.vshop.get(table_idx), t.visuals.get(table_idx)
-    if not row or not vis:
+    if not row or not vis or table_idx in context.vshop_hidden:     # off sale: emulator.ini [vshop] hidden
         return error(session, '20050')                  # InvalidData
     text = item_text(pl[4:44], vis.category)
     from .driftuse import GIVES_ITEMS, parse_value

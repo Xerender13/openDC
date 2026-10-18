@@ -363,6 +363,9 @@ async def open_gift_box(session, p, info):
 #      Mito, the Natura prizes or a bust) gives one cell each.
 # 0x5b4 UseLuckyBag (u32 InvenIdx) -> 0x5b5 UseLuckyBagAck (u32 n, n x (u32 kind, u32 id, u16 count), at
 #      most 6, client 0x61a270; its handler takes (n - 1) x 60 + 16 bytes, so the message is padded to that).
+#      The window shows an inventory prize (kind 1) only if it finds an item of that TableIdx in the player's own
+#      inventory (0x717d40), so the 0x192 with the prizes goes first (user, 2026-10-18: the Big 4 Shopping Bag
+#      showed only the Enhancement Formula's icon, the one prize already held). Drift items: by table (0x846cd0).
 #      The shop's lucky bags name groups that are not in RewardGroup.xlt (rw_package_car_n / power_n); the
 #      Cupid's Gift Boxes have the same contents (rw_valentine_package_car_n / power_n) and are used.
 def cell(reward):
@@ -448,8 +451,8 @@ async def use_lucky_bag(session, frame):
     cells = [c for c in map(cell, won) if c[0]] or [(0, 0, 0)]
     body = struct.pack('<I', len(cells)) + b''.join(struct.pack('<IIH', *c) for c in cells)
     session.log.note(f'lucky bag {info.item_id}: {won}')
+    gains.send(session, p)          # first: the window finds each prize in the inventory (see above)
     send(session, Frame(0x5b5, body.ljust((len(cells) - 1) * 60 + 14, b'\0')))
-    gains.send(session, p)
 
 
 # ---- name change kit (drift item i_changenick, category 36) ---------------------------------------------
