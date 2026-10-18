@@ -13,12 +13,15 @@ Messages (client handlers / senders; the request senders are vtable methods 0x80
     keeps them at [char + 0x1b20] and reads the client-side effects ME_AcroComboRepair / ME_ReverseComboRepair /
     ME_UseBoost50Recovery of the mounted ones), and 0x326 LicenseInfoRes (u16 serial, the 3 x u16) to the other players
     (client 0x50e770: kept with that player's car). Only held licenses can be mounted.
-0x331 NewLicenseNoti (u16 license id, u16 1): a license gained (client 0x50e7e0: its notice; text by the id).
+0x331 NewLicenseNoti (u16 license id, u16 1, u16 0): a license gained (client 0x50e7e0: its notice; text by the id;
+    the handler takes 8 bytes: 2 more than the 2008 layout).
 0x29a LicenseStatus (u32 0, u32 serial: another player's licenses, the car's menu "license", client 0x5eb6b7) ->
     0x29b LicenseStatusAck (u32 0, u32 serial, u32 n @0xa, wchar[21] name @0xe, 3 x u16 mounted @0x38, n x (u16 id,
-    u16 0, u16 0) @0x3e; client 0x511260 opens the license window on them) and 0x32a ETCInfo (that player's
-    conditions: u16 n @0xa, u16 0 = first part @0xc, u32 @0xe, n x (u16 condition id, u32 value) @0x12; client
-    0x511510). The emulator sent an empty 0x32a at login before (login.py, still).
+    u16 0, u16 0) @0x3e; client 0x511260 opens the license window on them) and 0x29c LCondStatusAck (that player's
+    conditions: u32 0 @2, u32 serial @6, u16 n @0xa, u16 0 = first part @0xc, u32 @0xe (first part: passed to
+    0x5ffce0), n x (u16 condition id, u32 value) @0x12; client 0x511510, (n + 3) x 6 bytes). Until 2026-10-18 these
+    went out as 0x32a, whose handler 0x511620 is ETCInfo: a fixed 0x8a bytes (u32 @6 kept at net +0x3e828), so the
+    conditions never reached the window (decomp, ../DriftCityEU-decomp). login.py sends an empty 0x32a at login.
 License Ownership Reward Money (client texts 11703 / 11712-11715, its dialog 3010000 only shows the amounts): once a
     month, on or after the reset day (RESET_DAY = content flag Etc.NewLicenseSystemnDay, the day the dialog names), the
     first time the player is in the Driver Dome (position state 3: login there, 0xa2 SaveCarPos with state 3, or the
@@ -338,7 +341,7 @@ async def check(session, p, notify=True):
         session.log.note(f'licenses gained: {[(i, t.licenses[i]["name"]) for i in gained]}')
         if notify:
             for lid in gained:
-                send(session, Frame(0x331, struct.pack('<HH', lid, 1)))
+                send(session, Frame(0x331, struct.pack('<HHH', lid, 1, 0)))
             send(session, info_frame(p))
     return gained
 
@@ -489,7 +492,7 @@ async def license_status(session, frame):
                         + struct.pack(f'<{SLOTS}H', *mounted(st)) + b''.join(struct.pack('<HHH', i, 0, 0) for i in held)))
     t = tables()
     entries = [(i, value(p, n)) for i, n in sorted(t.gc_name.items())]
-    send(session, Frame(0x32a, struct.pack('<IIHHI', act, serial, len(entries), 0, len(entries))
+    send(session, Frame(0x29c, struct.pack('<IIHHI', act, serial, len(entries), 0, len(entries))
                         + b''.join(struct.pack('<HI', i, max(0, min(v, 0xffffffff))) for i, v in entries)))
 
 

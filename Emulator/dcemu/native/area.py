@@ -33,6 +33,8 @@ Client (sizes from the type, 2011; the 2008 handlers in Server/tools/dev/dispatc
         race's moves (0x221 / 0x225 / 0x226) without racing in it: World.observers (user, 2026-10-15: a spectator
         saw nothing; it was dropped, and with the size 0x10 the rest of its frame too).
   0x239 BlockList (6), 0x07 ping (6): accepted, nothing answered.
+Undercity areas 100-103 (UC_AREAS; the client loads one after 0xff UnderCityLoad): each party has its own instance
+(game/undercity.uc_area_key), without city traffic.
 BArea (races): the area is the room id (e.g. 909, any value); moves go to everyone in the room
 (the 2008 server's PvP areas: HashedVector::Scan<PvpMove>, no distance).
   0x238 SetAreaMap (0x2c, sent by the room owner at the start): u16 map (track number), u16 max
@@ -69,6 +71,7 @@ from .city_traffic import frames
 from .race import feed
 
 AREAS = 100
+UC_AREAS = range(100, 104)  # the Undercity (Moon Palace .. Oros, client 0x765950): one instance per party, no traffic
 MOVE_RANGE = 300.0          # metres: BS_AreaDispatch move relay (MoveInArea, 0x43960000)
 CAST_RANGE = 320.0          # metres: CastTask (0x43a00000)
 KEEPALIVE_SECONDS = 3
@@ -175,16 +178,21 @@ def enter_area(session, p):
     serial, = struct.unpack_from('<H', p)
     name = read_wstr(p, 2, 42)
     area, group, local = struct.unpack_from('<iii', p, 0x2c)
-    if area < 0 or (area >= AREAS and not world_of(session).pvp):
+    uc = area in UC_AREAS and not world_of(session).pvp
+    if area < 0 or (area >= AREAS and not world_of(session).pvp and not uc):
         session.log.note(f'enter area {area}: no such area')
         return
     car = car_of(session) or session.state.setdefault('car', Car(session, serial, name))
     car.serial, car.name = serial, name
     if group >= 0:
         car.group = group
-    world_of(session).enter(car, area)
-    session.log.note(f'{name!r} (serial {serial}) enters area {area}, group {group}')
-    if session.service == 'area' and context.city_traffic:
+    key = area
+    if uc:                                      # the Undercity: the party's own instance (game/undercity.py)
+        from .game.undercity import uc_area_key
+        key = uc_area_key(serial, area)
+    world_of(session).enter(car, key)
+    session.log.note(f'{name!r} (serial {serial}) enters area {area}, group {group}' + (f' ({key})' if uc else ''))
+    if session.service == 'area' and context.city_traffic and not uc:
         context.city_traffic.touch(area)
     session.to_client(Frame(0x233, struct.pack('<iiII', area, 1, local & 0xffffffff, tick()) + bytes(4)))
 

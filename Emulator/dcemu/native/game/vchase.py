@@ -17,7 +17,7 @@ city (not Mitro City, city 5; not in a chase: client 0x601cf0, texts 11144 / 109
     %dvs%d Waiting Players : %d"), also sent to every waiting player when the count changes.
 0x011e WaitCancel (empty) -> 0x011f (u32 0; 1 adds text 10943: sent to the other party members).
 When 2 x mode are waiting in one city and channel the match starts (parties kept together):
-0x0122 ChasingBattleStart (u32 mode, u32 0, u32 seconds (4:4 300, 8:8 600; the HUD clock, [net+0x154]+0x3c), u32 n,
+0x0122 ChasingBattleStart (u32 mode, u32 0 (not read), u32 seconds (4:4 300, 8:8 600; the HUD clock, [net+0x154]+0x3c), u32 n,
     n x 0x56: u32 serial, u32 team 0 / 1, u32 role (1 HUV, 2 next HUV, 0 chaser: texts VC_HUVNow / VC_HUVNext /
     VC_HUV_PVP), f32 HP shown, f32 max HP, u32 0, u32 HUV id (the model the HUV gets, 0x73be70 -> 0x5e2130), u32 0,
     u32 0, wchar[25] name) (0x5262b0: the 0x84-byte records at [net+0x3d584]: +0 score, +4 serial, +8 team, +0xc
@@ -27,16 +27,18 @@ When 2 x mode are waiting in one city and channel the match starts (parties kept
 In the match (client state 3):
 0x0123 ChasingBattleHit (u32 own serial, u32 target, u32 target team, f32 damage, i32 critical; 0x486690, only for a
     collision with a HUV (role 1) of the other team while not a HUV oneself) -> 0x0124 HitAck to all (u32 attacker,
-    u32 target, u32 target team, f32 damage added, i32 critical (effect), i32 caught (effect), u32 team 0 score,
-    u32 team 1 score, u32 attacker's score; 0x51ed00: the target's damage + the value, its boost refilled).
+    u32 target, u32 target team (not read), f32 damage added, i32 critical (> 0: an effect), i32 caught (1: the
+    attacker's catch effect 0x6b4fc0, as 0xc15 HuvHit shows when one's own hit empties a HUV), u32 team 0 score,
+    u32 team 1 score, u32 attacker's score; 0x51ed00: the target's damage + the value, its boost refilled; the
+    effects only for the attacker).
 0x012a (empty) from the current HUV: it hit a traffic car (once a car, 0x488xxx) -> +3 points, 5 % HP back.
 0x0120 (empty) from the current HUV every 10 s while its team's next HUV is 1500 m or more away (0x7469b1) -> 5 %.
 0x0129 Score (u32 serial, f32 damage added (< 0 heals; the client keeps it >= 0), u32 its score, u32 team 0, u32
     team 1; 0x51f020): the HP drain (5 % every 10 s for each HUV) and the two above.
-0x0127 HuvChange (u32 team, u32 old HUV (role 4, a chaser again 3 s later), u32 new HUV (role 3, the HUV 1.5 s later,
+0x0127 HuvChange (u32 team (not read), u32 old HUV (role 4, a chaser again 3 s later), u32 new HUV (role 3, the HUV 1.5 s later,
     text 10975, damage 0), u32 next HUV (role 2, text 10971), f32 HP shown, f32 max HP, u32 0, u32 HUV id; 0x51f200):
     when a HUV's HP is gone (caught: the attacker +20 points; or drained).
-0x0128 ChasingBattleEnd (u32 0, i32 result 1 won / 0 lost / -1 stopped (VC_Cancel_Msg), i64 Mito, u32 exp, 4 x i32 item
+0x0128 ChasingBattleEnd (u32 0 (not read), i32 result 1 won / 0 lost / -1 stopped (VC_Cancel_Msg), i64 Mito, u32 exp, 4 x i32 item
     TableIdx (-1 none), 4 x u32 counts; 0x524c50: texts 10973 / 10974, the result window 0x56c020; the client adds
     the Mito to its money itself, so no 0x8a here). At the time limit: the team with more points wins (a draw: both
     lose). It must come before the client's own clock reaches 0 (that clock is also the race clock: below 0 the race

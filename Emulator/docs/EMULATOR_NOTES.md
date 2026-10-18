@@ -8,6 +8,78 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 19b (2026-10-18): the Undercity, with a test mode for one player
+
+User: "Now start implementing Undercity gamemode" (the JP wiki page ゲームモード/アンダーシティ), "Make a test mode that
+will make the mode doable by 1 person". Nothing of it was in the emulator (no 0xfa / 0xfc / 0xbe ever logged).
+- **Source of the rules: the 2008 server.** ZoneServer.pdb has the whole mode (PacketParser::Cmd_UnderCity* /
+  Cmd_UCPatrol* / Cmd_UCBossPatrol* / Cmd_Huv*, BS_Party::OnTick 0x5dded0, UnderChaseEnd 0x5dd3f0,
+  Pre/PostUnderCityResult, the reward tables s_UCItemTable / s_UCNewItemTable at 0x6fef28 / 0x6ff068), decompiled with the
+  decomp's Ghidra zone session (`GQ_PORT=18492 tools/gq`). The 2011 client speaks the same protocol: every message has
+  the 2008 size (checked against the decomp's senders and handlers) except 0x100 UnderCityResult (2011: 0x5c-byte units
+  with two new bytes @0x5a / @0x5b, client 0x764b50) and 0xbcc (2011 handler 0x518310: flag @2 = text 11114 "Undercity
+  120% item has been applied.", exp @6, Mito @0xa). The 2008 numbers match the wiki: fees 600 / 1200 / 2100 (4200
+  Oros), Mission 2 times 2:20 / 2:30 / 2:40 and barrier HUBs 5 / 4 / 3 for 2 players up to 15 / 12 / 9 for 4, 4 HUV
+  waves + the boss, the class shown at most A (client 0x6b1e20 clamps 1-4, so S shows as A, as the wiki says), the S
+  pattern near 2150 s (one of the six marks). All layouts and rules: `dcemu/native/game/undercity.py` docstring.
+- **The client's side** (EU exe): the Undercity manager at [App + 0x164] (0x764xxx-0x769xxx) drives the stages itself
+  (0x7677b0) and sends 0xfa with them; after 0xff UnderCityLoad it loads scene 0x13 with area 100 + city - 1
+  (0x765950). The HUBs are client objects (the server counts places 0-99); the HUV waves come from the client's own list
+  (0xbe HuvReq, 0x767530); each member's client drives the HUVs given to it in 0xbf (0x512630 spawns them).
+- **Entering:** Tatiana's dialog refuses a party of fewer than 2 in the client (0x6b4xxx, UC_Err_PlayTogether). The
+  client's chat command `/uc` + city letter (`/ucm` Moon Palace, `/uck` Koinonia, `/ucc` Cras, `/uco` Oros; parser
+  0x5e43e0) sends the same 0xfc without that check, and it is on the client's list of commands every account may use.
+- **Test mode** (`emulator.ini [undercity] test = 1`, or the GM chat command `gmuctest on`): `/ucm` alone enters (free,
+  as the 2008 solo party), and Mission 2 has a 2-player party's barrier HUBs. Without the test mode a lone 0xfc gets
+  UC_Err_PlayTogether (the wiki's rule; the 2008 server let a party of one in).
+- Emulator changes: `game/undercity.py` (new); `area.py` takes areas 100-103 (UC_AREAS), one instance per party
+  (`uc_area_key`), no city traffic there (area_city(100) would have started Taipei's); `commands.py` knows the
+  Undercity C>S sizes (the client buffers them, several per frame) and HuvReq's length; no city instant offers while
+  in the Undercity; `[undercity]` in emulator.ini; GM `gmuctest`.
+- Guesses / not done: the Undercity 120% item (i_n_00064) adds 20 % to Undercity exp / Mito and one is used up at the
+  result (when the real server used it up is not known); the two new result bytes are sent 0; a member leaving
+  mid-run just loses his HUVs (2008 handed them to another member); Undercity Direct (Korea only) not done.
+- Script-tested (stub session and DB, `uc_test.py` in the session scratchpad): a whole solo run in the test mode:
+  0xfc -> party + 0xff, stages 1 / 4, Mission 1 (100 HUBs, 10 red: 200 exp, 250 Mito), Mission 2 with one timeout
+  (0xbc9, try 2: 4 HUBs, 150 s) and the main HUB, five HUV releases, the middle reward, the boss, 0xc1 and a 386-byte
+  0x100. Every frame of that run was walked through the original client handlers (decomp harness): all consumed
+  exactly. **Not yet confirmed in game** (nothing of the Undercity has been played).
+
+## Session 19 (2026-10-18): message sizes checked against the decompilation
+
+User: "Check the decompilation project and see if there are any parts of the emulator that can be improved". The
+decomp (`../DriftCityEU-decomp`, private) now has every S>C handler and 402 of the 423 C>S senders ported and checked
+against the original. Its unicorn harness (`tools/autotest.py` World) can run any **original** handler on a packet,
+so every distinct S>C frame in all 317 `logs/*.msgs.txt` (3 samples per type and length) was walked the way the client's
+PacketAnalyze (0x813870) does: each handler returns the bytes it consumed, and the next message starts there. For the
+handlers the harness cannot finish (C++ / large UI paths), the return expressions of the ports were used. Result: 1807
+frames correct; the rest below. The client agrees: `Client US/DriftCityUS_Log/PacketAnalyzeLogC022/C024.txt` (today
+08:37 / 08:48) hold "Wrong Command: 0" exactly when the emulator sent an empty 0x3f6. Note: the client compares a
+handler's size with the whole frame length, so a lone message 2 bytes short goes unnoticed (it reads 2 bytes past).
+- **0x3f6 GetCouponStampListAck**, empty list: the handler takes `(n - 1) x 12 + 0x12` as a u16 = 6 bytes for n = 0;
+  the 12 padding bytes ("the client reads one entry even for n = 0", wrong) were read as type 0. Fixed (coupons.py).
+- **0xf3 PartyJoinResult**: `(n - 1) x 0x3e + 0x88` = exactly n units; the empty unit after them was read as type 0
+  (the old note had read the formula as 0x88 + n x 0x3e). Fixed (social.party_state).
+- **0x331 NewLicenseNoti**: the handler (0x50e7e0) takes 8 bytes; we sent 6. Now u16 id, u16 1, u16 0 (licenses.py).
+- **0x29a another player's licenses**: the conditions went out as 0x32a, but 0x32a's handler (0x511620) is ETCInfo,
+  a fixed 0x8a bytes (it keeps u32 @6, here the serial, at net +0x3e828); the handler named in the docstring, 0x511510,
+  is **0x29c LCondStatusAck**, whose layout is exactly what we built ((n + 3) x 6 bytes). Now sent as 0x29c. The
+  license window of another player never had its conditions before.
+- Virtual HUV guesses settled (see session 18 below): 0x124 @0xa, 0x127 @2, 0x128 @2, 0x122 @6 are never read;
+  0x124 @0x16 == 1 is the attacker's catch effect. The 0x128 handler also counts the daily-mission events 0x1a-0x1f
+  on the client by itself (nothing for the server).
+- The area walker's command sizes (area.SIZES) match the decomp's senders for every type that has one.
+- Checked and fine: 0x17 server list (state 1 falls through to the load texts 10762..; 100 / 200 / 300 are the
+  states with their own texts 10759 / 10758 / 10760), 0x1a2 (fixed in session 15), 0x1a7 / 0xe1b (shared handler
+  0x50f060, 10 bytes).
+- Lead, not done: **C>S 0x1b5** (5 x u32; sender 0x7f0c90, no Dev Ed name) is sent in pairs after a 0x89 NotifyEvent
+  and has no handler here ("no handler for 0x01b5"). Its callers (e.g. 0x728xxx) swap two items' slots: u32 item A
+  InvenIdx, u32 A's slot (100+ / 0x6a+), u32 item B InvenIdx, u32 B's slot, u32 kind.
+- The two checking scripts are in the session scratchpad (they need the private decomp, so they are not in this repo).
+Frames script-tested through the original handlers (harness): 0x3f6 n = 0 / 2, 0xf3 n = 1 / 3, 0x331, 0x29c n = 0 /
+40 all consumed exactly. **Not yet confirmed in game** (party join, license gained, another player's license window,
+login without coupon stamps: the client's PacketAnalyzeLog should stay empty).
+
 ## Session 18 hand-off (2026-10-18 ~09:10)
 
 **In short:** drift shop items (Manufacturing Enhancer, Fuel Booster checked, DriftBooster sold, harvest rows hidden:
@@ -82,6 +154,10 @@ Client addresses in this entry are of the EU exe (../DriftCityEU-decomp, the sam
     winners: Undercity 120% x1, N / S Mittron Enhancers by city (10 / 30 / 1 / 3), Team ROO 10 HUV Call Units.
   - Guesses: 0x124 @0xa (sent: the target's team) and @0x16 (sent: 1 when caught), 0x127 @2 (the team), 0x122 @6 and
     the entry's +0x14 / +0x1c / +0x20 (0), 0x128 @2 (0), which team score field is which (team 0 first).
+    *Settled from the decomp (session 19):* 0x124 @0xa, 0x127 @2, 0x128 @2 and 0x122 @6 are never read by the
+    client; 0x124 @0x16 == 1 is the attacker's catch effect (0x6b4fc0), so "1 when caught" is right. Still open:
+    0x122 entry +0x14 (kept at the chaser's +0x1c, like 0x127 @0x1a) and +0x1c / +0x20 (chaser +0x40 / +0x44),
+    and which score setter (0x56b650 @0x1a / 0x56b680 @0x1e) is which team on screen.
   - **Test mode, two players** ([vchase] test = 1, or GM chat `gmvchasetest on` by one of them): a match starts with
     two waiting in the same city and channel, one a team, one HUV at a time (with one HUV per team both would be
     HUVs and nobody could ram); when it is out the other player becomes the HUV of his team.

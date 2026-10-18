@@ -34,8 +34,9 @@ Parties (BS_Party; in memory only, as in the 2008 server):
        (The first version had no 0xf0 and treated 0xf7 as 0xf2: user 2026-10-13, "party request not
        being accepted".)
   -> 0xf3 PartyJoinResult to every member: u32 result 1, i32 party id, wchar[30] name, u32 n @0x46, n x
-       (u32 serial, member info) @0x4a; the client's handler 0x526170 takes 0x88 + n x 0x3e bytes, so one
-       empty unit follows.
+       (u32 serial, member info) @0x4a; the client's handler 0x526170 takes (n - 1) x 0x3e + 0x88 = 0x4a + n x
+       0x3e bytes, nothing after the units (an empty unit sent after them until 2026-10-18 was read as a message
+       of type 0).
   0xf1 PartyReject (serial, ticket, member info, wchar[100]): passed on to the inviter.
   0xf4 PartyLeave / 0xf5 PartyBanish (u32 serial; banish by the leader): 0xf4 (serial) to the members;
        a party of one is dissolved. Leaving the game leaves the party.
@@ -232,7 +233,7 @@ def party_state(party):
     units = b''.join(struct.pack('<I', s.state.get('serial', 0)) + member_info(s) for s in party.members)
     leader = party.members[0].state['player'].char.name
     return Frame(0xf3, struct.pack('<Ii', 1, party.id) + wstr(f"{leader}'s party", 60)
-                 + struct.pack('<I', len(party.members)) + units + bytes(4 + MEMBER_2011))
+                 + struct.pack('<I', len(party.members)) + units)
 
 
 def by_serial(serial):

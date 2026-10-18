@@ -104,6 +104,9 @@ def native_setup(cp):
             raw = vc.get(k, '').strip()
             if raw:
                 context.vchase[k] = raw not in ('0', 'no', 'off') if isinstance(v, bool) else float(raw)
+    if cp.has_section('undercity'):
+        uc = cp['undercity']
+        context.undercity['test'] = uc.get('test', '0').strip() not in ('0', 'no', 'off', '')
     if cp.has_section('gotcha'):
         g = cp['gotcha']
         context.gotcha_enabled = g.get('enabled', '1').strip() == '1'

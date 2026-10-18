@@ -14,9 +14,11 @@ Counters:
   UpdateCouponParam (u32 CType, f32 value) after 0x3f4 and when they change.
 Stamps (SKID_COUPONSTAMP_TB CTYPE / STAMPIDX = the row's DB type / index, STATE 1 marked, 2 opened, 3 coupon
 taken):
-  0x3f5 GetCouponStampList -> 0x3f6 (u32 n, n x XiStrCoupon: i32 type, u32 index, u32 state; the client
-       reads one entry even for n = 0). The client then marks every coupon whose counter has reached its
-       target (handler 0x51bbf0 -> 0x7f5b80):
+  0x3f5 GetCouponStampList -> 0x3f6 (u32 n, n x XiStrCoupon: i32 type, u32 index, u32 state; the client's
+       handler 0x51bbf0 takes (n - 1) x 12 + 0x12 bytes as a u16, so 6 for n = 0: nothing follows an empty list.
+       12 padding bytes there were read as a message of type 0, "Wrong Command: 0" in the client's
+       PacketAnalyzeLog, until 2026-10-18). The client then marks every coupon whose counter has reached its
+       target (0x51bbf0 -> 0x7f5b80):
   0x3f7 MarkCoupon (u32 type, i32 index) -> 0x3f8 (the same): a new stamp, state 1 (20064 if it exists, or for
        the server's own counters DUEL_RM / RUSH_TRY if short; the client's counters are its decision: it sends
        0x3f7 before the 0x3f2 with the counter that reached the target).
@@ -134,7 +136,7 @@ async def stamp_list(session, frame):
             c = by_db(db_type, db_idx)
             if c:
                 entries.append(struct.pack('<iII', c.type, c.index, state))
-    send(session, Frame(0x3f6, struct.pack('<I', len(entries)) + (b''.join(entries) or bytes(12))))
+    send(session, Frame(0x3f6, struct.pack('<I', len(entries)) + b''.join(entries)))
 
 
 @on(SVC, C2S, 0x3f7)

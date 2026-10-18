@@ -172,6 +172,8 @@ async def city_offers(session):
             # registered for or in a Virtual HUV (user, 2026-10-18: an offer that came as the Tatiana Call Unit was
             # used kept its window with the UI file's placeholder text: the 0x119 handler 0x5846b0 resets the others)
             busy.append('vchase')
+        if session.state.get('undercity'):    # in the Undercity: no instant missions there (the wiki)
+            busy.append('undercity')
         if not busy and not in_field(session):       # not in the Driver Dome (user, 2026-10-15)
             busy = ['not in the field']
         if busy or p.char.pos_state < IN_CITY:

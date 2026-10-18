@@ -27,6 +27,14 @@ def _load():
 SIZES = _load()
 SIZES[0x16] = ('BS_PktUserAuthAck', 0x4e)     # Cmd_UserAuth's ack; its server list follows
 SIZES.setdefault(0x3e1, ('BS_PktInstantStartAck', 6))
+# Undercity commands the client sends (2011 senders, ../DriftCityEU-decomp src/re/net_send.c; = the 2008 BS_Pkt sizes):
+# the client buffers them, so several can come in one frame (native/game/undercity.py)
+for _t, _n, _size in ((0xfa, 'BS_PktUnderCityStage', 0xe), (0x101, 'BS_PktExitUnderCity', 2),
+                      (0xbb8, 'BS_PktUCPatrolStart', 0xa), (0xbba, 'BS_PktUCPatrolGiveUp', 6),
+                      (0xbbc, 'BS_PktUCPatrolGoalPlace', 0xe), (0xbc2, 'BS_PktUCBossPatrolStart', 0xa),
+                      (0xbc4, 'BS_PktUCBossPatrolGiveUp', 6), (0xbc6, 'BS_PktUCBossPatrolGoalPlace', 0x12),
+                      (0xc2, 'BS_PktHuvParam', 0x12)):
+    SIZES.setdefault(_t, (_n, _size))
 
 # type -> size from the command bytes (b starts at the type), for 2008 commands with a count
 VARIABLE = {
@@ -41,6 +49,7 @@ VARIABLE = {
     0x1a5: lambda b: 0x06 + _u32(b, 2) * 0x24,  # BS_PktItemDataList: ItemNum @2, XiStrIData (sent after 0x191)
     0x1ce: lambda b: 0xb2 + _u32(b, 0xae) * 0x35,  # BS_PktRoomState: m_Size @0xae, Unit (53)
     0x1d0: lambda b: 0x12 + _u32(b, 0xa) * 0x68,   # BS_PktRoomListAck: m_Size @0xa, XiPvpRoomInfo (104)
+    0xbe: lambda b: 0x0a + _u32(b, 6) * 0xe,       # BS_PktHuvReq (C>S): m_Size @6, XiHuvInfo (14)
 }
 
 

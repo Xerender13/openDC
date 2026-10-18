@@ -166,6 +166,8 @@ ItemClient.tdf (column 8 = 0 everywhere, same levels): no real EU grade data exi
   when one runs (Proton's steam.exe hung). Both: the user started both clients afterwards.
 
 **Open (next session):**
+0. The Undercity (session 19b, `game/undercity.py`): play it in game, alone with `gmuctest on` (or `[undercity] test =
+   1`) and `/ucm` in a Moon Palace channel, then with a real party at Tatiana. Not confirmed in game at all yet.
 1. Confirm the session 18 items above in game (the drift shop rows need a client restart).
 2. Virtual HUV: a real 4:4 / 8:8 needs 8 / 16 players (only the 2-player test was played); a party registering
    together (0x11c / 0x11d) is untested; rewards are our amounts (`[vchase] win_rate / lose_rate`); guessed fields
