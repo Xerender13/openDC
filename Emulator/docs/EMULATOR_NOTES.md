@@ -8,6 +8,22 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 19 hand-off (2026-10-18 ~13:30)
+
+**In short:** (1) the decompilation (`../DriftCityEU-decomp`, private, the user's) now has every S>C handler; running
+the client's *original* handlers on every frame in our logs found four wrong message layouts, all fixed (session 19).
+(2) The Undercity, ported from the 2008 server (whose PDB has the whole mode) with a one-player test mode (session 19b).
+Neither is confirmed in game. State and the open list: `docs/HANDOVER.md` §5 (item 0 = play the Undercity).
+
+**How to test the Undercity alone:** a Moon Palace channel, GM chat `gmuctest on`, then chat `/ucm` (the client's own
+command, open to every account; Tatiana's dialog refuses a party of one in the client). If it breaks: the newest
+`logs/*.msgs.txt` (`grep -n "undercity" `) and the client's `DriftCityUS_Log/PacketAnalyzeLog*.txt`.
+
+**Where things are for the next Undercity work:** the 2008 server functions are listed in the 19b entry; decompile them
+with the decomp's read-only zone Ghidra session (`tools/gq-zone.sh &`, then `GQ_PORT=18492 tools/gq decomp
+BS_Party::OnTick`; `tools/gq quit` stops it, ~3 GB of memory). The client side is in the decomp's `raw/src/seg_0076.c`
+(the manager, 0x764xxx-0x769xxx) and `src/re/msg_auto*.c` (the handlers).
+
 ## Session 19b (2026-10-18): the Undercity, with a test mode for one player
 
 User: "Now start implementing Undercity gamemode" (the JP wiki page ゲームモード/アンダーシティ), "Make a test mode that

@@ -100,14 +100,14 @@ that change client files are in git, so those changes can be made again on anoth
 
 ## 5. State at the handover
 
-Updated 2026-10-18 ~09:10 (end of session 18; committed and pushed in this session). Details: the "Session 18" entry
-at the top of `docs/EMULATOR_NOTES.md` (its hand-off summary first), then "Session 17".
+Updated 2026-10-18 ~13:30 (end of session 19; committed and pushed, 3293ef0 + this note). Details: the "Session 19
+hand-off" at the top of `docs/EMULATOR_NOTES.md`, then "Session 19b" (Undercity), "Session 19" (size check), "Session 18".
 
 **Running state:** emulator and DB running (`./launch.sh restart-emu` after code changes), emulator.ini
 `[nation] allow = all` (US and EU clients both log in; the user tests a decompilation project of the EU exe in
 `../DriftCityEU-decomp`, not part of this repo: its proxy `version.dll` is in `Client US/` and loads when the client is
 started through Steam, whose launch options set `WINEDLLOVERRIDES="version=n,b"`; it replaces ~585 client functions,
-the VHUV handlers too). `[partypatrol] test = 0`, `[vchase] test = 0`, `[mita500] enabled = 0` (Mita bottles off for
+the VHUV handlers too). `[partypatrol] test = 0`, `[vchase] test = 0`, `[undercity] test = 0`, `[mita500] enabled = 0` (Mita bottles off for
 now, user).
 
 **Confirmed in game on 2026-10-18:**
@@ -151,6 +151,17 @@ now, user).
 **Reference data the user brought (scratchpad only, not kept in the project):** an older EU Init.agt (7-Zip, 24
 xlt from 2009-12; other car stats and prices: **the user wants the US stats and costs kept**) and an older EU
 ItemClient.tdf (column 8 = 0 everywhere, same levels): no real EU grade data exists, the rule above is the user's.
+
+**Done in session 19, not yet confirmed in game:**
+- **The Undercity** (`dcemu/native/game/undercity.py`, new): the 2008 server's rules in the 2011 layouts (entry at
+  Tatiana or `/ucm` `/uck` `/ucc` `/uco`, the four missions, HUV waves + BossHUV, rating, rewards); areas 100-103 one
+  instance per party (`area.py`). Test mode alone: GM `gmuctest on` or `[undercity] test = 1`. Only script-tested.
+- Message fixes from checking logged frames against the client's own handlers (decomp harness): 0x3f6 empty coupon
+  stamp list (was "Wrong Command: 0" in the client's PacketAnalyzeLog at every login), 0xf3 party join (an extra empty
+  unit), 0x331 license gained (2 bytes short), another player's license window (conditions now 0x29c, were 0x32a).
+- Tools for this live only in the session scratchpad (they need the private decomp): `size_check.py` (walks every
+  logged S>C frame through the original handlers), `uc_test.py` (the Undercity script test). Rerun the size check
+  after protocol work: it found what the client logs only as "Wrong Command" / "Wrong Packet Size".
 
 **Done in session 18, not yet confirmed in game:**
 - Manufacturing Enhancer (i_n_createup): +20 % per try while held, one used up (alchemy.enhancer).
