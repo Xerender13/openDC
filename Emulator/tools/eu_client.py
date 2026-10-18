@@ -74,6 +74,20 @@ tools/global_text.py "../Client EU" --column EU_eng set 11874=kph (Patch.006, a 
 -> "by 6 km/h"; 451 rows: speed up, party speed, booster max speed, the battle / chasing speed assists; the three
 test options of value 0 stay).
 
+Driving physics (user, 2026-10-18: a toggle for the new model; the EU client drives on the old one): the client reads
+GlobalContent NEWVEHICLESTAT (Patch.000; Value_US 1, the EU columns 0) whenever it loads a car: 1 = Vehicle/
+LevelModifier.dat with 0x641 rows per stat curve and caps 2500 / 1200 / 1600, 0 = oldLevelModifier.dat, 0x3e9 rows, cap
+999 (0x484840, 0x47d7d0, 0x48xxxx); both files are in vehicles_eueng.agt. The server cannot switch it, so `physics new|old`
+(part of setup, without a word: emulator.ini [nation] eu.new_physics) writes it into the four EU columns; with the new
+model the stat window's labels 21769-21772 come from GlobalText, untranslated (Korean) in the EU column: their US
+English texts are written into EU_eng. Restart the EU client after it.
+
+Channel battle (user, 2026-10-18): the EU Semi-channels without level limits, Semi-channel 1 up to V3 and 2 up to V6
+(emulator.ini [cbattle] eu.semi.N = max level, min grade, max grade; the server sends the max grade in each channel's
+record, the client checks only GlobalContent MinChBattleGrade / MinSemi<N>ChBattleGrade itself). `cbattle` (part of
+setup) writes those minimum grades (EU columns: MinChBattleGrade from eu.main, MinSemi<N> from eu.semi.N) and the EU_eng
+texts 11409 (the Semi-channels' tax) and 11411 (their rules).
+
 The client dir defaults to ../Client EU (../Client US for `us`).
 
 usage: python3 Emulator/tools/eu_client.py [client dir] setup [de|eng|fr|es]   (default eng)
@@ -83,6 +97,8 @@ usage: python3 Emulator/tools/eu_client.py [client dir] setup [de|eng|fr|es]   (
        python3 Emulator/tools/eu_client.py [client dir] grades        part tooltips with the required V grade
        python3 Emulator/tools/eu_client.py [client dir] kph           the HUD speed labels KPH instead of MPH
        python3 Emulator/tools/eu_client.py [client dir] assists       the assist texts (converts, options) in km/h
+       python3 Emulator/tools/eu_client.py [client dir] physics [new|old]   the driving physics model (default: emulator.ini)
+       python3 Emulator/tools/eu_client.py [client dir] cbattle       the channel battle grades and texts from emulator.ini
        python3 Emulator/tools/eu_client.py [client dir] status
        python3 Emulator/tools/eu_client.py [client dir] reset         the original exe back (the data folder stays)
 """
@@ -494,6 +510,103 @@ def set_assist_kph(client):
         print(f'{folder}/World.agt: Assist_Client.tdf: {len(changes)} texts in km/h')
 
 
+EU_GC_COLUMNS = ('Value_EU_de', 'Value_EU_eng', 'Value_EU_fr', 'Value_EU_es')
+PHYSICS_TEXTS = {'21769': 'Maximum Speed Increase', '21770': 'Booster Charging Speed',
+                 '21771': 'Speed Decrease After Crash', '21772': 'Boost Time'}
+INI = os.path.join(HERE, '..', 'emulator.ini')
+
+
+def ini():
+    import configparser
+    cp = configparser.ConfigParser(inline_comment_prefixes=(';', '#'))
+    cp.read(INI)
+    return cp
+
+
+def set_physics(client, new=None):
+    """GlobalContent NEWVEHICLESTAT of the EU columns: 1 the new driving model, 0 the old (EU) one."""
+    import global_content
+    import global_text
+    if new is None:
+        new = ini().get('nation', 'eu.new_physics', fallback='0').strip() not in ('0', 'no', 'off', '')
+    for col in EU_GC_COLUMNS:
+        global_content.set_values(client, col, {'NEWVEHICLESTAT': int(new)})
+    if new:
+        global_text.set_texts(client, 'EU_eng', PHYSICS_TEXTS)
+    print(f'EU driving physics: {"new" if new else "old"} model (NEWVEHICLESTAT {int(new)}); restart the EU client')
+
+
+def cbattle_rules():
+    """emulator.ini [cbattle] eu.main and eu.semi.N -> (main (max level, min grade, max grade), {N: (...)})."""
+    cp = ini()
+    sec = cp['cbattle'] if cp.has_section('cbattle') else {}
+    nums = lambda v: tuple(int(float(x)) for x in v.replace(',', ' ').split())[:3]
+    main = nums(sec.get('eu.main', '0, 6, 0'))
+    semi = {int(k[8:]): nums(v) for k, v in sec.items() if k.startswith('eu.semi.') and k[8:].isdigit()}
+    return main, semi or {1: (0, 1, 3), 2: (0, 1, 6)}
+
+
+def set_cbattle(client):
+    """The EU client's own channel battle checks (minimum car grades) and its Semi-channel texts, as emulator.ini."""
+    import global_content
+    import global_text
+    main, semi = cbattle_rules()
+    values = {'MinChBattleGrade': main[1]}
+    for n in range(1, 11):
+        values[f'MinSemi{n}ChBattleGrade'] = semi[n][1] if n in semi else 0
+    for col in EU_GC_COLUMNS:
+        global_content.set_values(client, col, values)
+
+    def limits(r):
+        lvl, low, high = r
+        parts = [f'V{low or 1}-V{high}' if high else (f'V{low} and up' if low else 'all vehicles'),
+                 f'Lv {lvl} or lower' if lvl else 'no level limit']
+        return ', '.join(parts)
+    rules = '\n'.join(f'Semi-channel {n}: {limits(semi[n])}' for n in sorted(semi))
+    taxes = ', '.join(str(n) for n in sorted(semi))
+    global_text.set_texts(client, 'EU_eng', {
+        '11411': f'"{rules}"',
+        '11409': f'"Semi-channel {taxes}: Mittron charging fees <COLOR #FFC38B1A> 1 %</COLOR>\n'
+                 f'<COLOR #FF407F94>The charging fees apply to all players.</COLOR>"'})
+    set_semi_buttons(client, semi)
+    print('EU channel battle:', rules.replace('\n', '; '))
+
+
+SEMI_BUTTON = 2020001                    # game.nui dialog 2020000: Semi-channel N's button is control 2020001 + N
+
+
+def set_semi_buttons(client, semi):
+    """Data_EU_<lang>/gameui/game.nui: only the Semi-channels the EU rules open get a button. The window's code never
+    shows or hides them (0x6a5de0 only enables / greys them, flag bits 2 / 4); the layout does: a control with a
+    <NATION> entry (its position) is drawn, one without is not (the US layout has three: Semi-channels 1-3). Built from
+    the original layout (client_backup/game_<folder>.nui.orig), so a Semi-channel added back gets its button again."""
+    import re
+    for folder in FOLDER.values():
+        path = os.path.join(client, folder, 'gameui', 'game.nui')
+        if not os.path.exists(path):
+            continue
+        backup = os.path.join(HERE, '..', 'client_backup', f'game_{folder}.nui.orig')
+        if not os.path.exists(backup):
+            shutil.copy2(path, backup)
+        orig, d = open(backup, 'rb').read(), open(path, 'rb').read()
+        shown = []
+        for n in range(1, 11):
+            pat = re.compile(rb'<CONTROL B="%d"[^>]*>.*?</CONTROL>' % (SEMI_BUTTON + n), re.S)
+            mo, mc = pat.search(orig), pat.search(d)
+            if not mo or not mc:
+                continue
+            block = mo.group(0)
+            if n not in semi:
+                block = re.sub(rb'\s*<NATION [^>]*/>', b'', block)
+            elif b'<NATION ' in block:
+                shown.append(n)
+            d = d[:mc.start()] + block + d[mc.end():]
+        tmp = path + '.new'
+        open(tmp, 'wb').write(d)
+        os.replace(tmp, path)
+        print(f'{folder}/gameui/game.nui: Semi-channel buttons shown: {", ".join(map(str, shown)) or "none"}')
+
+
 def make_us(client):
     """Client/DriftCityUS.exe: the original unpacked exe (the backup, else DriftCityEU.exe while unchanged), nation 1,
     GameGuard class 0, the dname.chk data file check skipped."""
@@ -526,7 +639,8 @@ def main():
         client, args = args[0], args[1:]
     elif args and args[0] == 'us':
         client = os.path.join(HERE, '..', '..', 'Client US')
-    if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2', 'speedo', 'grades', 'kph', 'assists'):
+    if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2', 'speedo', 'grades', 'kph', 'assists',
+                                   'physics', 'cbattle'):
         sys.exit(__doc__)
     if args[0] == 'status':
         n = nation_of(open(os.path.join(client, EXE), 'rb').read())
@@ -557,6 +671,12 @@ def main():
         return set_kph(client)
     if args[0] == 'assists':
         return set_assist_kph(client)
+    if args[0] == 'physics':
+        if len(args) > 1 and args[1] not in ('new', 'old'):
+            sys.exit('physics [new|old]')
+        return set_physics(client, None if len(args) < 2 else args[1] == 'new')
+    if args[0] == 'cbattle':
+        return set_cbattle(client)
     if args[0] == 'reset':
         if not os.path.exists(BACKUP):
             sys.exit('no backup: the exe was never changed by this tool')
@@ -570,6 +690,8 @@ def main():
     set_grades(client)
     set_kph(client)
     set_assist_kph(client)
+    set_physics(client)
+    set_cbattle(client)
     set_nation(client, NATIONS[lang])
     set_filecheck(client, True)
     set_f2(client, True)

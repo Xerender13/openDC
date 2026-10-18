@@ -113,6 +113,30 @@ def native_setup(cp):
         context.undercity['enhancer'] = uc.get('enhancer', 'i_n_00003').strip() or 'i_n_00003'
         counts = [int(x) for x in uc.get('enhancers', '1, 1, 2, 3, 3').replace(',', ' ').split() if x.isdigit()]
         context.undercity['enhancers'] = tuple(counts) or (1, 1, 2, 3, 3)
+    if cp.has_section('cbattle'):
+        cb = cp['cbattle']
+        c = context.cbattle
+        nums = lambda v: [float(x) for x in v.replace(',', ' ').split()]
+        for k in ('channels', 'day', 'hour', 'open_minutes', 'battle_minutes', 'defence_reward', 'tax_hour', 'replays'):
+            if cb.get(k, '').strip():
+                c[k] = int(cb[k])
+        for k in ('coupon', 'test', 'major_stakes'):
+            if cb.get(k, '').strip():
+                c[k] = cb[k].strip() not in ('0', 'no', 'off')
+        if cb.get('tax_major', '').strip():
+            c['tax_major'] = float(cb['tax_major'])
+        for k in ('tax_minor', 'tax_semi'):
+            if cb.get(k, '').strip():
+                c[k] = tuple(nums(cb[k]))
+        for g in ('', 'eu.'):
+            key = g.replace('.', '_')
+            if cb.get(g + 'main', '').strip():
+                c[key + 'main'] = tuple(int(x) for x in nums(cb[g + 'main'])[:3])
+            semis = {int(k[len(g) + 5:]): tuple(int(x) for x in nums(v)[:3]) for k, v in cb.items()
+                     if k.startswith(g + 'semi.') and k[len(g) + 5:].isdigit()}
+            if semis:
+                c[key + 'semi'] = semis
+        c['channels'] = max(10, min(24, c['channels']))
     if cp.has_section('gotcha'):
         g = cp['gotcha']
         context.gotcha_enabled = g.get('enabled', '1').strip() == '1'

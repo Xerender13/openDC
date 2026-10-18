@@ -224,10 +224,10 @@ async def fuel_charge(session, frame):
     f32 efficiency, i32 sale flag; 2011 + u32 @0x32: 1 = leave the fuel dialog alone -> 0).
     Cmd_FuelChargeReq 0x5f5210: unit price = Contents.ini Main.MitronUnitPrice, factor 1 (- 0.5 with the
     Mittron Fuel Booster held: char flag 0x363, HalfMitronCharge, which also sets the sale flag; - 0.2 / 0.1
-    for owners of team channels: none here). Pay 0 asks the price. A
+    for owners of team channels: channels.fuel_discount). Pay 0 asks the price. A
     purchase needs fuel <= pay / (price x factor) + 0.1, pay <= money (else error 20121), Mitron + fuel
-    <= capacity + 1; then the money is taken and the fuel added (car and money saved at once; the 2008
-    server also paid a tax to the channel owners).
+    <= capacity + 1; then the money is taken and the fuel added (car and money saved at once) and the channel
+    owners' tax counted (channels.collect_tax).
     **Auto Fill-Up** (drift item i_automitron, category 34, 2011): the client (0x5361b0, every 2 s) sends (car, 0, 0.0,
     u32 1) when the tank is below 20 %, it holds i_automitron (opts +0x1b12, set by 0x5dd) and has Mito; again after
     10 s, after 30 s with no Mito. Its item text: refuels with 20 % discounted Mittron, only as much as the Mito
@@ -244,6 +244,9 @@ async def fuel_charge(session, frame):
     price = float(context.data.contents.get('Main.MitronUnitPrice', 15))
     from .items import FUEL_BOOSTER, holds
     factor, sale_flag = (0.5, 1) if holds(p, FUEL_BOOSTER) else (1.0, 0)
+    from .channels import collect_tax, fuel_discount
+    off, bits = fuel_discount(p)                # crews owning channels several weeks in a row (channels.py)
+    factor, sale_flag = factor - off, sale_flag | bits
     auto = len(frame.payload) >= 20 and struct.unpack_from('<I', frame.payload, 16)[0] == 1
     if auto:
         if not holds(p, AUTO_FILL_UP):
@@ -265,6 +268,7 @@ async def fuel_charge(session, frame):
         if gold == c.mito - pay:
             car.mitron += fuel
             paid, added = pay, fuel
+            collect_tax(paid)                   # the channel owners' tax (channels.py)
         c.mito = gold
     send(session, Frame(0x2d4, struct.pack('<Iqfqfffffi', car_id, paid, added, c.mito, car.mitron, price,
                                            price * factor, car.max_mitron(), car.mileage(), sale_flag)

@@ -264,11 +264,27 @@ async def game_stream(session, frame):
         reply = gm_test(session, args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
+    if cmd == 'gmcbtest':                       # gmcbtest on | off: a channel battle attack alone (channels.py)
+        from .channels import gm_test
+        reply = gm_test(session, args)
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
+    if cmd == 'gmcbattle':                      # gmcbattle now | end | owner | status (channels.py)
+        from .channels import gm_command
+        reply = await gm_command(session, args)
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
     if cmd == 'gmgate':                         # gmgate 0-7: every gate gives that reward; gmgate off
         from . import rooms
         rooms.forced_reward = int(args[0]) if args and args[0].isdigit() and int(args[0]) < rooms.REWARDS else None
         reply = (f'every gate now gives reward {rooms.forced_reward}' if rooms.forced_reward is not None
                  else 'gate rewards follow gate_rewards.txt again')
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
+    if cmd == 'gmcoin':                         # gmcoin [name or account] amount: G Coin (Hancoin) to an account
+        if len(args) == 1:
+            args = [session.state['player'].char.name] + args
+        ok, reply = await admin.command('coin', args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
     if cmd[2:] in ADMIN_COMMANDS:
@@ -378,7 +394,7 @@ async def gm(session, cmd, args):
     from .items import add_money, mod_list
     if cmd not in GM_USAGE:
         return False, (f'unknown GM command {cmd!r}: gmitem, gmlevel, gmexp, gmmoney, gmdrift, gmsets, gmgate, '
-                       f'gmpartytest, gmvchasetest, gmuctest, gm' + ', gm'.join(ADMIN_COMMANDS))
+                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcoin, gm' + ', gm'.join(ADMIN_COMMANDS))
     target = session
     if args and not args[0].lstrip('-').isdigit() and args[0] not in context.data.item_index:
         target = online(args[0])

@@ -300,5 +300,5 @@ After a practice race (no 0x1ec at all) the same screen appeared once; not looke
 2. Rewards: what the 2008 server gives for races with several players (0 for one).
 3. 0x316 ChannelOwnershipListAck (1776 -> 1787 in the client's log; not room-related).
 4. Real Match (room type 0x100, 0x1c7 RealMatchInfo 248 -> 14), observers (0x1df OBSState 405),
-   channel battles (0x35c..0x38e), BattleZoneReform = 1.
+   channel battles (0x35c..0x393: done in session 22, game/channels.py), BattleZoneReform = 1.
 5. Done in session 3: rooms and races in the native game service, native BArea (see above).

@@ -83,7 +83,8 @@ POS = 0x14                  # position in the 2011 XiCarMove
 SIZES = {0x236: 6, 0x237: 2, 0x23c: 0x22, 0x23f: 0xa,
          0x232: 0x3a, 0x234: 6, 0x21c: 10, 0x2aa: 2, 0x2ac: 2, 0x21d: 0x64, 0x2d0: 0x22, 0x239: 6,
          0x23a: 2, 0x238: 0x2c, 0x336: 0xe, 0x07: 6, 0x220: 0x52, 0x223: 0x36, 0x225: 0x84, 0x226: 0x38,
-         0x23b: 0x3c, 0x2c1: 6, 0x2be: 0x24, 0x2c3: 0x1a, 0x2bc: 0x20, 0x2c0: 2, 0x21f: 0x6c}
+         0x23b: 0x3c, 0x2c1: 6, 0x2be: 0x24, 0x2c3: 0x1a, 0x2bc: 0x20, 0x2c0: 2, 0x21f: 0x6c,
+         0x227: 0x36, 0x212: 0x1b6, 0x216: 0xa}
 CASTS = {0x2be: (0x2bd, 0x24), 0x2c3: (0x2c2, 0x1a), 0x2bc: (0x21e, 0x20)}   # agent -> client type, size
 
 
@@ -157,6 +158,17 @@ class World:
 
 
 worlds = {'area': World(), 'barea': World(pvp=True)}
+# race recorders (game/channels.py: channel battle replays): BArea area -> a callable taking (type, payload) for every
+# race command the server relays there; the client's own recorder keeps the same ones (client 0x5034xx / 0x50bxxx:
+# NetMsg handlers that pass the packet to the replay manager App+0x174 vfunc 0x34): moves 0x221, jumps 0x225,
+# objects 0x2d0, traffic hits 0x220 / 0x223, AI 0x21f, race traffic 0x21e (of one racer)
+recorders = {}
+
+
+def record(area, t, p):
+    rec = recorders.get(area)
+    if rec is not None:
+        rec(t, p)
 
 
 def near(cars, x, y, r):
@@ -237,6 +249,7 @@ def move(session, p):
         w = world_of(session)
         others = [c for c in w.cars(car.area).values() if c is not car]
         out = Frame(0x221, p + bytes(6))
+        record(car.area, 0x221, out.payload)
         for o in (others if w.pvp else near(others, *struct.unpack_from('<ff', p, POS), MOVE_RANGE)):
             o.session.to_client(out)
         for o in w.observers.get(car.area, {}).values():
@@ -246,6 +259,8 @@ def move(session, p):
     car.move = p
     car.pos = struct.unpack_from('<ff', p, POS)
     receivers = world_of(session).receivers(car)
+    if car.area in recorders:
+        record(car.area, 0x221, p + bytes(6))
     if receivers:
         out = Frame(0x221, p + bytes(6))
         for o in receivers:
@@ -273,6 +288,7 @@ def object_update(session, p):
     car = car_of(session)
     if car and car.area is not None:
         out = Frame(0x2d0, p)
+        record(car.area, 0x2d0, p)
         for o in world_of(session).cars(car.area).values():
             if o is not car:
                 o.session.to_client(out)
@@ -290,6 +306,8 @@ def relay_near(t):
         if t in (0x220, 0x223) and session.service == 'area' and context.city_traffic:
             context.city_traffic.hit(car.area, struct.unpack_from('<H', p)[0])     # Taipei's path traffic
         receivers = world_of(session).receivers(car)
+        if t != 0x226:
+            record(car.area, t, p)
         if receivers:
             out = Frame(t, p)
             for o in receivers:
@@ -436,6 +454,23 @@ def observe_mode(session, p):
 
 
 HANDLERS[0x336] = observe_mode
+
+
+def replay_data(session, p):
+    """0x227 ReplayData (char[32] replay @0, u32 @0x20 / @0x24 / @0x28, u32 offset @0x2c, u32 have @0x30; sent on the
+    race connection, client 0x78de80): the next part of a channel battle replay (game/channels.py)."""
+    from .game.channels import replay_chunk
+    replay_chunk(session, p)
+
+
+def ghost(session, p, t):
+    from .game.channels import ghost_message
+    ghost_message(session, t, p)
+
+
+HANDLERS[0x227] = replay_data
+HANDLERS[0x212] = lambda session, p: ghost(session, p, 0x212)
+HANDLERS[0x216] = lambda session, p: ghost(session, p, 0x216)
 IGNORED = {0x239, 0x07, 0x2ac}
 
 

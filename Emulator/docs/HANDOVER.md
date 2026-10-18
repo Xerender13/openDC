@@ -100,7 +100,7 @@ that change client files are in git, so those changes can be made again on anoth
 
 ## 5. State at the handover
 
-Updated 2026-10-18 ~18:40 (session 20; session 19 ended ~13:30, committed and pushed, 3293ef0 + this note). Details: the "Session 19
+Updated 2026-10-18 ~23:00 (sessions 21-22b, committed and pushed with this note; session 20 ~18:40). Details: the "Session 22b", "Session 22", "Session 21" entries, then the "Session 19
 hand-off" at the top of `docs/EMULATOR_NOTES.md`, then "Session 19b" (Undercity), "Session 19" (size check), "Session 18".
 
 **Running state:** emulator and DB running (`./launch.sh restart-emu` after code changes), emulator.ini
@@ -187,7 +187,27 @@ ItemClient.tdf (column 8 = 0 everywhere, same levels): no real EU grade data exi
   the rewritten Init_us.agt: "Invalid Files Detected."). Launcher: a second client starts without the Steam game ids
   when one runs (Proton's steam.exe hung). Both: the user started both clients afterwards.
 
+**Session 22b (2026-10-18), none confirmed in game:** main channels (flag Main.NormalCh), EU Semi buttons 1-2 only
+(game.nui), Major channel part stakes ([cbattle] major_stakes, `gmcbattle stakes`), CB spectators across rounds, round
+replays (Emulator/replays/, Replay Pass free), Ghost Battle start with the Ghost Pass / tickets.
+
+**Session 22 (2026-10-18; details: "Session 22" at the top of EMULATOR_NOTES.md), none confirmed in game:** channel
+battles (`game/channels.py`, [cbattle], test mode `gmcbtest on` + `gmcbattle now`), EU Semi-channels by V grade (EU
+client pack rewritten by `eu_client.py cbattle`), EU physics toggle (`[nation] eu.new_physics` + `eu_client.py physics`,
+not switched), `gmcoin` / gmctl `coin`. Two old unit tests in tests/test_position.py fail (stale since session 12).
+
 **Open (next session):**
+00. **Channel battles (sessions 22 / 22b) are untested in game.** Try first: `gmcbtest on`, `gmcbattle owner 4 test`,
+    `gmcbattle now 2 20`, Crew window > Channel Battle > Minor tab > channel 4 > Enter (one player attacks alone: finish
+    2 rounds). Then: the main channel tab (flag Main.NormalCh, new), EU Semi buttons 1-2 only (EU client restart),
+    spectating (Channel Battle view > Spectate), a replay of a recorded round (Replay button; Emulator/replays/; the
+    client may need more than the recorded frames: see 22b), Ghost Battle in a replay (Ghost Pass / tickets; which
+    connection 0x212 comes on is unknown), the Major channel stakes with two crews (`gmcbattle stakes on`), the tax
+    payout (daily, [cbattle] tax_hour) and the owner refuel discount. Open questions for the user: EU Semi-channel 2 as
+    V1-V6 (now) or V4-V6; whether to switch the EU physics (`[nation] eu.new_physics` + `tools/eu_client.py physics`).
+    The client's own Ready button for challengers seems to want 4 crew members (test mode queues without it).
+    `gmcoin` (G Coin) is new; the GM command reference is a Claude Doc ("openDC GM Commands", the user's artifacts).
+    tests/test_position.py has 2 stale failures (since session 12), not from these sessions.
 0. Session 20 leftovers: confirm in game the DriftBooster bought from the shop, `gmitem` parts / docking items and
    the GM replies, the EU km/h assist texts (restart the EU client), 1-3 enhancers by class; the Undercity with a
    real party at Tatiana (only solo test runs so far, `gmuctest on [1-4]`). Option parts: the server-side assist

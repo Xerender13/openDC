@@ -92,6 +92,10 @@ NEW_FLAGS = {'Etc.InventoryReform': 2, 'Main.NeoCityMainUI': 1, 'Etc.VShopSeason
              # old-layout controls the 2011 UI no longer has; 0x5baff0 used control 0xe30d7 unchecked and the client froze
              # in its crash handler on opening the battle zone (user, 2026-10-15: new character, Amateur section)
              'BattleZone.BattleZoneReform': 1,
+             # the channel battle window (UI+0x2ac, 0x6a5de0 / 0x6a3ad0): Main.NormalCh ([net+0x270] bit 7) opens the
+             # Major / Minor channel tab (without it 0x20e8 / 0x20f0 are greyed and only the Semi-channel tab shows: user,
+             # 2026-10-18), Main.SemiCh (bit 8) the Semi-channels; ChannelBattleReplay the replay items (channels.py)
+             'Main.NormalCh': 1, 'Main.SemiCh': 1, 'TeamCenter.ChannelBattleReplay': 1,
              # its section buttons (client 0x5a7530): Newbie (PvP channel 11) needs ChannelNewbie, Pro (12) ChannelPro
              # (the top bit, 0x5a77a2 js); without them both stayed locked (user, 2026-10-15). Real Match is 6.
              'BattleZone.ChannelNewbie': 1, 'BattleZone.ChannelPro': 1, 'BattleZone.Channel16X': 1,

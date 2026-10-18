@@ -294,8 +294,10 @@ class Room:
         members @0x1a6 x 63 as in 0x1be."""
         # result (client 0x52e860): 1 the state; 2 "You cannot enter the room anymore." (10030) and 3 "This room no
         # longer exists." (10031, the room cleared too) both close the spectator view
-        return Frame(0x1bf, struct.pack('<i', result) + self.head()[4:] + bytes(4) + wstr(self.name, 82) + bytes(16) + struct.pack('<4q', -1, -1, 0, 0)
-                     + bytes(124) + self.seat_bytes() + struct.pack('<I', len(self.members))
+        teams = getattr(self, 'obs_teams', None)    # a channel battle round: the crews and the round states (channels.py)
+        teams = teams() if teams else bytes(16) + struct.pack('<4q', -1, -1, 0, 0) + bytes(124)
+        return Frame(0x1bf, struct.pack('<i', result) + self.head()[4:] + bytes(4) + wstr(self.name, 82) + teams
+                     + self.seat_bytes() + struct.pack('<I', len(self.members))
                      + b''.join(m.unit() for m in self.members))
 
     def refresh_observers(self):
@@ -998,6 +1000,9 @@ def leave(session, banished=False):
                 room.racers.remove(m.serial)
             asyncio.ensure_future(progress(room))
         room.watch_start()
+    if getattr(room, 'cbattle', None) is not None:     # a channel battle room (channels.py): its channel's list
+        from .channels import room_changed
+        room_changed(room.cbattle)
     lists_changed(room.channel)
 
 
@@ -1058,6 +1063,8 @@ async def start_request(session, frame):
         return error(session, '20180')
     if m.serial != room.master:
         return error(session, '20181')
+    if getattr(room, 'no_start', False):        # channel battle rooms: the server starts their races (channels.py)
+        return
     if room.state != WAIT:
         return error(session, '20186')
     if any(not o.ready for o in room.members if o is not m):
@@ -1284,6 +1291,8 @@ async def secure_join_obs(session, frame):
 @on(SVC, C2S, 0x1e0)
 async def leave_obs(session, frame):
     unwatch(session)
+    from .channels import stop_spectating      # a channel battle spectator, also between rounds
+    stop_spectating(session)
 
 
 @on(SVC, C2S, 0x1db)
@@ -1529,3 +1538,6 @@ async def result(room):
     for s in room.observers:                    # BS_OBSRoom::SetResult
         send(s, result_frame)
     lists_changed(room.channel)
+    hook = getattr(room, 'on_result', None)     # a channel battle round (channels.race_result)
+    if hook:
+        hook(room, team_points, result_frame)

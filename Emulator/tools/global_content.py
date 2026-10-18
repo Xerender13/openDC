@@ -79,6 +79,20 @@ def main():
                 print(f'{f[3]:28} {f[col]}')
         return
     want = dict(a.split('=', 1) for a in args[1:])
+    missing = set_values(client, column, want, files, lines)
+    if missing:
+        sys.exit(f'no such key: {", ".join(missing)} (nothing written)')
+
+
+def set_values(client, column, want, files=None, lines=None):
+    """Write values {key: value} into the table's column (also for other tools) -> the keys not found (then nothing is
+    written)."""
+    want = {k: str(v) for k, v in want.items()}
+    backup = backup_of(client)
+    if lines is None:
+        files, text = load(client)
+        lines = text.split('\r\n')
+    col = lines[2].split('\t').index(column)
     for i, line in enumerate(lines):
         f = line.split('\t')
         if len(f) > col and f[3] in want:
@@ -86,7 +100,7 @@ def main():
             f[col] = want.pop(f[3])
             lines[i] = '\t'.join(f)
     if want:
-        sys.exit(f'no such key: {", ".join(want)} (nothing written)')
+        return list(want)
     if not os.path.exists(backup):
         os.makedirs(os.path.dirname(backup), exist_ok=True)
         shutil.copy2(os.path.join(client, PACK), backup)
@@ -94,6 +108,7 @@ def main():
     new = b'\xff\xfe' + '\r\n'.join(lines).encode('utf-16-le')
     write_pack(client, [(n, new if n == ENTRY else d) for n, d in files])
     print('written:', os.path.normpath(os.path.join(client, PACK)))
+    return []
 
 
 if __name__ == '__main__':

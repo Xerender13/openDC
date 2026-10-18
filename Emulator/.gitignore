@@ -26,3 +26,4 @@ server_data/tables/*
 # Database backups other than the clean one (they hold accounts and characters)
 db/*.bak
 !db/SKDBTW_clean.bak
+replays/

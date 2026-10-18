@@ -156,6 +156,36 @@ async def ban(account, valid=False):
     return account
 
 
+ACCOUNT_SQL = "SELECT MEMBERID FROM MEUSERMT WHERE MEMBERID=%s"
+COIN_ADD_SQL = """SET NOCOUNT ON;
+IF NOT EXISTS (SELECT 1 FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s)
+  INSERT INTO SKID_UNALISCOIN_TB (MEMBERID, COIN, LASTDATE) VALUES (%s, 0, GETDATE());
+UPDATE SKID_UNALISCOIN_TB SET COIN=CASE WHEN COIN+%s < 0 THEN 0 ELSE COIN+%s END, LASTACTION='GM', LASTDATE=GETDATE()
+  WHERE MEMBERID=%s;
+SELECT COIN FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s"""
+
+
+async def add_coin(name, amount):
+    """G Coin (Hancoin) of an account, by its ID or one of its characters' names, + amount (below 0 takes, never under
+    0); the account's online characters see the new balance (0x579) -> (account, balance) or (None, 0)."""
+    db = context.db
+    c = await db.row(CHAR_SQL, (db.server_id, name))
+    account = c[1] if c else None
+    if not account:
+        r = await db.row(ACCOUNT_SQL, (name,))
+        account = r[0] if r else None
+    if not account:
+        return None, 0
+    r = await db.row(COIN_ADD_SQL, (account, account, amount, amount, account, account))
+    balance = int(r[0]) if r else 0
+    from .game.login import send
+    for s in connections(account):
+        p = player_of(s)
+        if p:
+            send(s, Frame(0x579, struct.pack('<Iq', balance, p.char.mileage)))
+    return account, balance
+
+
 def who():
     return [f'{p.char.name} (account {s.state.get("member")}, level {p.char.level}, '
             f'{s.client_w.get_extra_info("peername")[0]})'
@@ -173,7 +203,7 @@ async def command(cmd, args):
     """One GM command -> (done, text). kick NAME [days] | block NAME days | unblock NAME |
     chatblock NAME minutes (0 lifts it) | ban ACCOUNT-or-NAME | unban ACCOUNT-or-NAME | who |
     item NAME ITEM-ID [count] [+LEVEL] [A|B|C [TIER]] (as the chat command gmitem) | drift NAME DRIFT-ITEM-ID [days] (as gmdrift; 0 days
-    = for good); both for a character online | realmatch open | close | in MINUTES | auto | status"""
+    = for good); both for a character online | coin NAME-or-ACCOUNT amount (G Coin) | realmatch open | close | in MINUTES | auto | status"""
     if cmd == 'who':
         names = who()
         return True, f'{len(names)} online' + ''.join('\n  ' + n for n in names)
@@ -206,11 +236,20 @@ async def command(cmd, args):
         gains.send(session, p)
         send(session, bonus_update(p))
         ok = True
+    elif cmd == 'coin':
+        try:
+            amount = int(args[1])
+        except (IndexError, ValueError):
+            return False, 'usage: coin NAME-or-ACCOUNT amount (below 0 takes G Coin)'
+        account, balance = await add_coin(name, amount)
+        if not account:
+            return False, f'no account or character {name!r}'
+        return True, f'account {account}: {amount:+d} G Coin, now {balance}'
     elif cmd in ('ban', 'unban'):
         account = await ban(name, valid=cmd == 'unban')
         return bool(account), f'{cmd} account {account}' if account else f'no account or character {name!r}'
     else:
-        return False, f'unknown command {cmd!r} (kick, block, unblock, chatblock, ban, unban, who, item, drift, realmatch)'
+        return False, f'unknown command {cmd!r} (kick, block, unblock, chatblock, ban, unban, who, item, drift, coin, realmatch)'
     return ok, f'{cmd} {name}: {"done" if ok else "no such character, or not online"}'
 
 

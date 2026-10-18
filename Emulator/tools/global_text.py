@@ -78,6 +78,20 @@ def main():
                 print(f'{f[3]:12} {f[col]!r}')
         return
     want = dict(a.split('=', 1) for a in args[1:])
+    missing = set_texts(client, column, want, records, files)
+    if missing:
+        sys.exit(f'no such key: {", ".join(missing)} (nothing written)')
+
+
+def set_texts(client, column, want, records=None, files=None):
+    """Write texts {key: text} into the pack's column (also for other tools) -> the keys not found (then nothing is
+    written)."""
+    want = dict(want)
+    backup = backup_of(client)
+    if records is None:
+        _, files = agt.read(os.path.join(client, PACK))
+        records = RECORD.split(dict(files)[ENTRY].decode('utf-16'))
+    col = EU_COLUMNS.get(column) or records[0].split('\r\n')[2].split('\t').index(column)
     for i, r in enumerate(records):
         f = r.split('\t')
         if i and len(f) > col and f[3] in want:
@@ -85,13 +99,14 @@ def main():
             f[col] = want.pop(f[3])
             records[i] = '\t'.join(f)
     if want:
-        sys.exit(f'no such key: {", ".join(want)} (nothing written)')
+        return list(want)
     if not os.path.exists(backup):
         os.makedirs(os.path.dirname(backup), exist_ok=True)
         shutil.copy2(os.path.join(client, PACK), backup)
         print('original pack kept as', os.path.normpath(backup))
     new = b'\xff\xfe' + '\r\n'.join(records).encode('utf-16-le')
     write_pack(client, [(n, new if n == ENTRY else d) for n, d in files])
+    return []
 
 
 if __name__ == '__main__':

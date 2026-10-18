@@ -186,3 +186,7 @@ async def feed(session, traffic, tick):
         f = traffic.snapshot(car, tick())
         if f:
             session.to_client(f)
+            from .area import recorders
+            rec = recorders.get(car.area)
+            if rec is not None and getattr(rec, 'pov', None) == car.serial:     # one racer's traffic for a replay
+                rec(0x21e, f.payload)

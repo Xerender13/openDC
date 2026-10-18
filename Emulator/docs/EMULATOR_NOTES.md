@@ -8,6 +8,111 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 22b (2026-10-18): main channels shown, EU semi buttons, part stakes, CB spectators, replays, Ghost Battle
+
+User: "Make a document with all the GM commands" (a Claude Doc, "openDC GM Commands"), "implement losing an equipped part
+when failing to take a major channel and make it toggleable", "implement spectator mode in CB and the use of CB replay
+items", "check why the client only shows 3 semi-channels", "check same for US client", "There are no main channels shown
+in the client". **None of it confirmed in game**; script-tested with stubs (scratchpad cb_test.py / cb_test2.py).
+
+- **No main channels** (user): the channel battle window (0x6a5de0) greys the Major / Minor tab buttons (UI+0x2ac +0x20e8
+  / +0x20f0) and forces the Semi-channel tab unless content flag **Main.NormalCh** ([net+0x270] bit 7) is set; the 2008
+  Contents.ini has no such flag. NEW_FLAGS: Main.NormalCh, Main.SemiCh (bit 8), TeamCenter.ChannelBattleReplay (the
+  "Replay" buttons of the channel battle view, 0x58d730: [net+0x2a4] bit 3).
+- **3 Semi-channel buttons in the EU client** (user): read from the running client (window UI+0x2ac, buttons +0x2078..:
+  flags 0x27 / 0x27 / 0x23, the others 0x26): the server's state bit only enables or greys a button (bits 2 / 4); bit 1
+  (shown) comes from the layout, game.nui dialog 2020000: Semi-channel N = control 2020001 + N, shown when it has a
+  `<NATION>` entry (the US layout: 1-3). `eu_client.py cbattle` now also drops that entry for Semi-channels the EU rules
+  do not open (built from client_backup/game_Data_EU_eng.nui.orig): EU shows Semi-channels 1-2. US client: 3 buttons =
+  the US rules (Semi 1-3), left vanilla.
+- **Major channel part stakes** ([cbattle] major_stakes, default 0; GM `gmcbattle stakes on|off`): 2008
+  BS_CBattleRoom::RegisterBattleItem (0x5bebf0: at the match's first round, one item of each racer, locked) and
+  BS_CBattleLobby::GatherBattleItem (0x5c0400: when the match is decided, the losers' items are deleted ("LoseItem", 0x392
+  CBattleMissedItems to the owner) and go to the winning crew's master ("CBattle", by message when offline; 0x391
+  CBattleRewardItems to the winners)). Here: a random part on the car raced with; locked (no unequip / sell while at
+  stake); the prize goes as a message with the part attached (mail.py item text: enhancement, converts, box kept) to
+  the winning master, online or not. 0x38d CBattleItems lists the parts at stake (0x88 each: wchar[32] id + item unit
+  0x48 = XiStrMyItem's first 0x48 bytes, *guess*). Not done: the 2008 "reserve" rule (items with assists worth > 4 kept
+  out).
+- **CB spectators**: 0x38b JoinOBS now keeps the spectator for the whole battle (lobby.spectators): each round's race
+  room gets them (0x26e + 0x1bf; rooms.watch's spectator-option and one-racer checks skipped), between rounds they get
+  0x386; 0x1bf carries the crews and round states (Room.obs_teams: i32 state[4], i64 crew[2], mark[2], wchar[31]
+  name[2]). 0x1e0 LeaveOBS ends it.
+- **Replays** (TeamCenter.ChannelBattleReplay; the Ch. Battle Replay Pass, ch_replaypass, drift item category 44): the
+  client's replay = a recording of the race as received (its own recorder 0x78d9e0 "play_record.r0": 0x26d RoomModify
+  0x8e, 0x1be RoomState, 0x329 + XiPlayerInfo per racer, then the race commands the NetMsg handlers pass to App+0x174
+  vfunc 0x34: 0x221, 0x224, 0x225, 0x22b, 0x21e, 0x2bd, 0x223, 0x220, 0x2c2, 0x2d0, 0x21b, 0x2d5, 0x23e, 0x21f, 0x1ec),
+  played back in scene 0xd. The server records every round so (area.recorders fed by the barea relays; race traffic of
+  the first racer) into Emulator/replays/<key>.r0 + index.json (git-ignored; [cbattle] replays = how many kept).
+  Protocol (client 0x52dbf0 / 0x52b130 / 0x7921a0 / 0x78d120 / 0x78cfb0 / 0x58ee60): 0x395 -> 0x396 list (0xec
+  entries), 0x397 step 0 open -> 0x398 result 0, step 1 (with the first data) pays -> 0x398 result 2 + price + Mito;
+  0x227 on the race connection (net+0x168) -> 0x228 chunks of 16000. Prices = the client's: Major 1000, Minor 500, Semi
+  free; free with the Replay Pass. *Unverified*: whether playback needs more than these frames (the recording client
+  also writes its own car as a 0x220-type frame, 0x538180; here every racer's 0x221 is in the stream).
+- **Ghost Battle** (Ch. Replay Ghost Pass ch_ghostpass category 45, Ch. Battle Ghost Tickets ch_ghost_NN): 0x212
+  GhostStart -> 0x213 with the client's own stat blocks (client 0x52cda0 reads @0x16 / @0x7e / @0xa6), when the player
+  holds the Ghost Pass or uses up a ticket of the replay's channel (*our rule*); 0x216 -> 0x217 (ignored by the
+  client). Registered on game and barea (which connection the client uses is not known yet).
+- The GM command document: a Claude Doc "openDC GM Commands" (all chat GM commands, test modes, channel battle, sticker
+  and control port commands).
+
+## Session 22 (2026-10-18): channels and channel battles, EU physics toggle, G Coin GM command
+
+User: "Implement channel battle and channels. For EU client version implement the driving physics new model toggle (the
+EU version drives on old physics). For EU version channel battle semi-channels don't have level limitation, but V grade
+limitation. Need 1 semi channel with max V3 allowed, 1 channel with max V6 allowed." Then: "for 2011 the attacker needs
+just 2 straight wins", "add a testing function where just 1 player is enough to attack a channel", "add a gm command to
+add g coins (han coins) to account". **Nothing of it confirmed in game yet**; script-tested with stub sessions only.
+
+- **Channel battles** (`game/channels.py`, rewritten; docstring = every layout and rule). Source: the 2008 server
+  (ZoneServer.pdb: PacketParser::Cmd_CBattle* 0x662900-0x664c30, BS_CBattleLobby 0x4c4440-0x4c9c00 / 0x5be6b0-0x5c1580,
+  BS_CBattleBoard; decompiled with the decomp's zone Ghidra session) and the 2011 client (channel battle window class
+  UI+0x2ac: 0x6a5de0 the 0x35d list, 0x6a2340 the Enter checks, 0x6a3b90 the buttons, 0x6a6120 / 0x6a8900 the state,
+  0x6a61b0 the battle records, 0x6a5230 the settings, 0x6a7590 the crew room window; 0x5308f0 0x376).
+  - Found: the 2011 channel record splits the 2008 i32 channel into i16 channel + u8 max level + u8 max car grade
+    (0x6a5de0 -> +0x18f4 / +0x1954; 0x6a2340 greys Enter above them): per-nation limits go there. Channels 0-9 normal
+    (0-1 Major), 10+ Semi-channels (MinSemi<index-9>ChBattleGrade). u16 @0x130 bit 0 = channel shown / open.
+  - Found: 0x1e7 PvpLoad with type 1-99 is a channel battle race (PvP manager App+0x168 vfunc 0xd4 -> 0x7726d0: changes
+    to scene 0x12, opens window 0x29); the 2008 server sent the round number there (TryBattle -> StartRace(round + 1)).
+  - Rules (2008 + user): crew master / first class makes the crew room (0x370), members join (0x371); the owner crew's
+    room defends (its client readies on 0x376), challengers queue on Ready (0x384; the client's button wants 4 members);
+    Challenge Coupon i_n_00037 used up at the first round; crew rank B for normal channels; one try per channel per
+    battle; no defence room -> the first challenger defends and owns the channel at once. Rounds: both crews' members
+    move into a race room (team 0 defence, 1 attack; rooms.py race, type 0x28 team points; tie -> defence). **2 straight
+    attack wins take the channel** (user; 2008 EndBattle agrees: AtkWinCnt >= 2). Defence win: the challenger is out,
+    the defending master gets 5000 Mito x attacking racers (0x393). End: channel win + successive weeks
+    (SKID_TEAM_TB.CHANNELWINCNT, SKID_CBATTLE_TB), rooms closed (0x1d6). Owners kept in SKID_CHANNEL_TB / OWNCHANNEL.
+  - Tax: every refuel payment adds Major 10 % / Minor 3-5 % / Semi 1-1.5 % to each owned channel; paid daily
+    ([cbattle] tax_hour) to the crew master (*our choice*: the 2008 payout was a stored procedure we lack). Owner refuel
+    discount 10 % / 20 % for 2 / 3+ weeks (session.fuel_charge, 0x2d4 sale flag bits 4 / 2).
+  - Per nation ([cbattle] main / semi.N, eu.main / eu.semi.N = max level, min grade, max grade): US Semi 1-3 below level
+    40 / 60 / 70 (2008 BS_CBattleBoard); **EU Semi 1 V1-V3, Semi 2 V1-V6, no level limits** (Semi 3 closed for EU),
+    normal channels V6+ (EU client design). *Our reading*: "max V3 / max V6" as V1 upwards (Semi 2 could be V4-V6: one
+    ini line + `tools/eu_client.py cbattle`).
+  - EU client changed (user-requested; `tools/eu_client.py cbattle`, part of setup; originals in client_backup/
+    Patch.000_ClientEU.orig / Patch.006_ClientEU.orig): GlobalContent EU columns MinSemi1/2ChBattleGrade 3/4 -> 1/1,
+    MinSemi3-5 -> 0 (MinChBattleGrade stays 6); GlobalText EU_eng 11409 / 11411 rewritten for the two Semi-channels.
+  - **Test mode** (user: 1 player attacks alone): `gmcbtest on` (or [cbattle] test = 1): no coupon / crew rank, the room
+    queues at once, a lone test crew against an owner without a room attacks alone (finish = round win, 2 wins = the
+    channel). `gmcbattle now [min] [length]` opens a battle now, `gmcbattle owner N test|crew|none`, `end`, `status`.
+    Try: `gmcbtest on`, `gmcbattle owner 4 test`, `gmcbattle now 2 20`, then Crew > Channel Battle > channel 4 > Enter.
+  - rooms.py: `room.no_start` (no Start in channel battle rooms), `room.on_result` (after the result), leave() tells
+    channels.room_changed.
+  - Not done: the Major channels' part stakes (2008 GatherBattleItem; 0x38d answers empty), 0x1bf spectator state for
+    crew rooms (2008 AddOBS/SendOBSState; left out: 0x1bf opens the spectator view), battle logs (SKID_CBATTLELOG_TB...).
+  - Script test (scratchpad cb_test.py, stub sessions / DB): 0x35d 0x12 + 13 x 0x134 with US (40/60/70 levels) and EU
+    (V3 / V6, Semi 3 closed) limits; EU V5 refused on Semi 1; the solo flow: test owner -> 0x370 -> queue -> round 1
+    (0x26e, 0x1be, 0x1e7 type 1) -> finish -> 0x1ec -> back to the crew room -> round 2 -> owner Widiastari -> end
+    (0x1d6, successive 1); tax 3 % of 1000; frame sizes 0x386 0x76, 0x316 1787, 0x390 0xa + n x 0x6a.
+- **EU driving physics toggle**: the client reads GlobalContent NEWVEHICLESTAT whenever it loads a car (0x484840
+  LevelModifier.dat vs oldLevelModifier.dat, 0x47d7d0 0x641 / 0x3e9 rows, caps 2500 / 1200 / 1600 vs 999), so only the
+  client pack can switch it. emulator.ini [nation] eu.new_physics (nation.RULES new_physics) + `tools/eu_client.py
+  physics [new|old]` (part of setup): the four EU columns; with new also EU_eng 21769-21772 (the stat window labels,
+  Korean in the EU column) in English. **Not applied** (still old, the EU design) until the user switches it.
+- **G Coin GM command**: chat `gmcoin [name or account] amount`, `tools.gmctl coin NAME-or-ACCOUNT amount`
+  (admin.add_coin: SKID_UNALISCOIN_TB of the account, never below 0; online characters get 0x579). Tested on the live
+  DB with 0 (no change).
+
 ## Session 21 (2026-10-18): server-side assist effects
 
 User: "Implement the server-side option part assist effects". New `dcemu/native/game/assists.py` (docstring = the

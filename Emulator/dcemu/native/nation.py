@@ -63,9 +63,9 @@ NAMES = {0: 'KR', 1: 'US', 2: 'JP', 3: 'TW', 4: 'INI', 5: 'TH thai', 6: 'TH eng'
 # rules per nation group (group(): 'us' or 'eu'); emulator.ini [nation] us.<rule> / eu.<rule> overrides
 RULES = {
     'us': dict(part_level=True, part_grade=False, level_points=True, half_level_points=False, drop_by_grade=False,
-               battle_levels=True),
+               battle_levels=True, new_physics=True),
     'eu': dict(part_level=False, part_grade=True, level_points=False, half_level_points=False, drop_by_grade=True,
-               battle_levels=False),
+               battle_levels=False, new_physics=False),
 }
 
 

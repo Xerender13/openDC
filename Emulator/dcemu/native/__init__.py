@@ -113,6 +113,12 @@ class Context:
                   win_rate=30, lose_rate=10, test=False)
     # emulator.ini [undercity] (game/undercity.py): the test mode (one player alone, with the /ucm .. chat commands)
     undercity = dict(test=False, phase=1, beta_class=4, enhancer='i_n_00003', enhancers=(1, 1, 2, 3, 3))
+    # emulator.ini [cbattle] (game/channels.py): the channels and their crews' battles. main / semi: (max level, min car
+    # grade, max car grade), 0 = no limit; semi by Semi-channel number (from 1); eu_*: the EU clients' rules
+    cbattle = dict(channels=13, day=-1, hour=-1, open_minutes=10, battle_minutes=60, coupon=True, defence_reward=5000,
+                   test=False, tax_hour=6, tax_major=10.0, tax_minor=(3.0, 4.0, 5.0), tax_semi=(1.0, 1.0, 1.5),
+                   main=(0, 0, 0), semi={1: (40, 0, 0), 2: (60, 0, 0), 3: (70, 0, 0)},
+                   eu_main=(0, 6, 0), eu_semi={1: (0, 1, 3), 2: (0, 1, 6)}, major_stakes=False, replays=200)
     gotcha_enabled = True    # emulator.ini [gotcha] enabled: the Gotcha machine (main menu button)
     gotcha_season = 13       # [gotcha] season: the newest season offered (Etc.GotchaSeason; client GotchaViewSeason 13)
     gotcha_mito_price = 0    # [gotcha] mito_price / coin_price: 0 = the client's prices (gotcha.py)

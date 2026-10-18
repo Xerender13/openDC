@@ -245,6 +245,9 @@ async def sell_item(session, frame):
     info = context.data.item_info(table_idx)
     if not it or not info or it.table_idx != table_idx or count < 1 or count > it.stack or (it.state & 0xffff) == 4:
         return error(session, '20030')                  # (state 4: on auction)                  # ItemSellFail
+    from .channels import STAKED_TEXT, staked
+    if staked(p, it):                                   # at stake in a Major channel battle (channels.py)
+        return error(session, STAKED_TEXT)
     price = info.sell * count
     await add_money(p.char, price)
     db = context.db
@@ -538,6 +541,9 @@ async def unequip_item(session, frame):
     it = next((i for i in p.items if i.inven_idx == inven_idx and i.car_id), None)
     if not it:
         return error(session, '20028')                  # ItemUnEquipFail
+    from .channels import STAKED_TEXT, staked
+    if staked(p, it):                                   # at stake in a Major channel battle (channels.py)
+        return error(session, STAKED_TEXT)
     if needs_heat(p, it):
         # as the client does for normal (scorched) hyper parts: only a Heat Treatment Kit used on the part (0x1a3)
         # takes it off; set parts the client lets drag off (user, 2026-10-16: a kit in the bag was used silently)
