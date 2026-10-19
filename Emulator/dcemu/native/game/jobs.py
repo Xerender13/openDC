@@ -47,6 +47,7 @@ import time
 from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .login import SVC, error, send, stat_frames
 from .progress import add_exp, play_mode
@@ -247,7 +248,7 @@ async def job_reward(session, frame):
     for f in stat_frames(p):
         send(session, f)
     await count_delivery(session, row, MEDAL_RESULT[j['medal']])
-    send(session, Frame(0x146, struct.pack('<IIIII3IH', serial, exp, money, *shown, c.exp, c.exp_next, c.exp_base, c.level)
+    send(session, Frame(0x146, pack_exp('<IIIII3IH', serial, exp, money, *shown, c.exp, c.exp_next, c.exp_base, c.level)
                         + struct.pack('<IiIi', *best, *cur) + struct.pack('<I', MEDAL_RESULT[j['medal']])))
 
 

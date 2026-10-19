@@ -26,6 +26,7 @@ def _load():
 
 SIZES = _load()
 SIZES[0x16] = ('BS_PktUserAuthAck', 0x4e)     # Cmd_UserAuth's ack; its server list follows
+SIZES[0x5d2] = ('BS_PktCompleteApprentice', 18)  # four u32, both 2011 and 2016
 SIZES.setdefault(0x3e1, ('BS_PktInstantStartAck', 6))
 # Undercity commands the client sends (2011 senders, ../DriftCityEU-decomp src/re/net_send.c; = the 2008 BS_Pkt sizes):
 # the client buffers them, so several can come in one frame (native/game/undercity.py)

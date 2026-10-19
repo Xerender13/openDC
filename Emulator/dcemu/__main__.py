@@ -18,6 +18,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def load_config(path):
     cp = configparser.ConfigParser(inline_comment_prefixes=(';', '#'))
     cp.read_dict({'emulator': {'listen': '0.0.0.0', 'upstream': '127.0.0.1', 'log_dir': 'logs', 'control_port': '11099'},
+                  'client': {'version': '2011', 'data_2016': 'server_data_2016'},
                   'database': {'host': '127.0.0.1', 'port': '14330', 'user': 'sa', 'password': 'z0ne!server',
                                'name': 'SKDBTW', 'server_id': '100'},
                   'native': {'server_list': 'server_data/serverlist.txt', 'data': 'server_data',
@@ -45,16 +46,23 @@ def native_setup(cp):
     from .native.data import Tables
     from .native.db import Database
     d, n = cp['database'], cp['native']
+    from .native import version
+    version.configure(cp['client'])
+    data_root = cp['client']['data_2016'] if version.is_2016() else n['data']
+    table_root = os.path.join(data_root, 'tables') if version.is_2016() else n['server_data']
+    if version.is_2016() and not os.path.isfile(os.path.join(HERE, data_root, 'Init', 'VehicleList.xlt')):
+        raise ValueError('2016 data missing: run python -m tools.prepare2016 before selecting version = 2016')
     context.db = Database(d['host'], int(d['port']), d['user'], d['password'], d['name'], int(d['server_id']))
-    context.data = Tables(os.path.join(HERE, n['data']), os.path.join(HERE, n['server_data']),
+    context.data = Tables(os.path.join(HERE, data_root), os.path.join(HERE, table_root),
                           os.path.join(HERE, n['admin_list']))
     context.server_list = load_server_list(os.path.join(HERE, n['server_list']))
     context.public_host = (os.environ.get('DCEMU_PUBLIC_HOST') or n.get('public_host', '')).split(';')[0].strip()
-    from .handlers.game import FLAGS_2011_TABLE
+    from .native.version import flag_table
+    flags_table = flag_table()
     context.extra_flags = {}
     if cp.has_section('flags'):
         for key, value in cp['flags'].items():
-            name = next((n for n in FLAGS_2011_TABLE if n.lower() == key.lower()), None)
+            name = next((n for n in flags_table if n.lower() == key.lower()), None)
             if name:
                 context.extra_flags[name] = int(value)
             else:
@@ -230,6 +238,7 @@ def native_setup(cp):
         from .native.city_traffic import CITIES, CityTraffic
         counts = {cid: int(t[f'cars.{name.lower()}']) for cid, (name, _) in CITIES.items() if f'cars.{name.lower()}' in t}
         context.city_traffic = CityTraffic(context.data.root, counts)
+    print(f'client protocol: {context.client_version}', flush=True)
     print(f'city traffic: {"native" if context.city_traffic else mode}', flush=True)
     print(f'native: {len(context.server_list)} server(s), database {d["host"]}:{d["port"]}/{d["name"]}', flush=True)
 

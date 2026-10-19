@@ -15,6 +15,7 @@ from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame
 from .. import context
+from ..version import is_2016
 from .login import SVC, error, send, stat_frames
 
 CUR_CAR_SQL = "UPDATE SKID_CHARACTER_TB SET CURCAR=%s WHERE SERVERID=%s AND CID=%s"
@@ -25,7 +26,9 @@ def visual_update(session, car):
     see the car), and ask for its player info again (0x321) since its age changed."""
     from .login import sessions
     age = session.state['visual_age'] = session.state.get('visual_age', 1) + 1
-    f = Frame(0x425, struct.pack('<HHI', session.state.get('serial', 0), age & 0xffff, car.car_id) + car.encode())
+    # 2016 handler 0x529fd0 reads the new byte @0x0a and car @0x0b (offsets from type).
+    f = Frame(0x425, struct.pack('<HHI', session.state.get('serial', 0), age & 0xffff, car.car_id)
+              + (bytes(1) if is_2016() else b'') + car.encode())
     for s in list(sessions.values()):
         if s is not session and s.state.get('player') and s.state.get('channel') == session.state.get('channel'):
             s.to_client(f)

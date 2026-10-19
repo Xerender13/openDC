@@ -59,6 +59,7 @@ import time
 from ...handlers import on, on_open
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .combo import take
 from .items import add_money, mod_list, play_bonus
@@ -323,7 +324,7 @@ async def instant_goal_place(session, frame):
             change = await take(p, info)
             inven = change[0].inven_idx
             send(session, mod_list(change))
-    send(session, Frame(0x3ea, struct.pack('<III3IHI', idx, place, exp, c.exp, c.exp_next, c.exp_base, c.level, inven)))
+    send(session, Frame(0x3ea, pack_exp('<III3IHI', idx, place, exp, c.exp, c.exp_next, c.exp_base, c.level, inven)))
     if m['patrol'] and len(m['places']) >= _n(row, 16):
         # the last post ends the patrol here: the client sends no 0x3e2 for it (user, 2026-10-13: the
         # mission did not end). 2008 Cmd_InstantGoalPlace 0x606528: 0x3e5 InstantRewardAck with the
@@ -344,7 +345,7 @@ async def instant_goal_place(session, frame):
                          f' items {[(i.item_id, n) for i, n in given]}')
         for f in stat_frames(p):
             send(session, f)
-        send(session, Frame(0x3e5, struct.pack('<III3IHH3I', idx, final, 0, c.exp, c.exp_next, c.exp_base, c.level,
+        send(session, Frame(0x3e5, pack_exp('<III3IHH3I', idx, final, 0, c.exp, c.exp_next, c.exp_base, c.level,
                                                0, 0, 0, 0)))
         # then 0x3e3: only its handler (0x513ed0 -> 0x70d7c0) frees the client's mission; without it the patrol
         # stayed on the HUD at 40/40 (user, 2026-10-17). The 2008 server sent only 0x3e5 here.
@@ -397,7 +398,7 @@ async def instant_complete(session, frame):
     session.log.note(f'instant complete {idx}: {exp} exp, {money} mito ({len(m["places"])} places)')
     for f in stat_frames(p):
         send(session, f)
-    send(session, Frame(0x3e5, struct.pack('<III3IHH3I', idx, exp, money, c.exp, c.exp_next, c.exp_base, c.level, 0,
+    send(session, Frame(0x3e5, pack_exp('<III3IHH3I', idx, exp, money, c.exp, c.exp_next, c.exp_base, c.level, 0,
                                            0, 0, 0)))
     send(session, Frame(0x3e3, struct.pack('<I', idx)))     # after 0x3e5: see INSTANT_ORDER
 

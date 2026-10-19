@@ -48,6 +48,7 @@ import time
 from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .combo import drop, take, take_if_room
 from .items import add_money, mod_list, play_bonus
@@ -252,7 +253,7 @@ async def chase_hit(session, frame):
 def result_unit(session, p, money=0, exp=0, items=()):
     c = p.char
     idx = list(items)[:2]
-    return (wstr(c.name, 64) + struct.pack('<HHiiqII3IIfI', session.state.get('serial', 0), 0, money, 0, c.mito, exp, 0,
+    return (wstr(c.name, 64) + pack_exp('<HHiiqII3IIfI', session.state.get('serial', 0), 0, money, 0, c.mito, exp, 0,
                                            c.exp, c.exp_next, c.exp_base, c.level, 0.0, len(idx))
             + struct.pack('<2I', *(idx + [0] * (2 - len(idx)))))
 

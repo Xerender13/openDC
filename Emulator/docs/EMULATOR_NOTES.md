@@ -8,6 +8,276 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 32 (2026-10-19): guided race prompts fixed; next-session handoff
+
+User reports mode1 stalls at Battle Zone (no Tutorial button), suggests skipping the button, then reports
+bypass starts a race without prompts. User clarifies expected **two races: prompted tutorial first, normal
+race second**, then the existing field tutorial. **After final server fix user confirms “Works correctly now”.**
+Full character completion/field transition has not separately been reported; do not infer additional coverage.
+
+Client button bypass (`tools/tutorial_flow.py`): keep GlobalContent.ApprenticeFlowType1 for Driver Dome
+routing and lessons; select existing native start branch at Battle Zone by cmp4->cmp1:
+- 2011 VA0x5a3a86 bytes83f8047518 ->83f8017518 (file delta0x400c00).
+- 2016 VA0x5ca8ed bytes83f8047522 ->83f8017522 (same text delta).
+Applied to local Client US/DriftCityUS.exe, Client EU/DriftCityEU.exe and Dev Ed/DriftCity2016Test.exe.
+Each changed exactly one byte against its before_start_skip backup. Reversible/idempotent; original Dev Ed
+exe untouched. Backups `client_backup/tutorial_flow/`. `tools.client2016.patch_image(..., guided=True)`
+and prepare() now preserve/rebuild this branch along with isolated11105 auth port. Three new client patch
+checks brought suite to71. Bypass alone failed prompts, so do not treat this client patch alone as the fix.
+
+**Final cause/fix:** rooms.practice answered every no-room0x1e6 with ordinary PvpLoad0x1e7/type100.
+2011 native FUN005a0690 (2016 twin0x5c7210) sends0x1e6 but immediately builds its own car/race and calls
+race vfunc+d4(0,-1,0,0). FUN007726d0 records the negative time sentinel in DAT00942b3c. On first loaded
+frame FUN0077dcb0 uses that negative sentinel and Main.Apprentice to set apprentice stage2 and call
+FUN0077a340(2), which runs Apprentice_Client script2 (Duffy's drift lesson). The normal server response
+replaced the sentinel and set practice mode, bypassing this branch. Runtime before fix in2016 PID82184:
+root stage15, apprentice step0; log shows map11 starts answered as type100 and immediate LoadComplete.
+
+rooms.practice now suppresses the response **only** for enabled Main.Apprentice, correctly marked training
+car, map11 and flag0. It leaves the native guided and subsequent race lifecycle under client control.
+No invented PvpLoad kind or forced step3. Two regression tests cover both versions' local training start
+and permanent-car normal practice. **73 tests pass** (`PYTHONWARNINGS=ignore .venv/bin/python -m unittest
+discover -q`). User confirms fix after restart. No SQL character edits and no commits.
+
+Native follow-up pointers (static evidence, not a full observed two-race trace):
+- FUN0077a340 sets apprentice stage and runs the matching Apprentice_Client script.
+- FUN0077ebb0 handles lesson stages2/3 and later stage6 restart; at stage6 after closing window500000
+  it resets race and calls vfunc+d4(0,-1,0,0). FUN0077dcb0 maps stage6->8 instead of starting lesson2.
+- Race completion with negative time in seg_0077.c selects scripts9/10/11 by elapsed-time thresholds.
+- Decompile: `/home/deck/Drift City Project/DriftCityEU-decomp/raw/src/seg_0077.c`; use rg --no-ignore.
+- 2016 root=[0x9d10d0], root+0x158 UI, UI+0x250 apprentice, apprentice+0x48 stage,
+  root+0x168 race. Script manager static0x9e5b70; GetScript0x532e90, RunScript0x532c70.
+- 2011 equivalents rootgetter0x43aef0, UI+0x24c apprentice, GetScript0x51e8f0, RunScript0x51e6d0.
+- 2016 Tutorial controlID950012 (2011ID890012); actual resource exists. Don't use old control IDs in2016.
+- ptrace_scope is0 (user enabled); reidentify client PID before reading memory. Historical PIDs may exit.
+
+Both servers restarted after server edit; exact old PIDs72786/73850 verified before SIGTERM, detached
+replacements83577 (2011) /83578 (2016). Auth/game listeners11005/11021 and11105/11121 verified.
+New logs `logs/20261019-230542.msgs.txt` and `logs/2016/20261019-230542.msgs.txt`.
+Config/profile/DB split unchanged. Preserve all earlier uncommitted and untracked files.
+
+Remaining issue observed but not fixed: position.save_car_pos(DriverDome) calls licenses.pay_monthly;
+old2016 log22:56:26 grants Rookie7000 and3000 Mito during training. Login.in_tutorial already avoids
+login rewards, but position path may need the same training guard. Do not edit online character rows.
+Priority remains2011 completion then2016 full support; Origin research deferred indefinitely.
+
+## Session 31 (2026-10-19): guided tutorial correction; Origin client research
+
+User tested apprentice mode: immediately teleported to Battle Zone and race began without tutorial tips.
+Log `logs/2016/20261019-224131.msgs.txt`, new training character at22:47:19: Driver Dome position at19.452,
+room-observer registration for map11 at19.557, start request at19.633. Existing no-room practice handler
+answered with0x1e7 type100. The immediate jump itself is initiated by the client, not FirstPosition.
+
+**Cause:** client GlobalContent.ApprenticeFlowType=4 in both US2011 and Dev Ed2016; EU2011=3.
+The table's own Korean comment documents mode1 as compulsory/guided, mode3 as directly entering Battle Zone.
+2011 `FUN_005a39a0` at0x5a39a0 explicitly branches on flow4 to `FUN_0050e480` + `FUN_005a0690` (direct start)
+instead of setting apprentice stage1 and calling its tutorial message. Driver Dome entry0x7b61a0 also treats
+flow3/4 differently. Enabling only Main.Apprentice was insufficient for the requested guided route.
+
+**Applied local client correction:** `python -m tools.tutorial_flow` selects mode1 in the US and EU language
+columns of the effective GlobalContent table for Client US, Client EU, and Dev Ed2016. Mode4 restores the
+direct variant. US/EU tables are in Patch/Patch.000; Dev Ed is loose Data/Localize/GlobalContent.xlt.
+Current pre-change files backed up under `client_backup/tutorial_flow/`. No executable changes.
+Verified every other archive entry is byte-identical and header20..31 preserved. Verified loose-file change,
+idempotence and mode round-trip. **Full client restart required**, relog alone keeps the cached setting.
+Existing training characters can retry; no character rows edited. No emulator changes/restart this correction.
+**Not yet confirmed in game.** If race tips still fail in guided mode, next inspect whether returning type100
+from rooms.practice overrides the tutorial's locally initialized race state (0x5a0690 sets it up locally).
+Do not invent another PvpLoad kind without runtime/client evidence.
+
+Origin/Skid Rush research requested separately; see `docs/ORIGIN_CLIENT_RESEARCH.md`.
+**User then deferred Origin until much later: finish2011 first, then full2016 support.** Original client untouched,
+no Origin server profile implemented. Research continues from the existing2016 adapter rather than replacing2011.
+
+## Session 30 (2026-10-19): shared apprentice tutorial; pedestrian controls found
+
+User requested the newer tutorial in **both** clients: Driver Dome training car -> Battle Zone tutorial
+race -> permanent starter -> existing field introduction. Also asked to check 2016 pedestrian controls later.
+
+Implementation (no executable/data-pack patches):
+- `Main.Apprentice=1` in NEW_FLAGS; `[flags] Main.Apprentice = 0` restores legacy creation. Existing
+  permanent-car characters keep their progress. The server still defaults to protocol 2011; 2016 remains optional.
+- Send GameSetting in successful lobby check-in, before CheckInAck: the avatar/name wizard needs this flag
+  before it creates the character, not only after LoadChar. 2011 name wizard 0x797ae0 requests type95,
+  colour0x01000002 when Apprentice is on; ordinary creation otherwise shows the starter picker immediately.
+- Training car type95, Birdie RTI (`pc_0092s.nif`), SLOT `3<<16`. 2011 0x7087c0 checks the **short at
+  car record+0x12 == 3**, not grade3. Character creation atomically saves that marker and LASTPOSSTATE3,
+  LASTCITYID0, LASTAREA-1, so FirstPosition selects Driver Dome and interrupted logins retain the rental.
+  Both clients have ApprenticeFlowType4. The client implements the training prompts/local race.
+- `game/apprentice.py`: 0x5d2 CompleteApprentice, four u32(result, elapsed, starter type, colour), size18.
+  Request registered in commands.SIZES for bundled traffic. Starter must be one of the four models tagged
+  Sellable10001/20001/30001/40001 (29/81/79/80 in both table sets).
+- Completion locks/checks the character and training-car row in a SQL transaction, creates a **different**
+  permanent car ID, deletes the rental, updates CURCAR/NUMCAR and saves field intro state0/city1/area-1.
+  A stale connection/repeated completion cannot create another car. No speculative Mito prize (award0).
+- Reply0x5d3: four u32(0,elapsed,old car ID,0), versioned Car, i32 award, i64 total GOLD.
+  Client handlers2011 0x519510 / 2016 0x52ccb0 read car@0x12, returned ID@0xa, award@0x43/0x44,
+  money@0x47/0x48; consume0x4f/0x50 bytes including type. They add/select the new car before removing the old.
+- `items.link_keys` skips training cars; grants the chosen permanent car its normal key after completion.
+  Login treats the rental as tutorial even in Driver Dome, postponing license/quest login initialization.
+
+Validation:
+- **70 unit tests pass**, including both completion packet layouts, starter validation, legacy switch,
+  permanent-key exclusion, field-state handoff and replay rejection. Diff whitespace check passed.
+- Actual SQL against **SKDB2016TEST only**, disposable character (removed after test): training creation,
+  load/resume marker, Driver Dome position, no rental key, completion, one permanent car/key, NUMCAR1,
+  persisted state0, and DB replay guard all passed. No deliberate changes to existing player rows.
+- Restarted both instances; verified 110xx/111xx listeners. Current PIDs2011 **72786**, 2016 **72785**
+  (verify before stopping). Test log `logs/2016/20261019-223837.msgs.txt`.
+- **Full visual tutorial sequence not yet confirmed in game.** Create a new character to exercise the new
+  wizard; existing characters do not restart training. Watch 0x5d2/0x5d3 and field handoff in the next log.
+
+Pedestrian follow-up: user asked to turn the flag on. Set `[flags] Main.PasserBy = 1` in
+`server_data_2016/emulator.ini`, verified bit23 of flag bytes8..11 in GameSetting, and restarted only
+the 2016 test server (PID73850; 11105/11121 listeners verified). ShowPassenger remains true.
+Visible pedestrians not yet confirmed in game.
+
+Pedestrian investigation (static evidence; not enabled by this change):
+- 2016 supports `Data/Init/goption.ini [Game] ShowPassenger=true`, already true locally. Read0x4f6385..
+  0x4f63ad into option+0xa4; saved at0x4f6e9e. There is also server content flag **Main.PasserBy**,
+  flags+8 bit23, width1, shared with2011. It is absent in the current Contents/extra flags and therefore0.
+- 2016 pedestrian update0x4b26e0 returns unless field stage0xe and Main.PasserBy is set (0x4b271f).
+  Placement files exist in MoonPalace/Koinonia/Oros/Cras/NeoOros (`Data/World/.../passerby.pcs`).
+  Developer commands `/putonpasserbies` and `/removepasserbies` exist; no need to patch the exe for this switch.
+- Later test: set `[flags] Main.PasserBy = 1`, retain ShowPassenger=true, restart/relog and verify a city.
+  Visible pedestrians and complete asset coverage remain unconfirmed. Do not describe file presence as runtime proof.
+
+Research reused the existing 2011 Ghidra decompile plus focused objdump of the 2016 original. REA native
+providers were unavailable (Ghidra unconfigured); target session closed. No commits or pushes.
+
+## Session 29 (2026-10-19): real 2016 login, separate clean DB, HUD selector, EXP/cap fixed
+
+User asked to try logging in with the 2016 client, authorized executable patches, then requested a clean test
+DB. Follow-ups: legacy tutorial works; expose HUD switching in 2016 and 2011; 2016 level/EXP bug; cap **100**.
+**User confirmed level and EXP fixed after the final restart.**
+
+Running configuration:
+- Live 2011: emulator.ini, ports 110xx, SKDBTW, PID 68820. Main config stays version 2011.
+- Optional 2016: server_data_2016/emulator.ini (gitignored, merged from the existing settings), ports 111xx,
+  SKDB2016TEST, logical server ID 2016, PID 68796. Its server list is test_serverlist.txt (all 111xx).
+  Logs: logs/2016/. Client is running through Proton 11 in ~/.local/share/drift2016-pfx.
+  Check actual PIDs before doing anything; these are only the last verified values.
+- Reusable minimal configuration: tools/test2016.ini. Its DB address/credentials come from load_config defaults
+  or DCEMU_DB_* environment variables; copy the local DB settings when moving machines.
+- Dev Ed original DriftCity.exe unchanged; DriftCity2016Test.exe is a separate patched copy. Reproduce/launch:
+  `python -m tools.client2016 patch` / `python -m tools.client2016 launch` from Emulator.
+  Original also backed up to client_backup/2016/DriftCity.exe.orig. No game packs edited.
+
+Real client findings:
+- Correct auth socket patch is `mov word [0x9bc374], 11005` at 0x54f6bf, immediate at file 0x14eac6,
+  plus initialized data word file 0x5bb174: change only these two u16 words to 11105.
+  The three `push 11005` at 0x4b8372/0x4b8832/0x4b886c are **UI control IDs**, not socket ports.
+  An initial mistaken patch of those IDs reached live 2011/admin and loaded Xerender, then was stopped;
+  rebuilt from the untouched original with the correct patch. All subsequent sockets verified on 111xx.
+  No deliberate edits to existing live character rows. Do not describe that initial attempt as isolated.
+- After correction: actual client auth result 0; lobby check-in OK; 0 characters on the fresh DB; character
+  creation worked (user created Xerender, avatar 2, car type 80; CID 100000, car 1). Game check-in, LoadChar,
+  JoinChannel and EnterArea worked. Director Green introduction was visually observed and the user confirms
+  the **old tutorial also works**. Do not assume every new tutorial mode has been tested.
+- Current unported traffic: 0xe8d (payload u32 0), periodic 0xf4d (u32 0x953d; sometimes bundled with 0xe6),
+  area 0x21d frames 118 bytes hit the 2011 size 100 then drop the rest. These remain open for the next pass.
+  World entry is not proof multiplayer movement, new missions or all 2016 features work.
+
+Clean database:
+- Created SKDB2016TEST with db/01_initialize_database.sql, 02_create_user.sql, 03_seed_sequences.sql
+  (210 GO batches; seed server row uses ID 2016). No live database was dropped/restored/cleared.
+- Before character testing: account/character/item/car counts (1,0,0,0): only seeded admin/admin.
+- Clean snapshot: db/SKDB2016TEST_clean.bak (gitignored, about 3.7 MB), copied from container
+  /var/opt/mssql/data/SKDB2016TEST_clean_20261019.bak. Backup uses COPY_ONLY and CHECKSUM; RESTORE VERIFYONLY WITH CHECKSUM passed.
+  The active test DB now contains the user's test character; the snapshot remains empty of characters.
+  Never restore this backup over SKDBTW; any reset must target SKDB2016TEST while its test server is stopped.
+
+HUD selector (both builds):
+- User correctly suspected a content flag: **Main.MainButtonAdvanced = 2** (now in NEW_FLAGS).
+  2011 0x55df8c..0x55dfe3 / 2016 0x57637c..0x5763ce hide the selector and its label/base when
+  `[net+0x270] & 0x180000 < 0x100000` (Main +8, bits 19-20). No option-menu patch required.
+- Controls in both clients: ID_OPTION_VIDEO_MAINUI_BASE / TEXTBASE / TITLE / MAINUI; 2011 numeric
+  IDs 3890002-3890005, 2016 4220010-4220013. MainUIType remains the local classic/ADV choice.
+  Main.NeoCityMainUI is a different flag; retain 1. Both servers restarted to deliver the new flag.
+  Menu visibility/toggle still needs explicit user confirmation (static client evidence + wire tests pass).
+- Existing 2011 launcher main_ui_type=0/1 intentionally forces the local choice on each start;
+  main_ui_type=auto is already supported by setOptions and keeps the client's saved selection instead.
+
+2016 level / EXP (user-confirmed fixed):
+- Etc.LevelLimit was missing in 2008 Contents.ini, so wire value was zero; the 2016 HUD displayed level 1 (MAX).
+  `[client] max_level_2016 = 100` now controls the advertised cap and server add_exp progression for 2016 only.
+  Valid range 1-1023; 2011 progression keeps its previous cap 200 and its wire LevelLimit behavior is unchanged.
+- 15 reward packet encoders in quests, combo, jobs, instant/day mission, party patrol, Mother quests,
+  Undercity, Lap Time, chase and races now use records.pack_exp: only the first marked 3I EXP/next/base group
+  becomes 3Q in 2016. Following item IDs (another 3I), rewards, counts, level widths and money stay as before.
+  Character records already carried u64 EXP from session 28. This repairs the shared EXP fields, not every
+  other changed field in those game modes.
+- 65 tests pass. New checks cover exact executable port patch (four changed bytes; UI IDs unchanged),
+  both HUD flags, advertised cap, progression stopping at 100, >32-bit EXP and quest reward item-tail alignment,
+  plus 2011 record golden bytes and prior tests. Initial helper incorrectly treated the trailing 3I item group
+  as another EXP marker; tests caught this before restarting, and only the first group now widens.
+
+No commit/push requested. Next: confirm the HUD selector in both clients; adapt movement sizes/offsets and
+0xf4d/0xe8d; continue testing actual gameplay. The clean DB snapshot is retained locally, not committed.
+
+## Session 28 (2026-10-19): optional 2016 protocol foundation
+
+User: continue adapting to the 2016 client, **keep 2011 support as the default**; the 2016 client has a
+**different tutorial** and must not be assumed to follow the 2011 introduction.
+
+Implemented (script-tested, **not yet confirmed in game**):
+- `[client] version = 2011 | 2016` (default 2011), `data_2016 = server_data_2016`.
+  `native/version.py` selects server-wide layouts; login cannot identify the build. Nation remains independent.
+  The active emulator.ini remains 2011. Invalid version values fail startup.
+- Shared encoders: Character 0x11b / 0x141 (2016 name area 64 bytes, three u64 EXP fields), Car 0x31 / 0x32,
+  Item 0x5c / 0x60 (TableIdx @0x54, InvenIdx @0x58), Stats 0x68 / 0x70, enchant bonus 0x28 / 0x2c.
+  This covers load-character, item lists/modifications, stat replies, and other callers of these encoders.
+  The new car byte and unknown item field are zero. **Item Belonging @0x4c is provisional**: the new dword
+  could precede it instead of follow it; TableIdx/InvenIdx positions are measured.
+- Native GameSetting packs flags by the selected version; config flags recognize the selected table too.
+  `flags_2016.tsv` converts raw group-relative offsets to absolute offsets. Raw output has parser errors:
+  ChannelPro is actually @0x38 bit 31 (2016 0x463a24..0x463a4c), not @0x38 bits 0-1 (overlaps FinalMatchTime).
+  Other ambiguous names already flagged in 2011 remain commented. Group bases measured at 0x464820:
+  Main 0, City 0x14, InstantMission 0x1c, OMDBase 0x28, BattleZone 0x30, TeamCenter 0x40, NetSync 0x44, Etc 0x48.
+  `Cmd_GameSetting` 0x53a610 copies 24 dwords and returns 0x6a. New flags stay off unless configured.
+- VisualUpdate 0x425 has an extra byte before the car (2016 0x529fd0 reads @0x0a and car @0x0b,
+  offsets from type), giving 61 bytes including type versus 59 in 2011.
+- `tools/client_tables.py` reads loose Init / World/Data tables as well as archives (loose over archive,
+  patches over loose, US over base); `sync_data.py` also copies loose city traffic.
+- `python -m tools.prepare2016` builds an isolated directory from server defaults plus Dev Ed effective tables,
+  validates Tables before publishing the directory, and refuses existing destinations. Prepared locally:
+  71 tables, 159 traffic files, 722 vehicle rows (including AI), 1217 parts, 286 quests. 2011 tables untouched.
+  Generated data is gitignored and reproducible. No database schema/account/character changes.
+
+Verification:
+- 59 unittest tests pass, including 13 new checks for both wire layouts, flag overlaps/bit positions,
+  >32-bit EXP, bundled-command boundaries, inventory strides, config data selection, and loose/packed precedence.
+  A golden SHA-256 fixture from pre-port records.py verifies identical 2011 record bytes; default flags are
+  byte-compared to the existing 2011 packer.
+- Two existing tutorial tests were stale before this work (position.py and test_position.py were identical to
+  HEAD): new characters must return state 0 to start the introduction (session 11), and leaving tutorial invokes
+  license DB reads. Tests now assert NEW and mock/assert the separate license callback; gameplay unchanged.
+- Real Tables/native setup loaded separately for both versions. Temporary 2016 listeners bound all six services
+  on 111xx, lobby 56-byte handshake/keepalive and area TimeSync passed. These listeners were closed afterward;
+  no account/character queries or writes. No GUI client test yet.
+- REA skill used to bind the shipped exe, SHA-256
+  `52acaca96cb9f1e88d1f52bf5f8fa6db80daaa9ecbaae4c7c86eae92cd19657a`;
+  GNU objdump section Evidence `ev_ecc45707d4a9e18e1f6e5d342c0da84bf3c95e05829dea087913ffd8ea5e7a78`.
+  Deep REA providers unavailable here (Ghidra unconfigured); focused local objdump reads supplied addresses above.
+
+**Open / next:**
+1. Trace the **2016 tutorial**, independently of the 2011 flow. User explicitly says it changed. The Dev Ed
+   package still contains legacy Tutorial.tdf (Battle Zone) and StartMent_Client.tdf (Director Green), and
+   GlobalContent ApprenticeFlowType is 4 in both clients; this does **not** prove the new tutorial uses them.
+   Position ack 0x529600 (2011 0x516050) consumes the same 31-byte layout, with common city/state routing;
+   its parking-lot path checks ApprenticeFlowType at 0x529772. The actual new entry/stages remain unresolved.
+   Asked the user what the newer introduction starts with; incorporate their reply. Current position routing
+   and tutorial suppression flags remain preliminary for 2016, not a completed tutorial implementation.
+2. Changed area moves (0x21d / 0x21f / 0x225 / 0x22b), room user/car records, crew records, character-info windows,
+   and embedded EXP reward packets still require adaptation. Shared encoders alone do not fix their offsets.
+3. Test actual 2016 login -> character selection -> tutorial/city on isolated ports, then fix the next packets
+   using client evidence. Reusing a 2011 character's saved car/item indices with different client tables can
+   produce different content; do not migrate existing characters or claim save compatibility yet.
+4. All changes uncommitted; preserve existing workspace changes. No client files modified.
+   Live emulator restarted with version 2011, PID 63643; auth listener verified, DB healthy.
+   The launcher background child exited with the tool session; started the same command with
+   subprocess start_new_session=True and retained the normal .emulator.pid/log files.
+
 ## Session 27 (2026-10-19): MPH converts, convert effects checked, ported tires, server tables re-synced, GT Championship
 
 - **GT Championship (the client's "GT Tournament"), new `game/championship.py`** (user: "Implement the GT Tournament game

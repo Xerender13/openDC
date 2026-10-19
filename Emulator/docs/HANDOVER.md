@@ -4,6 +4,102 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
+## Latest handoff: 2026-10-19 (session 32: guided apprentice race works)
+
+**User confirms: “Works correctly now” after the tutorial race fix.** Expected route supplied by user:
+drive from Driver Dome to Battle Zone -> guided race with prompts -> normal race -> old field tutorial.
+Keep that two-stage race sequence; do not skip directly to apprentice stage3.
+
+Final fix: `dcemu/native/game/rooms.py::practice` no longer sends ordinary practice PvpLoad0x1e7/type100
+for Main.Apprentice + the marked training car + map11/flag0. Native client start already initializes a
+local race with time=-1; the practice answer overwrote it and bypassed lesson initialization. Ordinary
+practice behavior is unchanged. Regression checks cover both client versions. **73 tests pass.**
+
+The prior button bypass is also applied: `python -m tools.tutorial_flow` sets guided GlobalContent mode1
+and changes one comparison byte in Client US/EU exes and DriftCity2016Test.exe. It enters the existing
+native tutorial start branch upon reaching Battle Zone, skipping only the inaccessible Tutorial button.
+`tools.client2016` preserves/rebuilds this patch. Original Dev Ed exe untouched; backups under
+`client_backup/tutorial_flow/`. `--mode 4` restores the direct flow/comparison. Restart the client fully
+when changing its table. Bypass alone had started a race without prompts; the server correction fixed that.
+
+Both servers restarted and listeners verified after source change:
+- 2011 default: PID83577, emulator.ini,110xx, SKDBTW; log `logs/20261019-230542.msgs.txt`.
+- Optional2016: PID83578, server_data_2016/emulator.ini,111xx, SKDB2016TEST;
+  log `logs/2016/20261019-230542.msgs.txt`.
+Verify process identity before stopping anything. No character rows manually changed, no commits.
+
+**Next session:** preserve all existing dirty/untracked work. Finish2011, then full2016; Origin stays parked.
+Confirm the full starter selection/0x5d2 completion -> old field intro if not covered by the user's test.
+Investigate an additional observed issue: Driver Dome position saving calls licenses.pay_monthly even for
+training cars; old log22:56:26 shows a Rookie reward during training despite login's tutorial guard.
+Do not reset the user's character to hide it. Then continue2016 movement0x21d (112/118 vs old100),
+periodic0xf4d/0xe8d and remaining gameplay layouts. Level/EXP cap100 is already user-confirmed fixed.
+Pedestrian flag is on in2016 test config; visible pedestrians remain unconfirmed.
+See notes session32 for native addresses and debugging pointers.
+
+## Latest handoff: 2026-10-19 (session 31: guided tutorial correction)
+
+User found instant Battle Zone teleport and no tutorial tips. Cause: client table ApprenticeFlowType4
+(US2011/2016),3(EU2011) selects direct entry. Local clients now use **mode1** in their US/EU language columns.
+Reproduce: `python -m tools.tutorial_flow`; `--mode 4` selects direct entry. Backups under client_backup/tutorial_flow.
+Pack entries/header20..31 validated unchanged except tutorial row. **Restart client fully**; visual result pending.
+No server restart required. If tips still fail, inspect rooms.practice type100 vs client-local tutorial setup.
+
+**Priority set by user: finish2011 support, then full2016 support. Origin is for much later.**
+Origin feasibility is parked in `docs/ORIGIN_CLIENT_RESEARCH.md`; research only, no third profile.
+2011/2016 remain as before; Origin original files untouched. Preserve existing workspace changes.
+
+## Latest handoff: 2026-10-19 (session 30: apprentice tutorial implementation)
+
+Shared new-character tutorial enabled with Main.Apprentice=1; legacy creation selectable through
+`[flags] Main.Apprentice = 0`. New characters get the temporary Birdie RTI in Driver Dome; client runs
+its tutorial race; 0x5d2 completion swaps it atomically for the chosen starter and saves the old field intro
+state. Both 2011/2016 reply layouts implemented. **70 tests pass**, real isolated SQL lifecycle/replay
+check passed. **Full sequence not yet confirmed in game**; use a freshly created character for the next test.
+2011 remains default on110xx/SKDBTW (PID72786); optional2016 on111xx/SKDB2016TEST (PID73850).
+Both restarted after code changes. Verify PIDs. Details/addresses/layouts in notes session30.
+
+Pedestrians: user requested enabling the flag. Main.PasserBy=1 is now set in the local 2016 test config;
+ShowPassenger=true locally. Verified the outgoing flag bit and restarted the 2016 server (PID73850).
+Visible pedestrians still await in-game confirmation.
+No exe patches this session, no commits. Preserve earlier workspace modifications.
+
+## Latest handoff: 2026-10-19 (session 29: real 2016 login works)
+
+**2011 remains default and runs on 110xx / SKDBTW.** A separate 2016 instance runs on 111xx /
+SKDB2016TEST with server_data_2016/emulator.ini (gitignored); minimal portable config tools/test2016.ini.
+Latest PIDs: 2011 68820, 2016 68796 (verify, do not assume). All 65 tests pass.
+
+2016 client launched and logged in successfully, created a character, entered the world and played Director
+Green's introduction. User confirms the old tutorial works too. **2016 level/EXP fixed and user-confirmed**:
+Etc.LevelLimit now follows `[client] max_level_2016 = 100`; 15 reward encoders widen EXP counters only for 2016.
+Main.MainButtonAdvanced=2 exposes the native classic/ADV HUD selector in both versions; user confirmation pending.
+
+Launch/rebuild the test client: `python -m tools.client2016 launch` / `patch` from Emulator.
+Separate DriftCity2016Test.exe; original exe unchanged and backed up. Test sockets verified on 111xx.
+Fresh DB snapshot **db/SKDB2016TEST_clean.bak**, only admin/admin and no characters. Active test DB now has the
+user's character. Never restore this backup over live SKDBTW. More details and exact patch offsets: notes session 29.
+
+Open: 2016 movement sizes/field offsets, periodic 0xf4d and login 0xe8d, other changed gameplay records.
+No commits/pushes. Preserve existing workspace changes.
+
+## Latest handoff: 2026-10-19 (session 28, optional 2016 foundation)
+
+2011 US/EU remains the default: `[client] version = 2011`. Version 2016 is opt-in and experimental.
+Restarted and verified listening on 110xx after the changes (PID 63643; DB healthy).
+See the newest EMULATOR_NOTES session for exact layouts, tests, uncertainties and next steps.
+
+Implemented: version switch, shared char/car/item/stats/bonus encoders, selected content-flag table,
+0x425 new byte, loose-file table/traffic extraction, and isolated `tools.prepare2016` data preparation.
+Local `server_data_2016/` is ready (gitignored). `python -m tools.prepare2016` reconstructs it on another machine;
+it refuses to overwrite an existing directory. 59 tests pass; both table configurations load; 2016 listener
+smoke checks on 111xx pass. Not yet confirmed in game. Changes have not been committed.
+
+**Next priority: the new 2016 tutorial (user correction), then changed area/room/crew/EXP packets.**
+Do not assume legacy tutorial files in Dev Ed describe its new entry sequence. A question about what the newer
+introduction starts with is pending; use the reply. The current port has shared records, not complete gameplay.
+Do not modify 2011 tutorial behavior while implementing the 2016 path.
+
 ## Latest handoff: 2026-10-19 (session 27, end of day)
 
 Details: "Session 27" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). **Everything below is committed and pushed**

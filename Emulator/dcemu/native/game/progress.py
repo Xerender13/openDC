@@ -6,6 +6,7 @@ data.Tables.exp_bounds), and the character is saved (BS_GameDB::UpdateCharInfo: 
 level / exp fields (the client plays the level-up when they differ, e.g. 0x410 handler 0x516910).
 """
 from .. import context
+from ..version import max_level
 
 CHAR_EXP_SQL = "UPDATE SKID_CHARACTER_TB SET NLEVEL=%s, NEXP=%s WHERE SERVERID=%s AND CID=%s"
 PLAY_MODE_SQL = """SET NOCOUNT ON;
@@ -22,7 +23,7 @@ async def add_exp(c, exp):
     t = context.data
     old = c.level
     c.exp += exp
-    while c.level < MAX_LEVEL:
+    while c.level < max_level():
         base, nxt = t.exp_bounds(c.level)
         if nxt <= base or c.exp < nxt:
             break

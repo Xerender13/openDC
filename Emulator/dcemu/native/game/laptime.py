@@ -26,6 +26,7 @@ import os
 import random
 import struct
 
+from .records import pack_exp
 from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame
@@ -173,7 +174,7 @@ async def lap_record(session, frame):
         await add_money(c, money)
     await play_mode(c, 'LAPTIME', 1, 0, exp, money)
     session.log.note(f'lap time: lap {current}/{total} in {lap_s:.3f} s, +{exp} exp, +{money} Mito')
-    room.cast(Frame(0x52c, struct.pack('<IiifiiI3IIq', m.serial, rec_time, lap_ms, lap_s, current, total, exp,
+    room.cast(Frame(0x52c, pack_exp('<IiifiiI3IIq', m.serial, rec_time, lap_ms, lap_s, current, total, exp,
                                        c.exp, c.exp_next, c.exp_base, c.level, money)))
     if total and current >= total and not lap.finishing:
         lap.finishing = True

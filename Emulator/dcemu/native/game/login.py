@@ -19,10 +19,11 @@ import struct
 import time
 
 from ...handlers import on, on_open
-from ...handlers.game import FLAG_ALIASES, FLAGS_2011_TABLE, NEW_FLAGS, pack_flags_2011
+from ...handlers.game import FLAG_ALIASES, NEW_FLAGS
 from ...protocol import C2S
 from ...wire import Frame, read_wstr
 from .. import admin, context, now
+from ..version import flag_table, pack_flags
 from . import player
 from .records import enchant_bonus, wstr
 
@@ -103,7 +104,8 @@ TUTORIAL_FLAGS = {'Main_License': 0, 'Etc_NewLicenseSystem': 0, 'Main_LadderDisp
 
 def in_tutorial(p):
     from .position import IN_CITY
-    return p.char.pos_state < IN_CITY
+    from .apprentice import training_car
+    return p.char.pos_state < IN_CITY or training_car(getattr(p, 'car', None))
 
 
 def content_flags(**overrides):
@@ -112,7 +114,7 @@ def content_flags(**overrides):
     named = {}
     for name, value in context.data.contents.items():
         target = FLAG_ALIASES.get(name, name)
-        if target in FLAGS_2011_TABLE:
+        if target in flag_table():
             named[target] = value
     named.update(NEW_FLAGS)
     named['Main.OptionItem'] = int(context.option_parts)      # emulator.ini [items] option_parts
@@ -131,8 +133,12 @@ def content_flags(**overrides):
     named['Main.AuctionCommission'] = int(context.auction_item_fee)    # the fees the client shows (%)
     named['Main.AuctionVSCommission'] = int(context.auction_drift_fee)
     named.update(context.extra_flags)          # emulator.ini [flags]
+    from ..version import is_2016, max_level
+    if is_2016():
+        # 2016 reads this cap literally: zero makes level 1 display as MAX.
+        named['Etc.LevelLimit'] = max_level()
     named.update({k.replace('_', '.', 1): v for k, v in overrides.items()})
-    return pack_flags_2011(named)
+    return pack_flags(named)
 
 
 def game_setting(**overrides):

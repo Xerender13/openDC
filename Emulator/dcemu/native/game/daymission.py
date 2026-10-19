@@ -34,6 +34,7 @@ import struct
 from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .driftuse import Gains, give_item
 from .items import CHANGED, DELETE_SQL, REMOVED, STACK_SQL, mod_list
@@ -162,7 +163,7 @@ async def complete(session, p, idx):
         send(session, f)
     # 0x3e5 before 0x3e3, as the 2008 server: 0x3e3 frees the client's mission object, which 0x3e5 needs for the
     # banner and the result window (instant.py INSTANT_ORDER)
-    send(session, Frame(0x3e5, struct.pack('<III3IHH3I', idx, exp, money, c.exp, c.exp_next, c.exp_base, c.level, 0,
+    send(session, Frame(0x3e5, pack_exp('<III3IHH3I', idx, exp, money, c.exp, c.exp_next, c.exp_base, c.level, 0,
                                            0, 0, 0)))
     send(session, Frame(0x3e3, struct.pack('<I', idx)))
 

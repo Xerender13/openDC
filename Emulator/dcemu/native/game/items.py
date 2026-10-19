@@ -145,19 +145,21 @@ async def link_keys(p):
     their type (the key's value) that no other key names; a car with no key gets one (2008 XiCsCharInfo::CheckCarKey
     -> CreateCarKey: the key item named after the car's model, VehicleList "File Name"; user, 2026-10-14: a new
     character's Metro had no key). -> the keys made."""
+    from .apprentice import training_car
     db, t = context.db, context.data
+    permanent = [c for c in p.char.cars if not training_car(c)]
     keys = [i for i in p.items if (info := info_of(i)) and info.kind == 'car']
     taken = {i.random for i in keys if i.random}
     for k in keys:
         if k.random:
             continue
-        car = next((c for c in p.char.cars if c.car_type == info_of(k).value and c.car_id not in taken), None)
+        car = next((c for c in permanent if c.car_type == info_of(k).value and c.car_id not in taken), None)
         if car:
             k.random = car.car_id
             taken.add(car.car_id)
             await db.execute(LINK_KEY_SQL, (car.car_id, db.server_id, p.char.cid, k.inven_idx))
     made = []
-    for car in p.char.cars:
+    for car in permanent:
         if car.car_id in taken:
             continue
         key_id = t.vehicles.get(car.car_type, {}).get('File Name', '').rsplit('.', 1)[0]

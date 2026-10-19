@@ -51,6 +51,7 @@ Rooms
         the host from that.
 Race (BS_Room::StartLoad, LoadComplete, RemoveFromWaitSet, Gate, EndRace, PvpRaceResult)
   0x1e6 PvpStartReq (i32 map, map flag, start time): without a room a practice run (see practice());
+        apprentice map11 starts locally and must retain its local time=-1 lesson setup (no PvpLoad reply).
         else the master (20181), with members (20180), everyone else ready (20182), not loading yet (20186) -> to the room 0x1e7 PvpLoad (i32 type 0, map, map flag,
         area, f32 best record, start time, i32 traffic -1). The area (BArea, native/area.py) is 900 + room.
         A room with one member starts a practice run instead (type 100, nothing more from the server;
@@ -87,6 +88,7 @@ import random
 import struct
 import time
 
+from .records import pack_exp
 from ...handlers import on, on_open
 from ...protocol import C2S
 from ...wire import Frame, read_wstr
@@ -1140,10 +1142,17 @@ def practice(session, p):
     2026-10-13: map 74) and starts loading the track whatever the answer; the 2008 server knew no such
     request (error 20180). Answered as a practice run: 0x1e7 type 100 (what BS_Room::StartLoad sends
     for practice: no go signal, no gates, no result) in an area of the player's own.
-    *(guess: what the real 2011 server answered is not known)*"""
+    Apprentice training is different: native 0x5a0690 initializes its own race with time=-1.
+    A practice reply overwrites that sentinel, bypassing 0x77dcb0's lesson initialization.
+    Keep the local guided lesson and subsequent race under client control.
+    *(guess: what the real 2011 server answered for ordinary practice is not known)*"""
     if not session.state.get('player'):
         return
     map_id, map_flag, start_time = struct.unpack_from('<iii', p)
+    from .apprentice import enabled, training_car
+    if enabled() and training_car(session.state['player'].car) and map_id == 11 and map_flag == 0:
+        session.log.note('apprentice local race: preserving client lesson setup (no practice reply)')
+        return
     area = PRACTICE_AREA_BASE + session.state.setdefault('serial', session.id & 0xffff)
     session.log.note(f'practice run without a room: map {map_id}, area {area}')
     send(session, Frame(0x1e7, struct.pack('<iiiifii', PRACTICE, map_id, map_flag, area, 0.0, start_time, -1)))
@@ -1540,7 +1549,7 @@ async def result(room):
             team_points[room.seats.index(m.serial) & 1] += point
         m.session.log.note(f'race result: rank {rank} of {n}, +{exp} exp, +{money} Mito'
                            + (f', team point {point}' if team_room(room.type) else ''))
-        entries.append(struct.pack('<iIIQIfHH3III', end_type, m.serial, money, c.mito, exp, record, rank, c.level,
+        entries.append(pack_exp('<iIIQIfHH3III', end_type, m.serial, money, c.mito, exp, record, rank, c.level,
                                    c.exp, c.exp_next, c.exp_base, point, 0) + bytes(8))
     room.state = WAIT
     room.waiting.clear()

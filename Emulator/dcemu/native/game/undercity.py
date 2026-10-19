@@ -106,6 +106,7 @@ import time
 from ...handlers import on, on_open
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .login import SVC, send, sessions
 
@@ -520,7 +521,7 @@ def huv_attr(h):
 
 def exp_info(c):
     """0x7d1 ExpInfo (XiStrExpInfo, u16 level, i32 0: no "EXP received" text; client 0x517cd0)."""
-    return Frame(0x7d1, struct.pack('<3IHi', c.exp, c.exp_next, c.exp_base, c.level, 0))
+    return Frame(0x7d1, pack_exp('<3IHi', c.exp, c.exp_next, c.exp_base, c.level, 0))
 
 
 def uc120_rate(p):

@@ -1,0 +1,2936 @@
+{
+  "data": {
+    "archive_entries": {
+      "Data/Init.agt": 45,
+      "Data/World/data.agt": 23,
+      "Patch/patch.000": 196,
+      "Patch/patch.001": 6,
+      "Patch/patch.002": 13,
+      "Patch/patch.003": 58,
+      "Patch/patch.004": 34,
+      "Patch/patch.005": 3,
+      "Patch/patch.006": 2587,
+      "Patch/patch.007": 1193,
+      "Patch/patch.008": 5,
+      "Patch/patch.009": 3,
+      "Patch/patch.010": 374
+    },
+    "key_changes_from_legacy": [
+      {
+        "legacy": 49,
+        "offset": 16,
+        "origin": 108
+      }
+    ],
+    "key_file_offset": "0x661590",
+    "tables": {
+      "Assist_Client.tdf": {
+        "bytes": 1389372,
+        "column_counts": {
+          "7": 5772
+        },
+        "rows": 5772,
+        "source": "Patch/patch.003"
+      },
+      "GlobalContent.xlt": {
+        "bytes": 88326,
+        "column_counts": {
+          "1": 1,
+          "17": 462
+        },
+        "rows": 463,
+        "source": "Patch/patch.004"
+      },
+      "ItemClient.tdf": {
+        "bytes": 595450,
+        "column_counts": {
+          "25": 1289
+        },
+        "rows": 1289,
+        "source": "Patch/patch.003"
+      },
+      "License.xlt": {
+        "bytes": 70558,
+        "column_counts": {
+          "31": 79
+        },
+        "rows": 79,
+        "source": "Patch/patch.003"
+      },
+      "QuestClient.tdf": {
+        "bytes": 1070636,
+        "column_counts": {
+          "80": 294
+        },
+        "rows": 294,
+        "source": "Patch/patch.003"
+      },
+      "UseItemClient.tdf": {
+        "bytes": 1491690,
+        "column_counts": {
+          "16": 3782
+        },
+        "rows": 3782,
+        "source": "Patch/patch.003"
+      },
+      "VehicleList.xlt": {
+        "bytes": 546140,
+        "column_counts": {
+          "79": 925
+        },
+        "rows": 925,
+        "source": "Patch/patch.003"
+      },
+      "VehicleUpgrade.xlt": {
+        "bytes": 910896,
+        "column_counts": {
+          "24": 5052
+        },
+        "rows": 5052,
+        "source": "Patch/patch.003"
+      }
+    }
+  },
+  "handlers": {
+    "0x1": {
+      "handler": "0x53ead0",
+      "name": "Cmd_Error",
+      "registration": "0x54cf0a"
+    },
+    "0x100": {
+      "handler": "0x540c80",
+      "name": "Cmd_UnderCityResult",
+      "registration": "0x54d714"
+    },
+    "0x105": {
+      "handler": "0x51b4e0",
+      "name": "Cmd_TutorialClearAck",
+      "registration": "0x54da00"
+    },
+    "0x107": {
+      "handler": "0x51b720",
+      "name": "Cmd_QuestStartAck",
+      "registration": "0x54d7f0"
+    },
+    "0x109": {
+      "handler": "0x52bd30",
+      "name": "Cmd_QuestCompleteAck",
+      "registration": "0x54d806"
+    },
+    "0x10b": {
+      "handler": "0x51b8d0",
+      "name": "Cmd_QuestRewardAck",
+      "registration": "0x54d81c"
+    },
+    "0x10d": {
+      "handler": "0x51bb40",
+      "name": "Cmd_QuestFailAck",
+      "registration": "0x54d832"
+    },
+    "0x10f": {
+      "handler": "0x51bca0",
+      "name": "Cmd_QuestGiveUpAck",
+      "registration": "0x54d848"
+    },
+    "0x111": {
+      "handler": "0x52be80",
+      "name": "Cmd_MyQuestListAck",
+      "registration": "0x54d85e"
+    },
+    "0x113": {
+      "handler": "0x5296e0",
+      "name": "Cmd_FriendConnectNotify",
+      "registration": "0x54ebd7"
+    },
+    "0x119": {
+      "handler": "0x51afb0",
+      "name": "Cmd_ChasingBattleInfoAck",
+      "registration": "0x54f768"
+    },
+    "0x11b": {
+      "handler": "0x51b020",
+      "name": "Cmd_ChasingBattleWaitRequestAck",
+      "registration": "0x54f77e"
+    },
+    "0x11c": {
+      "handler": "0x526e90",
+      "name": "Cmd_ChasingBattleWaitSuggest",
+      "registration": "0x54f794"
+    },
+    "0x11f": {
+      "handler": "0x51b180",
+      "name": "Cmd_ChasingBattleWaitCancelAck",
+      "registration": "0x54f7aa"
+    },
+    "0x122": {
+      "handler": "0x5323e0",
+      "name": "Cmd_ChasingBattleStart",
+      "registration": "0x54f7d6"
+    },
+    "0x124": {
+      "handler": "0x526f70",
+      "name": "Cmd_ChasingBattleHitAck",
+      "registration": "0x54f7ec"
+    },
+    "0x126": {
+      "handler": "0x518cb0",
+      "name": "Cmd_ChasingBattleLeaveAck",
+      "registration": "0x54f802"
+    },
+    "0x127": {
+      "handler": "0x5272c0",
+      "name": "Cmd_ChasingBattleHuvChange",
+      "registration": "0x54f818"
+    },
+    "0x128": {
+      "handler": "0x5309e0",
+      "name": "Cmd_ChasingBattleEnd",
+      "registration": "0x54f82e"
+    },
+    "0x129": {
+      "handler": "0x51b2d0",
+      "name": "Cmd_ChasingBattleScore",
+      "registration": "0x54f844"
+    },
+    "0x12b": {
+      "handler": "0x51b250",
+      "name": "Cmd_ChasingBattleWaitInfo",
+      "registration": "0x54f7c0"
+    },
+    "0x12d": {
+      "handler": "0x524d00",
+      "name": "Cmd_JoinAreaAck",
+      "registration": "0x54d2f4"
+    },
+    "0x130": {
+      "handler": "0x51a490",
+      "name": "Cmd_NotifyAreaLoc",
+      "registration": "0x54d30a"
+    },
+    "0x142": {
+      "handler": "0x528180",
+      "name": "Cmd_ArbeitListAck",
+      "registration": "0x54db1e"
+    },
+    "0x144": {
+      "handler": "0x51ccb0",
+      "name": "Cmd_ArbeitStartAck",
+      "registration": "0x54db34"
+    },
+    "0x146": {
+      "handler": "0x51ce50",
+      "name": "Cmd_ArbeitRewardAck",
+      "registration": "0x54db4a"
+    },
+    "0x147": {
+      "handler": "0x51d130",
+      "name": "Cmd_ArbeitFail",
+      "registration": "0x54db60"
+    },
+    "0x14a": {
+      "handler": "0x51d1b0",
+      "name": "Cmd_ArbeitGiveUpAck",
+      "registration": "0x54db76"
+    },
+    "0x14c": {
+      "handler": "0x51d240",
+      "name": "Cmd_ArbeitGoalPlaceAck",
+      "registration": "0x54db8c"
+    },
+    "0x150": {
+      "handler": "0x51d360",
+      "name": "Cmd_ArbeitReadyAck",
+      "registration": "0x54dba2"
+    },
+    "0x151": {
+      "handler": "0x51d3e0",
+      "name": "Cmd_ArbeitGo",
+      "registration": "0x54dbb8"
+    },
+    "0x154": {
+      "handler": "0x5281e0",
+      "name": "Cmd_ArbeitRankListAck",
+      "registration": "0x54dbce"
+    },
+    "0x156": {
+      "handler": "0x528220",
+      "name": "Cmd_ArbeitMatchRankListAck",
+      "registration": "0x54fdda"
+    },
+    "0x158": {
+      "handler": "0x528290",
+      "name": "Cmd_ArbeitMatchTeamRankListAck",
+      "registration": "0x54fdf0"
+    },
+    "0x15a": {
+      "handler": "0x51d410",
+      "name": "Cmd_ArbeitMatchInitByMitoAck",
+      "registration": "0x54fe06"
+    },
+    "0x15c": {
+      "handler": "0x51d510",
+      "name": "Cmd_ArbeitMatchInitByItemAck",
+      "registration": "0x54fe1c"
+    },
+    "0x15e": {
+      "handler": "0x51d570",
+      "name": "Cmd_ArbeitMatchMaxRecordAck",
+      "registration": "0x54fe32"
+    },
+    "0x16": {
+      "handler": "0x516bd0",
+      "name": "Cmd_UserAuthAck",
+      "registration": "0x54cf69"
+    },
+    "0x160": {
+      "handler": "0x522cd0",
+      "name": "Cmd_ArbeitMatchStatusAck",
+      "registration": "0x54fe5e"
+    },
+    "0x168": {
+      "handler": "0x51d5b0",
+      "name": "Cmd_LevelUp",
+      "registration": "0x54dbe4"
+    },
+    "0x169": {
+      "handler": "0x51d630",
+      "name": "Cmd_CharUpdate",
+      "registration": "0x54dbfa"
+    },
+    "0x17": {
+      "handler": "0x518050",
+      "name": "Cmd_ServerList",
+      "registration": "0x54cf7c"
+    },
+    "0x17c": {
+      "handler": "0x527780",
+      "name": "Cmd_MyMotherQuestList",
+      "registration": "0x54d7da"
+    },
+    "0x17e": {
+      "handler": "0x51b500",
+      "name": "Cmd_MotherQuestStartAck",
+      "registration": "0x54d798"
+    },
+    "0x180": {
+      "handler": "0x51b680",
+      "name": "Cmd_MotherQuestCompleteAck",
+      "registration": "0x54d7ae"
+    },
+    "0x182": {
+      "handler": "0x5188b0",
+      "name": "Cmd_MotherQuestGiveUpAck",
+      "registration": "0x54d7c4"
+    },
+    "0x186": {
+      "handler": "0x52ac60",
+      "name": "Cmd_MyContentQuestList",
+      "registration": "0x54fdc4"
+    },
+    "0x188": {
+      "handler": "0x522c20",
+      "name": "Cmd_ContentQuestRewardAck",
+      "registration": "0x54fdae"
+    },
+    "0x18d": {
+      "handler": "0x518c90",
+      "name": "Cmd_GetEnchantItemAck",
+      "registration": "0x54ddc8"
+    },
+    "0x18f": {
+      "handler": "0x518bd0",
+      "name": "Cmd_EnchantItemAck",
+      "registration": "0x54ddb2"
+    },
+    "0x19": {
+      "handler": "0x517190",
+      "name": "Cmd_ServerMessageAck",
+      "registration": "0x54cf8f"
+    },
+    "0x191": {
+      "handler": "0x528320",
+      "name": "Cmd_ItemListAck",
+      "registration": "0x54dc10"
+    },
+    "0x192": {
+      "handler": "0x528360",
+      "name": "Cmd_ItemModList",
+      "registration": "0x54dc26"
+    },
+    "0x194": {
+      "handler": "0x51d730",
+      "name": "Cmd_DropItemAck",
+      "registration": "0x54dc68"
+    },
+    "0x196": {
+      "handler": "0x518ae0",
+      "name": "Cmd_BuyItemAck",
+      "registration": "0x54dc7e"
+    },
+    "0x198": {
+      "handler": "0x51d770",
+      "name": "Cmd_SellItemAck",
+      "registration": "0x54dc94"
+    },
+    "0x19a": {
+      "handler": "0x51d7f0",
+      "name": "Cmd_EquipItemAck",
+      "registration": "0x54dcaa"
+    },
+    "0x19c": {
+      "handler": "0x51d880",
+      "name": "Cmd_UnEquipItemAck",
+      "registration": "0x54dcc0"
+    },
+    "0x19e": {
+      "handler": "0x51d910",
+      "name": "Cmd_UpgradeItemAck",
+      "registration": "0x54dcd6"
+    },
+    "0x1a": {
+      "handler": "0x517240",
+      "name": "Cmd_UserAuthEtc",
+      "registration": "0x54cfa2"
+    },
+    "0x1a0": {
+      "handler": "0x518bc0",
+      "name": "Cmd_ItemUnionAck",
+      "registration": "0x54dd2e"
+    },
+    "0x1a2": {
+      "handler": "0x528890",
+      "name": "Cmd_ItemUseAck",
+      "registration": "0x54dd44"
+    },
+    "0x1a4": {
+      "handler": "0x518b80",
+      "name": "Cmd_ItemUseExAck",
+      "registration": "0x54dd5a"
+    },
+    "0x1a5": {
+      "handler": "0x5286f0",
+      "name": "Cmd_ItemDataList",
+      "registration": "0x54dc3c"
+    },
+    "0x1a7": {
+      "handler": "0x518bc0",
+      "name": "Cmd_PackItemAck",
+      "registration": "0x54dd70"
+    },
+    "0x1a9": {
+      "handler": "0x518cb0",
+      "name": "Cmd_UnPackItemAck",
+      "registration": "0x54ddde"
+    },
+    "0x1ab": {
+      "handler": "0x51db90",
+      "name": "Cmd_ModifyItemAck",
+      "registration": "0x54ddf4"
+    },
+    "0x1ad": {
+      "handler": "0x51df00",
+      "name": "Cmd_CombiItemAck",
+      "registration": "0x54de0a"
+    },
+    "0x1af": {
+      "handler": "0x51da40",
+      "name": "Cmd_UpgradeItemDoubleAck",
+      "registration": "0x54dd02"
+    },
+    "0x1b1": {
+      "handler": "0x51df50",
+      "name": "Cmd_ReplenishItemAck",
+      "registration": "0x54de20"
+    },
+    "0x1b4": {
+      "handler": "0x51d9d0",
+      "name": "Cmd_RepairItemAck",
+      "registration": "0x54dcec"
+    },
+    "0x1b7": {
+      "handler": "0x51df50",
+      "name": "Cmd_SetItemStateAck",
+      "registration": "0x54de36"
+    },
+    "0x1b9": {
+      "handler": "0x538550",
+      "name": "Cmd_RegisterRoomObserverAck",
+      "registration": "0x54de62"
+    },
+    "0x1be": {
+      "handler": "0x53bb60",
+      "name": "Cmd_RoomState",
+      "registration": "0x54dfac"
+    },
+    "0x1bf": {
+      "handler": "0x53cd90",
+      "name": "Cmd_OBSState",
+      "registration": "0x54e0ca"
+    },
+    "0x1c": {
+      "handler": "0x517060",
+      "name": "Cmd_UserAuthSecondAck",
+      "registration": "0x54cfb5"
+    },
+    "0x1c0": {
+      "handler": "0x528b20",
+      "name": "Cmd_PartyItemUseAck",
+      "registration": "0x54de4c"
+    },
+    "0x1c3": {
+      "handler": "0x53b410",
+      "name": "Cmd_InviteeListAck",
+      "registration": "0x54e0f6"
+    },
+    "0x1c5": {
+      "handler": "0x5397a0",
+      "name": "Cmd_StatEnchantRes",
+      "registration": "0x54e329"
+    },
+    "0x1c7": {
+      "handler": "0x539e80",
+      "name": "Cmd_RealMatchInfo",
+      "registration": "0x54de78"
+    },
+    "0x1c8": {
+      "handler": "0x53a4b0",
+      "name": "Cmd_RealMatchNotice",
+      "registration": "0x54de8e"
+    },
+    "0x1ca": {
+      "handler": "0x53a7e0",
+      "name": "Cmd_GetRoomInfoAck",
+      "registration": "0x54df6a"
+    },
+    "0x1cb": {
+      "handler": "0x538e20",
+      "name": "Cmd_UpdateRoomInfo",
+      "registration": "0x54dfc2"
+    },
+    "0x1cd": {
+      "handler": "0x538c80",
+      "name": "Cmd_RoomCreateAck",
+      "registration": "0x54df80"
+    },
+    "0x1d0": {
+      "handler": "0x53a840",
+      "name": "Cmd_RoomListAck",
+      "registration": "0x54dfee"
+    },
+    "0x1d1": {
+      "handler": "0x53ab60",
+      "name": "Cmd_RoomInvite",
+      "registration": "0x54e004"
+    },
+    "0x1d2": {
+      "handler": "0x53ac60",
+      "name": "Cmd_RoomPrivateInvite",
+      "registration": "0x54e01a"
+    },
+    "0x1d3": {
+      "handler": "0x538d40",
+      "name": "Cmd_RoomNotifyChange",
+      "registration": "0x54e046"
+    },
+    "0x1d4": {
+      "handler": "0x53ad60",
+      "name": "Cmd_RoomJoin",
+      "registration": "0x54e030"
+    },
+    "0x1d5": {
+      "handler": "0x538ea0",
+      "name": "Cmd_RoomLeave",
+      "registration": "0x54e05c"
+    },
+    "0x1d6": {
+      "handler": "0x538ef0",
+      "name": "Cmd_RoomBanish",
+      "registration": "0x54e072"
+    },
+    "0x1da": {
+      "handler": "0x53aee0",
+      "name": "Cmd_RoomClose",
+      "registration": "0x54e09e"
+    },
+    "0x1e": {
+      "handler": "0x531f70",
+      "name": "Cmd_GameSetting",
+      "registration": "0x54d1e2"
+    },
+    "0x1e2": {
+      "handler": "0x539220",
+      "name": "Cmd_UserGhostMode",
+      "registration": "0x54e088"
+    },
+    "0x1e4": {
+      "handler": "0x53b360",
+      "name": "Cmd_PvpBattleBonusResult",
+      "registration": "0x54e2a5"
+    },
+    "0x1e5": {
+      "handler": "0x539280",
+      "name": "Cmd_PvpReadyState",
+      "registration": "0x54e19d"
+    },
+    "0x1e7": {
+      "handler": "0x539310",
+      "name": "Cmd_PvpLoad",
+      "registration": "0x54e1b3"
+    },
+    "0x1e8": {
+      "handler": "0x539370",
+      "name": "Cmd_PvpLoadingStatus",
+      "registration": "0x54e1c9"
+    },
+    "0x1ea": {
+      "handler": "0x53bf20",
+      "name": "Cmd_PvpGo",
+      "registration": "0x54e1df"
+    },
+    "0x1eb": {
+      "handler": "0x539570",
+      "name": "Cmd_PvpEnd",
+      "registration": "0x54e20b"
+    },
+    "0x1ec": {
+      "handler": "0x53c030",
+      "name": "Cmd_PvpResult",
+      "registration": "0x54e237"
+    },
+    "0x1ee": {
+      "handler": "0x5393a0",
+      "name": "Cmd_PvpGateReward",
+      "registration": "0x54e1f5"
+    },
+    "0x1ef": {
+      "handler": "0x5395f0",
+      "name": "Cmd_PvpFinish",
+      "registration": "0x54e221"
+    },
+    "0x1f0": {
+      "handler": "0x539540",
+      "name": "Cmd_PvpItemEffect",
+      "registration": "0x54e279"
+    },
+    "0x1f1": {
+      "handler": "0x539640",
+      "name": "Cmd_PvpSubResult",
+      "registration": "0x54e24d"
+    },
+    "0x1f2": {
+      "handler": "0x539700",
+      "name": "Cmd_PvpLadderResult",
+      "registration": "0x54e263"
+    },
+    "0x1f3": {
+      "handler": "0x53b130",
+      "name": "Cmd_PvpBattingResult",
+      "registration": "0x54e28f"
+    },
+    "0x1f5": {
+      "handler": "0x52b470",
+      "name": "Cmd_TradeOpenAck",
+      "registration": "0x54e431"
+    },
+    "0x1f6": {
+      "handler": "0x52b760",
+      "name": "Cmd_TradePropose",
+      "registration": "0x54e45d"
+    },
+    "0x1f9": {
+      "handler": "0x51df70",
+      "name": "Cmd_TradeItemOnAck",
+      "registration": "0x54e473"
+    },
+    "0x1fb": {
+      "handler": "0x51dff0",
+      "name": "Cmd_TradeItemOffAck",
+      "registration": "0x54e489"
+    },
+    "0x1fd": {
+      "handler": "0x51e060",
+      "name": "Cmd_TradeLockAck",
+      "registration": "0x54e49f"
+    },
+    "0x1ff": {
+      "handler": "0x52b5f0",
+      "name": "Cmd_TradeCloseAck",
+      "registration": "0x54e447"
+    },
+    "0x2": {
+      "handler": "0x518cb0",
+      "name": "Cmd_Ping",
+      "registration": "0x54cf1d"
+    },
+    "0x20": {
+      "handler": "0x532000",
+      "name": "Cmd_ServerSetting",
+      "registration": "0x54d1f5"
+    },
+    "0x201": {
+      "handler": "0x52b900",
+      "name": "Cmd_TradeCompleteAck",
+      "registration": "0x54e4b5"
+    },
+    "0x203": {
+      "handler": "0x51e0d0",
+      "name": "Cmd_TradeMoneyAck",
+      "registration": "0x54e4cb"
+    },
+    "0x20a": {
+      "handler": "0x526a10",
+      "name": "Cmd_CurrentGameMode",
+      "registration": "0x54d5b4"
+    },
+    "0x20c": {
+      "handler": "0x51db10",
+      "name": "Cmd_UpgradeItemSafeAck",
+      "registration": "0x54dd18"
+    },
+    "0x213": {
+      "handler": "0x53b7f0",
+      "name": "Cmd_GhostStartAck",
+      "registration": "0x54e36b"
+    },
+    "0x215": {
+      "handler": "0x5398b0",
+      "name": "Cmd_GhostGateReward",
+      "registration": "0x54e381"
+    },
+    "0x217": {
+      "handler": "0x5141b0",
+      "name": "Cmd_GhostResult",
+      "registration": "0x54e397"
+    },
+    "0x228": {
+      "handler": "0x515380",
+      "name": "Cmd_ReplayData",
+      "registration": "0x54e83b"
+    },
+    "0x241": {
+      "handler": "0x53e6b0",
+      "name": "Cmd_ReplaceCarAck",
+      "registration": "0x54f065"
+    },
+    "0x245": {
+      "handler": "0x528c00",
+      "name": "Cmd_MyAuctionListAck",
+      "registration": "0x54e867"
+    },
+    "0x247": {
+      "handler": "0x51e160",
+      "name": "Cmd_AuctionOnAck",
+      "registration": "0x54e8a9"
+    },
+    "0x249": {
+      "handler": "0x51e1e0",
+      "name": "Cmd_AuctionCancelAck",
+      "registration": "0x54e8bf"
+    },
+    "0x24b": {
+      "handler": "0x51e2c0",
+      "name": "Cmd_AuctionCompleteAck",
+      "registration": "0x54e901"
+    },
+    "0x24d": {
+      "handler": "0x528c40",
+      "name": "Cmd_AuctionListAck",
+      "registration": "0x54e87d"
+    },
+    "0x251": {
+      "handler": "0x51e210",
+      "name": "Cmd_AuctionBuyAck",
+      "registration": "0x54e8d5"
+    },
+    "0x252": {
+      "handler": "0x51e280",
+      "name": "Cmd_AuctionBuyed",
+      "registration": "0x54e8eb"
+    },
+    "0x254": {
+      "handler": "0x528c40",
+      "name": "Cmd_AuctionSearchAck",
+      "registration": "0x54e893"
+    },
+    "0x26d": {
+      "handler": "0x538d00",
+      "name": "Cmd_RoomModify",
+      "registration": "0x54df96"
+    },
+    "0x26e": {
+      "handler": "0x5391d0",
+      "name": "Cmd_RoomMaster",
+      "registration": "0x54e0b4"
+    },
+    "0x271": {
+      "handler": "0x53ae60",
+      "name": "Cmd_RoomAiCarAssign",
+      "registration": "0x54dfd8"
+    },
+    "0x280": {
+      "handler": "0x51e4e0",
+      "name": "Cmd_Weather",
+      "registration": "0x54e9c7"
+    },
+    "0x28a": {
+      "handler": "0x52acd0",
+      "name": "Cmd_Notice",
+      "registration": "0x54fe48"
+    },
+    "0x295": {
+      "handler": "0x51e580",
+      "name": "Cmd_GameCharInfoAck",
+      "registration": "0x54e9dd"
+    },
+    "0x297": {
+      "handler": "0x51e7a0",
+      "name": "Cmd_GameCharInfoExAck",
+      "registration": "0x54e9f3"
+    },
+    "0x299": {
+      "handler": "0x521c60",
+      "name": "Cmd_CGameCharInfoExAck",
+      "registration": "0x54ea09"
+    },
+    "0x29b": {
+      "handler": "0x519ed0",
+      "name": "Cmd_LicenseStatusAck",
+      "registration": "0x54e775"
+    },
+    "0x29c": {
+      "handler": "0x51a180",
+      "name": "Cmd_LCondStatusAck",
+      "registration": "0x54e78b"
+    },
+    "0x29f": {
+      "handler": "0x528d40",
+      "name": "Cmd_GameCharInfoOffLineAck",
+      "registration": "0x54ea1f"
+    },
+    "0x2a": {
+      "handler": "0x535930",
+      "name": "Cmd_CheckInLobbyAck",
+      "registration": "0x54cfde"
+    },
+    "0x2c": {
+      "handler": "0x5248e0",
+      "name": "Cmd_ClientAuth",
+      "registration": "0x54d1bc"
+    },
+    "0x2d4": {
+      "handler": "0x5291a0",
+      "name": "Cmd_FuelChargeRes",
+      "registration": "0x54ea35"
+    },
+    "0x2e5": {
+      "handler": "0x51e880",
+      "name": "Cmd_TrafficItemEventAck",
+      "registration": "0x54ea4b"
+    },
+    "0x2f": {
+      "handler": "0x535ad0",
+      "name": "Cmd_LobbyTimeAck",
+      "registration": "0x54d0e8"
+    },
+    "0x2f8": {
+      "handler": "0x518cc0",
+      "name": "Cmd_StatUpdate",
+      "registration": "0x54ea61"
+    },
+    "0x2f9": {
+      "handler": "0x518d50",
+      "name": "Cmd_PartyEnChantUpdate",
+      "registration": "0x54ea77"
+    },
+    "0x2fa": {
+      "handler": "0x518d70",
+      "name": "Cmd_ExtendUpdate",
+      "registration": "0x54ea8d"
+    },
+    "0x3": {
+      "handler": "0x514280",
+      "name": "Cmd_GlobalTime",
+      "registration": "0x54cf30"
+    },
+    "0x30d": {
+      "handler": "0x52ed00",
+      "name": "Cmd_AreaListAck",
+      "registration": "0x54eaa3"
+    },
+    "0x30f": {
+      "handler": "0x51ea60",
+      "name": "Cmd_MyPositionAck",
+      "registration": "0x54eae5"
+    },
+    "0x311": {
+      "handler": "0x51ee80",
+      "name": "Cmd_GetDateTimeAck",
+      "registration": "0x54eb11"
+    },
+    "0x313": {
+      "handler": "0x51edc0",
+      "name": "Cmd_QuestPositionAck",
+      "registration": "0x54eafb"
+    },
+    "0x315": {
+      "handler": "0x52ed40",
+      "name": "Cmd_GateListAck",
+      "registration": "0x54eab9"
+    },
+    "0x316": {
+      "handler": "0x5291f0",
+      "name": "Cmd_ChannelOwnershipListAck",
+      "registration": "0x54eacf"
+    },
+    "0x317": {
+      "handler": "0x51a460",
+      "name": "Cmd_UpdateSAge",
+      "registration": "0x54d2b2"
+    },
+    "0x318": {
+      "handler": "0x51a440",
+      "name": "Cmd_Action",
+      "registration": "0x54d29c"
+    },
+    "0x32": {
+      "handler": "0x535c00",
+      "name": "Cmd_SetCharacterState",
+      "registration": "0x54d03d"
+    },
+    "0x321": {
+      "handler": "0x52fbb0",
+      "name": "Cmd_PlayerInfoReq",
+      "registration": "0x54e6db"
+    },
+    "0x322": {
+      "handler": "0x5249a0",
+      "name": "Cmd_PlayerInfoOld",
+      "registration": "0x54e6c5"
+    },
+    "0x324": {
+      "handler": "0x531250",
+      "name": "Cmd_StickerInfoRes",
+      "registration": "0x54e6f1"
+    },
+    "0x326": {
+      "handler": "0x518550",
+      "name": "Cmd_LicenseInfoRes",
+      "registration": "0x54e707"
+    },
+    "0x328": {
+      "handler": "0x51f680",
+      "name": "Cmd_SetMyDeliveryItemAck",
+      "registration": "0x54f0e9"
+    },
+    "0x329": {
+      "handler": "0x524920",
+      "name": "Cmd_PlayerInfoRes",
+      "registration": "0x54e6af"
+    },
+    "0x32a": {
+      "handler": "0x51a290",
+      "name": "Cmd_ETCInfo",
+      "registration": "0x54d231"
+    },
+    "0x32c": {
+      "handler": "0x531430",
+      "name": "Cmd_GetLicenseInfoAck",
+      "registration": "0x54e71d"
+    },
+    "0x32e": {
+      "handler": "0x531520",
+      "name": "Cmd_GetLicenseCondAck",
+      "registration": "0x54e733"
+    },
+    "0x330": {
+      "handler": "0x524a70",
+      "name": "Cmd_SelectLicenseAck",
+      "registration": "0x54e749"
+    },
+    "0x331": {
+      "handler": "0x5185c0",
+      "name": "Cmd_NewLicenseNoti",
+      "registration": "0x54e75f"
+    },
+    "0x337": {
+      "handler": "0x5144d0",
+      "name": "Cmd_ObserverCount",
+      "registration": "0x54e825"
+    },
+    "0x33f": {
+      "handler": "0x53f470",
+      "name": "Cmd_SetTeamMarkAck",
+      "registration": "0x54ecdf"
+    },
+    "0x341": {
+      "handler": "0x53fff0",
+      "name": "Cmd_GetTeamMarkAck",
+      "registration": "0x54ecf5"
+    },
+    "0x343": {
+      "handler": "0x53f4e0",
+      "name": "Cmd_SetTeamUrlAck",
+      "registration": "0x54ed0b"
+    },
+    "0x349": {
+      "handler": "0x53f0d0",
+      "name": "Cmd_MyTeamInfoAck",
+      "registration": "0x54ec03"
+    },
+    "0x34b": {
+      "handler": "0x53f9b0",
+      "name": "Cmd_CreateTeamAck",
+      "registration": "0x54ec2f"
+    },
+    "0x34d": {
+      "handler": "0x53f330",
+      "name": "Cmd_CloseTeamAck",
+      "registration": "0x54ec45"
+    },
+    "0x34f": {
+      "handler": "0x53fbd0",
+      "name": "Cmd_JoinTeamAck",
+      "registration": "0x54ec71"
+    },
+    "0x351": {
+      "handler": "0x53fd70",
+      "name": "Cmd_LeaveTeamAck",
+      "registration": "0x54ec87"
+    },
+    "0x354": {
+      "handler": "0x53f360",
+      "name": "Cmd_CheckTeamNameAck",
+      "registration": "0x54ec9d"
+    },
+    "0x356": {
+      "handler": "0x53f330",
+      "name": "Cmd_CancelCloseTeamAck",
+      "registration": "0x54ec5b"
+    },
+    "0x358": {
+      "handler": "0x53fee0",
+      "name": "Cmd_TeamMembersAck",
+      "registration": "0x54ecc9"
+    },
+    "0x359": {
+      "handler": "0x53f740",
+      "name": "Cmd_DelegateTeamMasterAck",
+      "registration": "0x54eeef"
+    },
+    "0x35b": {
+      "handler": "0x53f2e0",
+      "name": "Cmd_CharTeamInfoAck",
+      "registration": "0x54ec19"
+    },
+    "0x35d": {
+      "handler": "0x540940",
+      "name": "Cmd_CBattleInfoAck",
+      "registration": "0x54ed63"
+    },
+    "0x35f": {
+      "handler": "0x53f770",
+      "name": "Cmd_GetCBattleTimeAck",
+      "registration": "0x54ed4d"
+    },
+    "0x365": {
+      "handler": "0x53f3b0",
+      "name": "Cmd_CheckTeamUrlAck",
+      "registration": "0x54ecb3"
+    },
+    "0x367": {
+      "handler": "0x540060",
+      "name": "Cmd_JoinTeamApply",
+      "registration": "0x54ee55"
+    },
+    "0x369": {
+      "handler": "0x540700",
+      "name": "Cmd_LeaveTeamRequest",
+      "registration": "0x54eead"
+    },
+    "0x36b": {
+      "handler": "0x5407f0",
+      "name": "Cmd_BanishTeamMember",
+      "registration": "0x54eec3"
+    },
+    "0x36c": {
+      "handler": "0x53f650",
+      "name": "Cmd_RejectTeamApply",
+      "registration": "0x54ee81"
+    },
+    "0x36d": {
+      "handler": "0x540180",
+      "name": "Cmd_TeamNotify",
+      "registration": "0x54ee97"
+    },
+    "0x36e": {
+      "handler": "0x53f5c0",
+      "name": "Cmd_JoinTeamApplyAck",
+      "registration": "0x54ee6b"
+    },
+    "0x375": {
+      "handler": "0x53f730",
+      "name": "Cmd_AssignTeamRankAck",
+      "registration": "0x54eed9"
+    },
+    "0x376": {
+      "handler": "0x53f910",
+      "name": "Cmd_CBattleRoomCreateAck",
+      "registration": "0x54ee13"
+    },
+    "0x384": {
+      "handler": "0x53f7e0",
+      "name": "Cmd_CBattleRoomReady",
+      "registration": "0x54edfd"
+    },
+    "0x386": {
+      "handler": "0x53f7a0",
+      "name": "Cmd_CBattleState",
+      "registration": "0x54ed21"
+    },
+    "0x388": {
+      "handler": "0x540a00",
+      "name": "Cmd_CBattleInstanceAck",
+      "registration": "0x54ed79"
+    },
+    "0x38d": {
+      "handler": "0x540a40",
+      "name": "Cmd_CBattleItemsAck",
+      "registration": "0x54eda5"
+    },
+    "0x38f": {
+      "handler": "0x53f800",
+      "name": "Cmd_CBattleGetSettingAck",
+      "registration": "0x54ed8f"
+    },
+    "0x390": {
+      "handler": "0x5409d0",
+      "name": "Cmd_CBattleBroadcast",
+      "registration": "0x54ed37"
+    },
+    "0x391": {
+      "handler": "0x540a60",
+      "name": "Cmd_CBattleRewardItems",
+      "registration": "0x54edbb"
+    },
+    "0x392": {
+      "handler": "0x540a90",
+      "name": "Cmd_CBattleMissedItems",
+      "registration": "0x54edd1"
+    },
+    "0x393": {
+      "handler": "0x53f830",
+      "name": "Cmd_CBattleRewardMoney",
+      "registration": "0x54ede7"
+    },
+    "0x394": {
+      "handler": "0x53c170",
+      "name": "Cmd_ObserverSupport",
+      "registration": "0x54e0e0"
+    },
+    "0x396": {
+      "handler": "0x53d700",
+      "name": "Cmd_ReplayListAck",
+      "registration": "0x54e33f"
+    },
+    "0x398": {
+      "handler": "0x5397b0",
+      "name": "Cmd_ReplayRes",
+      "registration": "0x54e355"
+    },
+    "0x3b7": {
+      "handler": "0x539960",
+      "name": "Cmd_MissionBattleStartAck",
+      "registration": "0x54e15b"
+    },
+    "0x3b9": {
+      "handler": "0x522530",
+      "name": "Cmd_MissionBattleCompleteAck",
+      "registration": "0x54f729"
+    },
+    "0x3ba": {
+      "handler": "0x5225f0",
+      "name": "Cmd_MissionBattleFail",
+      "registration": "0x54f73f"
+    },
+    "0x3bb": {
+      "handler": "0x5398d0",
+      "name": "Cmd_MissionRoomState",
+      "registration": "0x54e145"
+    },
+    "0x3bc": {
+      "handler": "0x539940",
+      "name": "Cmd_MissionBattleSeed",
+      "registration": "0x54e171"
+    },
+    "0x3bd": {
+      "handler": "0x539a00",
+      "name": "Cmd_MissionBattleObjectEvent",
+      "registration": "0x54e187"
+    },
+    "0x3c0": {
+      "handler": "0x53b860",
+      "name": "Cmd_WMLaptimeStatusInfo",
+      "registration": "0x54fc22"
+    },
+    "0x3d": {
+      "handler": "0x5369d0",
+      "name": "Cmd_UserInfoAck",
+      "registration": "0x54cff1"
+    },
+    "0x3df": {
+      "handler": "0x51c2f0",
+      "name": "Cmd_InstantRequestAck",
+      "registration": "0x54da16"
+    },
+    "0x3e1": {
+      "handler": "0x527a00",
+      "name": "Cmd_InstantStartAck",
+      "registration": "0x54da2c"
+    },
+    "0x3e3": {
+      "handler": "0x51c580",
+      "name": "Cmd_InstantCompleteAck",
+      "registration": "0x54da42"
+    },
+    "0x3e5": {
+      "handler": "0x527c70",
+      "name": "Cmd_InstantRewardAck",
+      "registration": "0x54da84"
+    },
+    "0x3e6": {
+      "handler": "0x518970",
+      "name": "Cmd_InstantFail",
+      "registration": "0x54da58"
+    },
+    "0x3e8": {
+      "handler": "0x51c6b0",
+      "name": "Cmd_InstantGiveUpAck",
+      "registration": "0x54da6e"
+    },
+    "0x3ea": {
+      "handler": "0x51c7d0",
+      "name": "Cmd_InstantGoalPlaceAck",
+      "registration": "0x54da9a"
+    },
+    "0x3f4": {
+      "handler": "0x518e80",
+      "name": "Cmd_GetCouponForVarAck",
+      "registration": "0x54ef1b"
+    },
+    "0x3f6": {
+      "handler": "0x529930",
+      "name": "Cmd_GetCouponStampListAck",
+      "registration": "0x54ef31"
+    },
+    "0x3f8": {
+      "handler": "0x51f2c0",
+      "name": "Cmd_MarkCouponAck",
+      "registration": "0x54f07b"
+    },
+    "0x3fa": {
+      "handler": "0x51f340",
+      "name": "Cmd_OpenCouponAck",
+      "registration": "0x54f091"
+    },
+    "0x3fc": {
+      "handler": "0x51f370",
+      "name": "Cmd_GetCouponAck",
+      "registration": "0x54f0a7"
+    },
+    "0x3fd": {
+      "handler": "0x518e50",
+      "name": "Cmd_UpdateCouponParam",
+      "registration": "0x54ef05"
+    },
+    "0x4": {
+      "handler": "0x53ee30",
+      "name": "Cmd_Latency",
+      "registration": "0x54cf43"
+    },
+    "0x41": {
+      "handler": "0x536430",
+      "name": "Cmd_GetImageAck",
+      "registration": "0x54d063"
+    },
+    "0x410": {
+      "handler": "0x51f3b0",
+      "name": "Cmd_ComboExp",
+      "registration": "0x54f0bd"
+    },
+    "0x425": {
+      "handler": "0x51f430",
+      "name": "Cmd_VisualUpdate",
+      "registration": "0x54f0d3"
+    },
+    "0x44": {
+      "handler": "0x5363c0",
+      "name": "Cmd_GetImageData",
+      "registration": "0x54d050"
+    },
+    "0x457": {
+      "handler": "0x53e0d0",
+      "name": "Cmd_EnterRushZoneAck",
+      "registration": "0x54ef5d"
+    },
+    "0x459": {
+      "handler": "0x53e160",
+      "name": "Cmd_ExitRushZoneAck",
+      "registration": "0x54ef73"
+    },
+    "0x45b": {
+      "handler": "0x53dfc0",
+      "name": "Cmd_RushStatus",
+      "registration": "0x54ef9f"
+    },
+    "0x45c": {
+      "handler": "0x53dc00",
+      "name": "Cmd_RushNotice",
+      "registration": "0x54ef47"
+    },
+    "0x45d": {
+      "handler": "0x53d8c0",
+      "name": "Cmd_AssignHuvControl",
+      "registration": "0x54efb5"
+    },
+    "0x45e": {
+      "handler": "0x53dd60",
+      "name": "Cmd_NotifyRushHuv",
+      "registration": "0x54efcb"
+    },
+    "0x45f": {
+      "handler": "0x518cb0",
+      "name": "Cmd_DeleteRushHuv",
+      "registration": "0x54efe1"
+    },
+    "0x46": {
+      "handler": "0x535a40",
+      "name": "Cmd_LobbyETCInfo",
+      "registration": "0x54d09c"
+    },
+    "0x460": {
+      "handler": "0x53da00",
+      "name": "Cmd_RushResult",
+      "registration": "0x54eff7"
+    },
+    "0x461": {
+      "handler": "0x53e3d0",
+      "name": "Cmd_SwitchRushHuv",
+      "registration": "0x54f039"
+    },
+    "0x462": {
+      "handler": "0x53da30",
+      "name": "Cmd_CastRushEvent",
+      "registration": "0x54f00d"
+    },
+    "0x463": {
+      "handler": "0x53dba0",
+      "name": "Cmd_RushObjectUpdate",
+      "registration": "0x54f023"
+    },
+    "0x464": {
+      "handler": "0x53dbe0",
+      "name": "Cmd_RushMemberCnt",
+      "registration": "0x54f04f"
+    },
+    "0x467": {
+      "handler": "0x53d7e0",
+      "name": "Cmd_UpdateRushZone",
+      "registration": "0x54ef89"
+    },
+    "0x47e": {
+      "handler": "0x52ed90",
+      "name": "Cmd_Mita500Position",
+      "registration": "0x54f637"
+    },
+    "0x48": {
+      "handler": "0x535990",
+      "name": "Cmd_StickerUploadAck",
+      "registration": "0x54d076"
+    },
+    "0x480": {
+      "handler": "0x5211f0",
+      "name": "Cmd_Mita500GetAck",
+      "registration": "0x54f64d"
+    },
+    "0x481": {
+      "handler": "0x521490",
+      "name": "Cmd_Mita500BuffInfo",
+      "registration": "0x54f663"
+    },
+    "0x483": {
+      "handler": "0x5215d0",
+      "name": "Cmd_BacchusBuffInfo",
+      "registration": "0x54f679"
+    },
+    "0x488": {
+      "handler": "0x5216a0",
+      "name": "Cmd_DayEventInfo",
+      "registration": "0x54f68f"
+    },
+    "0x489": {
+      "handler": "0x521730",
+      "name": "Cmd_DayMissionCompleteAck",
+      "registration": "0x54f6a5"
+    },
+    "0x48c": {
+      "handler": "0x5218a0",
+      "name": "Cmd_DayMissionGetRewardAck",
+      "registration": "0x54f6bb"
+    },
+    "0x48d": {
+      "handler": "0x52bf10",
+      "name": "Cmd_DayMileageGetRewardAck",
+      "registration": "0x54f6d1"
+    },
+    "0x48f": {
+      "handler": "0x52a5f0",
+      "name": "Cmd_DayHongbaoGetRewardAck",
+      "registration": "0x54f6e7"
+    },
+    "0x493": {
+      "handler": "0x521970",
+      "name": "Cmd_DayEventGetItemAck",
+      "registration": "0x54f6fd"
+    },
+    "0x495": {
+      "handler": "0x521a30",
+      "name": "Cmd_DayEventCompleteAck",
+      "registration": "0x54f713"
+    },
+    "0x4a": {
+      "handler": "0x5359f0",
+      "name": "Cmd_StickerListAck",
+      "registration": "0x54d089"
+    },
+    "0x4b1": {
+      "handler": "0x528730",
+      "name": "Cmd_VisualItemListAck",
+      "registration": "0x54f115"
+    },
+    "0x4b2": {
+      "handler": "0x5287d0",
+      "name": "Cmd_VSItemModList",
+      "registration": "0x54dc52"
+    },
+    "0x4b4": {
+      "handler": "0x5329e0",
+      "name": "Cmd_BuyVisualItemAck",
+      "registration": "0x54f141"
+    },
+    "0x4b6": {
+      "handler": "0x51f8b0",
+      "name": "Cmd_EquipVisualItemAck",
+      "registration": "0x54f183"
+    },
+    "0x4b8": {
+      "handler": "0x51f8e0",
+      "name": "Cmd_UnEquipVisualItemAck",
+      "registration": "0x54f199"
+    },
+    "0x4ba": {
+      "handler": "0x51f940",
+      "name": "Cmd_VisualItemUseAck",
+      "registration": "0x54f1af"
+    },
+    "0x4bc": {
+      "handler": "0x51f6e0",
+      "name": "Cmd_DropVisualItemAck",
+      "registration": "0x54f12b"
+    },
+    "0x4be": {
+      "handler": "0x51f9c0",
+      "name": "Cmd_SetAeroStatsAck",
+      "registration": "0x54f1db"
+    },
+    "0x4c0": {
+      "handler": "0x51fa00",
+      "name": "Cmd_RecycleVSItemAck",
+      "registration": "0x54f1f1"
+    },
+    "0x4c3": {
+      "handler": "0x518ee0",
+      "name": "Cmd_SellAeroPartsAck",
+      "registration": "0x54f9e6"
+    },
+    "0x4c5": {
+      "handler": "0x51fa50",
+      "name": "Cmd_RepairNeoPartsAck",
+      "registration": "0x54f207"
+    },
+    "0x4f": {
+      "handler": "0x535b00",
+      "name": "Cmd_StickerReportAttachAck",
+      "registration": "0x54f2a1"
+    },
+    "0x51": {
+      "handler": "0x535970",
+      "name": "Cmd_CheckCharNameAck",
+      "registration": "0x54d004"
+    },
+    "0x515": {
+      "handler": "0x529f20",
+      "name": "Cmd_BuyHistoryListAck",
+      "registration": "0x54f233"
+    },
+    "0x517": {
+      "handler": "0x51f750",
+      "name": "Cmd_SendVisualItemAck",
+      "registration": "0x54f157"
+    },
+    "0x519": {
+      "handler": "0x51f810",
+      "name": "Cmd_GetVisualItemAck",
+      "registration": "0x54f16d"
+    },
+    "0x51b": {
+      "handler": "0x518ea0",
+      "name": "Cmd_IsValidCharNameAck",
+      "registration": "0x54f0ff"
+    },
+    "0x51c": {
+      "handler": "0x51f980",
+      "name": "Cmd_ReceiveVisualItem",
+      "registration": "0x54f1c5"
+    },
+    "0x51e": {
+      "handler": "0x520040",
+      "name": "Cmd_TestPlayerQuestion",
+      "registration": "0x54f37a"
+    },
+    "0x528": {
+      "handler": "0x535790",
+      "name": "Cmd_LapTimeLoad",
+      "registration": "0x54e3ad"
+    },
+    "0x52a": {
+      "handler": "0x535810",
+      "name": "Cmd_LapTimeStart",
+      "registration": "0x54e3c3"
+    },
+    "0x52c": {
+      "handler": "0x535870",
+      "name": "Cmd_LapTimeRecord",
+      "registration": "0x54e3ef"
+    },
+    "0x52d": {
+      "handler": "0x5358a0",
+      "name": "Cmd_LapTimeFinishing",
+      "registration": "0x54e405"
+    },
+    "0x52e": {
+      "handler": "0x5358e0",
+      "name": "Cmd_LapTimeResult",
+      "registration": "0x54e41b"
+    },
+    "0x52f": {
+      "handler": "0x535840",
+      "name": "Cmd_LapTimeNotifyStart",
+      "registration": "0x54e3d9"
+    },
+    "0x53": {
+      "handler": "0x536b90",
+      "name": "Cmd_CreateCharAck",
+      "registration": "0x54d017"
+    },
+    "0x54": {
+      "handler": "0x536390",
+      "name": "Cmd_DeleteChar",
+      "registration": "0x54d02a"
+    },
+    "0x547": {
+      "handler": "0x529e00",
+      "name": "Cmd_MyStickerListAck",
+      "registration": "0x54f28b"
+    },
+    "0x549": {
+      "handler": "0x5299b0",
+      "name": "Cmd_AttachStickerAck",
+      "registration": "0x54f249"
+    },
+    "0x54b": {
+      "handler": "0x529ba0",
+      "name": "Cmd_DetachStickerAck",
+      "registration": "0x54f25f"
+    },
+    "0x54c": {
+      "handler": "0x529cc0",
+      "name": "Cmd_NotifySelledSticker",
+      "registration": "0x54f275"
+    },
+    "0x551": {
+      "handler": "0x52a050",
+      "name": "Cmd_EndingUserRecordAck",
+      "registration": "0x54f390"
+    },
+    "0x56": {
+      "handler": "0x5182d0",
+      "name": "Cmd_BuyCarAck",
+      "registration": "0x54d121"
+    },
+    "0x579": {
+      "handler": "0x51fa90",
+      "name": "Cmd_GetMyHancoinAck",
+      "registration": "0x54f21d"
+    },
+    "0x58": {
+      "handler": "0x5184a0",
+      "name": "Cmd_SellCarAck",
+      "registration": "0x54d134"
+    },
+    "0x5a": {
+      "handler": "0x5199b0",
+      "name": "Cmd_SelectCarAck",
+      "registration": "0x54d147"
+    },
+    "0x5ab": {
+      "handler": "0x521a90",
+      "name": "Cmd_OpenLottoAck",
+      "registration": "0x54f85a"
+    },
+    "0x5ad": {
+      "handler": "0x521b10",
+      "name": "Cmd_ScratchLottoAck",
+      "registration": "0x54f870"
+    },
+    "0x5b5": {
+      "handler": "0x52a500",
+      "name": "Cmd_UseLuckyBagAck",
+      "registration": "0x54f886"
+    },
+    "0x5b7": {
+      "handler": "0x52a540",
+      "name": "Cmd_UseGWEventAck",
+      "registration": "0x54f89c"
+    },
+    "0x5bf": {
+      "handler": "0x52a580",
+      "name": "Cmd_UseHongbaoAck",
+      "registration": "0x54f8b2"
+    },
+    "0x5c": {
+      "handler": "0x519a30",
+      "name": "Cmd_UpgradeCarAck",
+      "registration": "0x54d15a"
+    },
+    "0x5c9": {
+      "handler": "0x52c130",
+      "name": "Cmd_ReadMailAck",
+      "registration": "0x54f8c8"
+    },
+    "0x5cb": {
+      "handler": "0x52c220",
+      "name": "Cmd_DeleteMailAck",
+      "registration": "0x54f8de"
+    },
+    "0x5cd": {
+      "handler": "0x52d340",
+      "name": "Cmd_KeepMailAck",
+      "registration": "0x54f8f4"
+    },
+    "0x5cf": {
+      "handler": "0x521b60",
+      "name": "Cmd_SendMailAck",
+      "registration": "0x54f90a"
+    },
+    "0x5d1": {
+      "handler": "0x52c2f0",
+      "name": "Cmd_GetMailItemAck",
+      "registration": "0x54f920"
+    },
+    "0x5d3": {
+      "handler": "0x534390",
+      "name": "Cmd_CompleteApprenticeAck",
+      "registration": "0x54f98e"
+    },
+    "0x5d5": {
+      "handler": "0x521ec0",
+      "name": "Cmd_GetCarAck",
+      "registration": "0x54f9a4"
+    },
+    "0x5dd": {
+      "handler": "0x51fc70",
+      "name": "Cmd_BonusUpdate",
+      "registration": "0x54f2f6"
+    },
+    "0x5e": {
+      "handler": "0x535a50",
+      "name": "Cmd_StickerNameCheckAck",
+      "registration": "0x54d0af"
+    },
+    "0x5e6": {
+      "handler": "0x531c20",
+      "name": "Cmd_PostList",
+      "registration": "0x54f94c"
+    },
+    "0x5e8": {
+      "handler": "0x521e60",
+      "name": "Cmd_InsertPostAck",
+      "registration": "0x54f962"
+    },
+    "0x5ea": {
+      "handler": "0x521e90",
+      "name": "Cmd_DeletePostAck",
+      "registration": "0x54f978"
+    },
+    "0x60": {
+      "handler": "0x535a80",
+      "name": "Cmd_DeleteStickerCatalogAck",
+      "registration": "0x54d0c2"
+    },
+    "0x61": {
+      "handler": "0x535e10",
+      "name": "Cmd_NotifyBadSticker",
+      "registration": "0x54d0d5"
+    },
+    "0x62": {
+      "handler": "0x52b330",
+      "name": "Cmd_RewardCar",
+      "registration": "0x54d10e"
+    },
+    "0x63": {
+      "handler": "0x5198f0",
+      "name": "Cmd_ChangeCarGrade",
+      "registration": "0x54d0fb"
+    },
+    "0x641": {
+      "handler": "0x528ca0",
+      "name": "Cmd_MyAuctionVSListAck",
+      "registration": "0x54e917"
+    },
+    "0x643": {
+      "handler": "0x51e320",
+      "name": "Cmd_AuctionVSOnAck",
+      "registration": "0x54e959"
+    },
+    "0x645": {
+      "handler": "0x51e3a0",
+      "name": "Cmd_AuctionVSCancelAck",
+      "registration": "0x54e96f"
+    },
+    "0x647": {
+      "handler": "0x51e480",
+      "name": "Cmd_AuctionVSCompleteAck",
+      "registration": "0x54e9b1"
+    },
+    "0x649": {
+      "handler": "0x528ce0",
+      "name": "Cmd_AuctionVSListAck",
+      "registration": "0x54e92d"
+    },
+    "0x64d": {
+      "handler": "0x51e3d0",
+      "name": "Cmd_AuctionVSBuyAck",
+      "registration": "0x54e985"
+    },
+    "0x64e": {
+      "handler": "0x51e440",
+      "name": "Cmd_AuctionVSBuyed",
+      "registration": "0x54e99b"
+    },
+    "0x65": {
+      "handler": "0x5381c0",
+      "name": "Cmd_ChannelListAck",
+      "registration": "0x54d1a9"
+    },
+    "0x650": {
+      "handler": "0x528ce0",
+      "name": "Cmd_AuctionVSSearchAck",
+      "registration": "0x54e943"
+    },
+    "0x69": {
+      "handler": "0x519d20",
+      "name": "Cmd_RentCarAck",
+      "registration": "0x54d183"
+    },
+    "0x6a5": {
+      "handler": "0x52a0b0",
+      "name": "Cmd_MyAuctionCarListAck",
+      "registration": "0x54f3bc"
+    },
+    "0x6a7": {
+      "handler": "0x520130",
+      "name": "Cmd_AuctionCarOnAck",
+      "registration": "0x54f3fe"
+    },
+    "0x6a9": {
+      "handler": "0x520520",
+      "name": "Cmd_AuctionCarCancelAck",
+      "registration": "0x54f414"
+    },
+    "0x6ab": {
+      "handler": "0x520640",
+      "name": "Cmd_AuctionCarCompleteAck",
+      "registration": "0x54f456"
+    },
+    "0x6ad": {
+      "handler": "0x52a0f0",
+      "name": "Cmd_AuctionCarListAck",
+      "registration": "0x54f3d2"
+    },
+    "0x6af": {
+      "handler": "0x520550",
+      "name": "Cmd_AuctionCarBuyAck",
+      "registration": "0x54f42a"
+    },
+    "0x6b": {
+      "handler": "0x52a360",
+      "name": "Cmd_RenameCharAck",
+      "registration": "0x54f755"
+    },
+    "0x6b0": {
+      "handler": "0x520620",
+      "name": "Cmd_AuctionCarBuyed",
+      "registration": "0x54f440"
+    },
+    "0x6b2": {
+      "handler": "0x52a0f0",
+      "name": "Cmd_AuctionCarSearchAck",
+      "registration": "0x54f3e8"
+    },
+    "0x6d": {
+      "handler": "0x52fad0",
+      "name": "Cmd_ReturnRentCarAck",
+      "registration": "0x54d196"
+    },
+    "0x6f": {
+      "handler": "0x53c3b0",
+      "name": "Cmd_CheckInCGameAck",
+      "registration": "0x54e132"
+    },
+    "0x708": {
+      "handler": "0x520700",
+      "name": "Cmd_AuctionCarOpenClose",
+      "registration": "0x54f46c"
+    },
+    "0x73": {
+      "handler": "0x53b4c0",
+      "name": "Cmd_LadderListRes",
+      "registration": "0x54e10c"
+    },
+    "0x75": {
+      "handler": "0x53b660",
+      "name": "Cmd_LadderSearchRes",
+      "registration": "0x54e11f"
+    },
+    "0x76d": {
+      "handler": "0x520730",
+      "name": "Cmd_SelectGuildAck",
+      "registration": "0x54f482"
+    },
+    "0x776": {
+      "handler": "0x520750",
+      "name": "Cmd_SelectDCGPTeam",
+      "registration": "0x54f498"
+    },
+    "0x777": {
+      "handler": "0x52a150",
+      "name": "Cmd_DCGPSeasonState",
+      "registration": "0x54f4ae"
+    },
+    "0x778": {
+      "handler": "0x520800",
+      "name": "Cmd_GetDCGPReward",
+      "registration": "0x54f4c4"
+    },
+    "0x79": {
+      "handler": "0x5198a0",
+      "name": "Cmd_CheckInGameAck",
+      "registration": "0x54d1cf"
+    },
+    "0x7c": {
+      "handler": "0x534f20",
+      "name": "Cmd_LoadCharAck",
+      "registration": "0x54d208"
+    },
+    "0x7d1": {
+      "handler": "0x5209d0",
+      "name": "Cmd_ExpInfo",
+      "registration": "0x54f5b6"
+    },
+    "0x7d2": {
+      "handler": "0x520c90",
+      "name": "Cmd_MitoInfo",
+      "registration": "0x54f5e2"
+    },
+    "0x7d3": {
+      "handler": "0x520db0",
+      "name": "Cmd_MileageInfo",
+      "registration": "0x54f5f8"
+    },
+    "0x7d4": {
+      "handler": "0x520b10",
+      "name": "Cmd_ReputationInfo",
+      "registration": "0x54f5cc"
+    },
+    "0x7e": {
+      "handler": "0x51a2b0",
+      "name": "Cmd_JoinChannelAck",
+      "registration": "0x54d273"
+    },
+    "0x8": {
+      "handler": "0x53eba0",
+      "name": "Cmd_SystemMessage",
+      "registration": "0x54cf56"
+    },
+    "0x80": {
+      "handler": "0x524bf0",
+      "name": "Cmd_LeaveChannelAck",
+      "registration": "0x54d286"
+    },
+    "0x82": {
+      "handler": "0x524d70",
+      "name": "Cmd_GameStream",
+      "registration": "0x54d25d"
+    },
+    "0x835": {
+      "handler": "0x539740",
+      "name": "Cmd_ObsGachaInit",
+      "registration": "0x54e2bb"
+    },
+    "0x836": {
+      "handler": "0x539760",
+      "name": "Cmd_ObsGachaSelect",
+      "registration": "0x54e2d1"
+    },
+    "0x838": {
+      "handler": "0x539780",
+      "name": "Cmd_ObsGachaUp",
+      "registration": "0x54e2fd"
+    },
+    "0x839": {
+      "handler": "0x53b680",
+      "name": "Cmd_ObsGachaSelectState",
+      "registration": "0x54e2e7"
+    },
+    "0x83a": {
+      "handler": "0x53b6b0",
+      "name": "Cmd_ObsGachaResult",
+      "registration": "0x54e313"
+    },
+    "0x84": {
+      "handler": "0x52e9f0",
+      "name": "Cmd_MailContent",
+      "registration": "0x54d2c8"
+    },
+    "0x88": {
+      "handler": "0x51faf0",
+      "name": "Cmd_CheckEventAck",
+      "registration": "0x54f2b4"
+    },
+    "0x89": {
+      "handler": "0x532f60",
+      "name": "Cmd_NotifyEvent",
+      "registration": "0x54f2ca"
+    },
+    "0x8a": {
+      "handler": "0x52ebf0",
+      "name": "Cmd_MoneyMessage",
+      "registration": "0x54d2de"
+    },
+    "0x8b": {
+      "handler": "0x51fc40",
+      "name": "Cmd_InstantEvent",
+      "registration": "0x54f2e0"
+    },
+    "0x8c": {
+      "handler": "0x524e10",
+      "name": "Cmd_OpenChat",
+      "registration": "0x54d320"
+    },
+    "0x8d": {
+      "handler": "0x524ed0",
+      "name": "Cmd_CloseChat",
+      "registration": "0x54d336"
+    },
+    "0x8f": {
+      "handler": "0x51a500",
+      "name": "Cmd_JoinChatAck",
+      "registration": "0x54d34c"
+    },
+    "0x9": {
+      "handler": "0x521140",
+      "name": "Cmd_ScriptMessage",
+      "registration": "0x54f60e"
+    },
+    "0x91": {
+      "handler": "0x51a650",
+      "name": "Cmd_LeaveChatAck",
+      "registration": "0x54d362"
+    },
+    "0x93": {
+      "handler": "0x52ff10",
+      "name": "Cmd_ChatMsgAck",
+      "registration": "0x54d378"
+    },
+    "0x94": {
+      "handler": "0x518850",
+      "name": "Cmd_Whisper",
+      "registration": "0x54d3e6"
+    },
+    "0x96": {
+      "handler": "0x51aaa0",
+      "name": "Cmd_PrivateChatMsgAck",
+      "registration": "0x54d38e"
+    },
+    "0x97": {
+      "handler": "0x51fec0",
+      "name": "Cmd_RecommendEvent",
+      "registration": "0x54f30c"
+    },
+    "0x99": {
+      "handler": "0x51fee0",
+      "name": "Cmd_RecommendFriendAck",
+      "registration": "0x54f322"
+    },
+    "0x9a": {
+      "handler": "0x529f70",
+      "name": "Cmd_RecommendFriendReward",
+      "registration": "0x54f338"
+    },
+    "0x9c": {
+      "handler": "0x52a260",
+      "name": "Cmd_ExitClient",
+      "registration": "0x54f34e"
+    },
+    "0x9c4": {
+      "handler": "0x5211c0",
+      "name": "Cmd_ChatBlock",
+      "registration": "0x54f621"
+    },
+    "0x9e": {
+      "handler": "0x520080",
+      "name": "Cmd_ResCouponItem",
+      "registration": "0x54f3a6"
+    },
+    "0xa1": {
+      "handler": "0x5186a0",
+      "name": "Cmd_CarPosAck",
+      "registration": "0x54d247"
+    },
+    "0xa29": {
+      "handler": "0x51a7b0",
+      "name": "Cmd_PrivateChatBanishAck",
+      "registration": "0x54d3a4"
+    },
+    "0xa2b": {
+      "handler": "0x5186e0",
+      "name": "Cmd_PrivateChatDelegateAck",
+      "registration": "0x54d3ba"
+    },
+    "0xa2d": {
+      "handler": "0x51a910",
+      "name": "Cmd_PrivateChatInfoAck",
+      "registration": "0x54d3d0"
+    },
+    "0xa3": {
+      "handler": "0x524870",
+      "name": "Cmd_PvpQuickSlot",
+      "registration": "0x54d21b"
+    },
+    "0xaa": {
+      "handler": "0x51ff90",
+      "name": "Cmd_DormantEvent",
+      "registration": "0x54f364"
+    },
+    "0xb5": {
+      "handler": "0x524f90",
+      "name": "Cmd_ChaseBeginConfirm",
+      "registration": "0x54d428"
+    },
+    "0xb8": {
+      "handler": "0x525710",
+      "name": "Cmd_ChaseResult",
+      "registration": "0x54d43e"
+    },
+    "0xb9": {
+      "handler": "0x525290",
+      "name": "Cmd_ChaseProgress",
+      "registration": "0x54d454"
+    },
+    "0xba": {
+      "handler": "0x52c9a0",
+      "name": "Cmd_ChasePropose",
+      "registration": "0x54d412"
+    },
+    "0xbb": {
+      "handler": "0x525500",
+      "name": "Cmd_ChaseHit",
+      "registration": "0x54d46a"
+    },
+    "0xbb9": {
+      "handler": "0x520840",
+      "name": "Cmd_UCPatrolStartAck",
+      "registration": "0x54f4da"
+    },
+    "0xbbb": {
+      "handler": "0x520860",
+      "name": "Cmd_UCPatrolGiveUpAck",
+      "registration": "0x54f4f0"
+    },
+    "0xbbd": {
+      "handler": "0x520880",
+      "name": "Cmd_UCPatrolGoalPlaceAck",
+      "registration": "0x54f506"
+    },
+    "0xbbe": {
+      "handler": "0x5208c0",
+      "name": "Cmd_UCPatrolResult",
+      "registration": "0x54f51c"
+    },
+    "0xbc": {
+      "handler": "0x534940",
+      "name": "Cmd_ChaseSwitch",
+      "registration": "0x54d480"
+    },
+    "0xbc3": {
+      "handler": "0x520e20",
+      "name": "Cmd_UCBossPatrolStartAck",
+      "registration": "0x54f532"
+    },
+    "0xbc5": {
+      "handler": "0x520e60",
+      "name": "Cmd_UCBossPatrolGiveupAck",
+      "registration": "0x54f548"
+    },
+    "0xbc7": {
+      "handler": "0x520e80",
+      "name": "Cmd_UCBossPatrolGoalPlaceAck",
+      "registration": "0x54f55e"
+    },
+    "0xbc8": {
+      "handler": "0x520f00",
+      "name": "Cmd_UCBossPatrolResult",
+      "registration": "0x54f574"
+    },
+    "0xbc9": {
+      "handler": "0x520e00",
+      "name": "Cmd_UCBossPatrolReset",
+      "registration": "0x54f58a"
+    },
+    "0xbcc": {
+      "handler": "0x521020",
+      "name": "Cmd_UnderCityReward",
+      "registration": "0x54f5a0"
+    },
+    "0xbf": {
+      "handler": "0x525ef0",
+      "name": "Cmd_HuvRes",
+      "registration": "0x54d4c2"
+    },
+    "0xc0": {
+      "handler": "0x5264b0",
+      "name": "Cmd_HuvHit",
+      "registration": "0x54d504"
+    },
+    "0xc1": {
+      "handler": "0x526790",
+      "name": "Cmd_HuvResult",
+      "registration": "0x54d546"
+    },
+    "0xc1e": {
+      "handler": "0x51cae0",
+      "name": "Cmd_PartyPatrolComplete",
+      "registration": "0x54daf2"
+    },
+    "0xc24": {
+      "handler": "0x51c8b0",
+      "name": "Cmd_PartyPatrolRedPost",
+      "registration": "0x54dab0"
+    },
+    "0xc26": {
+      "handler": "0x51c980",
+      "name": "Cmd_PartyPatrolRedPostGetAck",
+      "registration": "0x54dac6"
+    },
+    "0xc27": {
+      "handler": "0x527ea0",
+      "name": "Cmd_PartyPatrolInfo",
+      "registration": "0x54dadc"
+    },
+    "0xc29": {
+      "handler": "0x527f70",
+      "name": "Cmd_PartyHuv",
+      "registration": "0x54db08"
+    },
+    "0xc3": {
+      "handler": "0x525d10",
+      "name": "Cmd_HuvTimeout",
+      "registration": "0x54d4ac"
+    },
+    "0xc4": {
+      "handler": "0x525c80",
+      "name": "Cmd_HuvTimeBonus",
+      "registration": "0x54d496"
+    },
+    "0xc5": {
+      "handler": "0x526810",
+      "name": "Cmd_HuvHealth",
+      "registration": "0x54d572"
+    },
+    "0xc7": {
+      "handler": "0x531680",
+      "name": "Cmd_NeoHuvRes",
+      "registration": "0x54d4d8"
+    },
+    "0xc81": {
+      "handler": "0x521ca0",
+      "name": "Cmd_CityLeaveCheckAck",
+      "registration": "0x54f936"
+    },
+    "0xc9": {
+      "handler": "0x51ad80",
+      "name": "Cmd_BattleRes",
+      "registration": "0x54d55c"
+    },
+    "0xcd": {
+      "handler": "0x526170",
+      "name": "Cmd_NeoHuvHit",
+      "registration": "0x54d51a"
+    },
+    "0xce": {
+      "handler": "0x51aba0",
+      "name": "Cmd_NeoHuvEnd",
+      "registration": "0x54d530"
+    },
+    "0xce7": {
+      "handler": "0x540ac0",
+      "name": "Cmd_GetTeamEventsAck",
+      "registration": "0x54ee29"
+    },
+    "0xce9": {
+      "handler": "0x540b30",
+      "name": "Cmd_GetTeamResearchAck",
+      "registration": "0x54ee3f"
+    },
+    "0xcef": {
+      "handler": "0x521ed0",
+      "name": "Cmd_ContributeItemAck",
+      "registration": "0x54f9ba"
+    },
+    "0xcf": {
+      "handler": "0x51acb0",
+      "name": "Cmd_NeoHubTargeting",
+      "registration": "0x54d588"
+    },
+    "0xcf2": {
+      "handler": "0x521f40",
+      "name": "Cmd_XmasTreeEventBuff",
+      "registration": "0x54f9d0"
+    },
+    "0xd0": {
+      "handler": "0x526920",
+      "name": "Cmd_NeoAggro",
+      "registration": "0x54d59e"
+    },
+    "0xd48": {
+      "handler": "0x539eb0",
+      "name": "Cmd_TournamentNotice",
+      "registration": "0x54dea4"
+    },
+    "0xd49": {
+      "handler": "0x538a40",
+      "name": "Cmd_TournamentInfo",
+      "registration": "0x54deba"
+    },
+    "0xd4a": {
+      "handler": "0x538fb0",
+      "name": "Cmd_RoomTimeOut",
+      "registration": "0x54df54"
+    },
+    "0xd4c": {
+      "handler": "0x538a00",
+      "name": "Cmd_TournamentMyInfo",
+      "registration": "0x54ded0"
+    },
+    "0xd4e": {
+      "handler": "0x538bc0",
+      "name": "Cmd_TournamentRaceInfo",
+      "registration": "0x54dee6"
+    },
+    "0xd51": {
+      "handler": "0x53a3d0",
+      "name": "Cmd_TournamentList",
+      "registration": "0x54defc"
+    },
+    "0xd53": {
+      "handler": "0x538c10",
+      "name": "Cmd_TournamentSetRewardAck",
+      "registration": "0x54df12"
+    },
+    "0xd55": {
+      "handler": "0x538c40",
+      "name": "Cmd_TournamentRewardList",
+      "registration": "0x54df28"
+    },
+    "0xd57": {
+      "handler": "0x53a440",
+      "name": "Cmd_TournamentSearchRes",
+      "registration": "0x54df3e"
+    },
+    "0xde": {
+      "handler": "0x529650",
+      "name": "Cmd_BlockListAck",
+      "registration": "0x54eb3d"
+    },
+    "0xe0": {
+      "handler": "0x51f210",
+      "name": "Cmd_BlockDelAck",
+      "registration": "0x54eb95"
+    },
+    "0xe1": {
+      "handler": "0x51f280",
+      "name": "Cmd_UpdateFriend",
+      "registration": "0x54ebed"
+    },
+    "0xe11": {
+      "handler": "0x519bd0",
+      "name": "Cmd_MitoUpgradeCarAck",
+      "registration": "0x54d16d"
+    },
+    "0xe13": {
+      "handler": "0x52a6c0",
+      "name": "Cmd_GHResAcceptAck",
+      "registration": "0x54fa6a"
+    },
+    "0xe15": {
+      "handler": "0x521fa0",
+      "name": "Cmd_GHReceiptReqAck",
+      "registration": "0x54fa80"
+    },
+    "0xe1b": {
+      "handler": "0x518bc0",
+      "name": "Cmd_GrindItemAck",
+      "registration": "0x54dd86"
+    },
+    "0xe1d": {
+      "handler": "0x518bc0",
+      "name": "Cmd_AddPeriodItemAck",
+      "registration": "0x54dd9c"
+    },
+    "0xe21": {
+      "handler": "0x5171d0",
+      "name": "Cmd_UserAuthOTP",
+      "registration": "0x54cfc8"
+    },
+    "0xe25": {
+      "handler": "0x5222d0",
+      "name": "Cmd_ViewTeamInfoAck",
+      "registration": "0x54fac2"
+    },
+    "0xe3": {
+      "handler": "0x51efd0",
+      "name": "Cmd_BlockAddByNameAck",
+      "registration": "0x54eb69"
+    },
+    "0xe5": {
+      "handler": "0x526a80",
+      "name": "Cmd_PartyPreCheckAck",
+      "registration": "0x54d5ca"
+    },
+    "0xe7": {
+      "handler": "0x529510",
+      "name": "Cmd_FriendListAck",
+      "registration": "0x54eb27"
+    },
+    "0xe75": {
+      "handler": "0x52a820",
+      "name": "Cmd_AlchemyInfoRes",
+      "registration": "0x54f9fc"
+    },
+    "0xe79": {
+      "handler": "0x521fd0",
+      "name": "Cmd_AlchemyCreateRes",
+      "registration": "0x54fa12"
+    },
+    "0xe7b": {
+      "handler": "0x522100",
+      "name": "Cmd_AlchemyDeleteSkillBookRes",
+      "registration": "0x54fa3e"
+    },
+    "0xe7c": {
+      "handler": "0x522040",
+      "name": "Cmd_AlchemyAddSkillBookRes",
+      "registration": "0x54fa28"
+    },
+    "0xe7e": {
+      "handler": "0x5221b0",
+      "name": "Cmd_AlchemySetLevelRes",
+      "registration": "0x54fa54"
+    },
+    "0xe7f": {
+      "handler": "0x522210",
+      "name": "Cmd_FieldQSlotExtended",
+      "registration": "0x54fa96"
+    },
+    "0xe81": {
+      "handler": "0x522280",
+      "name": "Cmd_NeoWSlotExtended",
+      "registration": "0x54faac"
+    },
+    "0xe88": {
+      "handler": "0x536f00",
+      "name": "Cmd_NeoCitySuggest",
+      "registration": "0x54d72a"
+    },
+    "0xe89": {
+      "handler": "0x536ec0",
+      "name": "Cmd_NeoCityLoad",
+      "registration": "0x54d740"
+    },
+    "0xe8b": {
+      "handler": "0x537100",
+      "name": "Cmd_NeoCityReject",
+      "registration": "0x54d756"
+    },
+    "0xe8c": {
+      "handler": "0x536e80",
+      "name": "Cmd_NeoCityAgree",
+      "registration": "0x54d76c"
+    },
+    "0xea": {
+      "handler": "0x51ef90",
+      "name": "Cmd_FriendAddAck",
+      "registration": "0x54eb53"
+    },
+    "0xed": {
+      "handler": "0x51f080",
+      "name": "Cmd_FriendDelAck",
+      "registration": "0x54eb7f"
+    },
+    "0xed9": {
+      "handler": "0x51bdb0",
+      "name": "Cmd_NeoChapterStartAck",
+      "registration": "0x54d874"
+    },
+    "0xedb": {
+      "handler": "0x5277f0",
+      "name": "Cmd_NeoChapterCompleteAck",
+      "registration": "0x54d8a0"
+    },
+    "0xedd": {
+      "handler": "0x51be10",
+      "name": "Cmd_NeoQuestStartAck",
+      "registration": "0x54d8cc"
+    },
+    "0xedf": {
+      "handler": "0x51be60",
+      "name": "Cmd_NeoQuestCompleteAck",
+      "registration": "0x54d924"
+    },
+    "0xee": {
+      "handler": "0x51f250",
+      "name": "Cmd_FriendRequest",
+      "registration": "0x54ebab"
+    },
+    "0xee3": {
+      "handler": "0x51c050",
+      "name": "Cmd_NeoQuestFailAck",
+      "registration": "0x54d93a"
+    },
+    "0xee5": {
+      "handler": "0x51c0b0",
+      "name": "Cmd_NeoQuestGiveUpAck",
+      "registration": "0x54d950"
+    },
+    "0xee6": {
+      "handler": "0x5279d0",
+      "name": "Cmd_MyNeoQuestListAck",
+      "registration": "0x54d97c"
+    },
+    "0xee9": {
+      "handler": "0x51c020",
+      "name": "Cmd_NeoChapterRewardAck",
+      "registration": "0x54d8b6"
+    },
+    "0xeea": {
+      "handler": "0x527890",
+      "name": "Cmd_NeoQuestGoalPlaceAck",
+      "registration": "0x54d8e2"
+    },
+    "0xeec": {
+      "handler": "0x5356e0",
+      "name": "Cmd_NeoMissionCompleteParamAck",
+      "registration": "0x54d8f8"
+    },
+    "0xeee": {
+      "handler": "0x518930",
+      "name": "Cmd_NeoMissionCompleteAck",
+      "registration": "0x54d90e"
+    },
+    "0xef": {
+      "handler": "0x529820",
+      "name": "Cmd_FriendRequestAck",
+      "registration": "0x54ebc1"
+    },
+    "0xef1": {
+      "handler": "0x51c170",
+      "name": "Cmd_NeoChapterGiveUpAck",
+      "registration": "0x54d966"
+    },
+    "0xef3": {
+      "handler": "0x51c2d0",
+      "name": "Cmd_NeoDyingMsgReq",
+      "registration": "0x54d9ea"
+    },
+    "0xef6": {
+      "handler": "0x5188d0",
+      "name": "Cmd_NeoChapterBonusMissionAck",
+      "registration": "0x54d88a"
+    },
+    "0xf0": {
+      "handler": "0x526ba0",
+      "name": "Cmd_PartyInvite",
+      "registration": "0x54d5e0"
+    },
+    "0xf1": {
+      "handler": "0x51ad90",
+      "name": "Cmd_PartyReject",
+      "registration": "0x54d60c"
+    },
+    "0xf2": {
+      "handler": "0x5320b0",
+      "name": "Cmd_PartyJoin",
+      "registration": "0x54d622"
+    },
+    "0xf3": {
+      "handler": "0x532290",
+      "name": "Cmd_PartyJoinResult",
+      "registration": "0x54d64e"
+    },
+    "0xf3f": {
+      "handler": "0x51ab80",
+      "name": "Cmd_ScriptNeoHuvDelRes",
+      "registration": "0x54d4ee"
+    },
+    "0xf4": {
+      "handler": "0x52dd20",
+      "name": "Cmd_PartyLeave",
+      "registration": "0x54d664"
+    },
+    "0xf42": {
+      "handler": "0x5378d0",
+      "name": "Cmd_NeoTurretRes",
+      "registration": "0x54d992"
+    },
+    "0xf44": {
+      "handler": "0x537930",
+      "name": "Cmd_NeoTurretSwitch",
+      "registration": "0x54d9a8"
+    },
+    "0xf4b": {
+      "handler": "0x527710",
+      "name": "Cmd_PartyPing",
+      "registration": "0x54d782"
+    },
+    "0xf4e": {
+      "handler": "0x537330",
+      "name": "Cmd_NeoPlayerHPReceiveAck",
+      "registration": "0x54d9be"
+    },
+    "0xf5": {
+      "handler": "0x52e0c0",
+      "name": "Cmd_PartyBanish",
+      "registration": "0x54d67a"
+    },
+    "0xf50": {
+      "handler": "0x537790",
+      "name": "Cmd_NeoHusExplosionAck",
+      "registration": "0x54d9d4"
+    },
+    "0xf51": {
+      "handler": "0x531d20",
+      "name": "Cmd_WMLaptimeNationRecords",
+      "registration": "0x54fbca"
+    },
+    "0xf52": {
+      "handler": "0x52a8d0",
+      "name": "Cmd_WMLaptimeWorldRecords",
+      "registration": "0x54fbe0"
+    },
+    "0xf54": {
+      "handler": "0x5226d0",
+      "name": "Cmd_WMNickNameUpdateAck",
+      "registration": "0x54fc0c"
+    },
+    "0xf57": {
+      "handler": "0x52a8e0",
+      "name": "Cmd_WMLaptimeRaceInfo",
+      "registration": "0x54fc38"
+    },
+    "0xf58": {
+      "handler": "0x522660",
+      "name": "Cmd_WMLaptimeCharRecordAck",
+      "registration": "0x54fbf6"
+    },
+    "0xf59": {
+      "handler": "0x52a9b0",
+      "name": "Cmd_WMLaptimeSeasonState",
+      "registration": "0x54fc4e"
+    },
+    "0xf5c": {
+      "handler": "0x522730",
+      "name": "Cmd_WMLaptimeDailyTryCnt",
+      "registration": "0x54fc64"
+    },
+    "0xf5e": {
+      "handler": "0x522750",
+      "name": "Cmd_WMLaptimeTryCanceled",
+      "registration": "0x54fc7a"
+    },
+    "0xf6": {
+      "handler": "0x526d20",
+      "name": "Cmd_PartyApply",
+      "registration": "0x54d5f6"
+    },
+    "0xf7": {
+      "handler": "0x5321b0",
+      "name": "Cmd_PartyAccept",
+      "registration": "0x54d638"
+    },
+    "0xf8": {
+      "handler": "0x527670",
+      "name": "Cmd_PartyUpdate",
+      "registration": "0x54d690"
+    },
+    "0xfa1": {
+      "handler": "0x537bf0",
+      "name": "Cmd_PersnalRankInfo",
+      "registration": "0x54fad8"
+    },
+    "0xfa3": {
+      "handler": "0x537e00",
+      "name": "Cmd_RankDetailInfoPerPageRes",
+      "registration": "0x54faee"
+    },
+    "0xfa5": {
+      "handler": "0x537e80",
+      "name": "Cmd_RankDetailInfoSearchRes",
+      "registration": "0x54fb04"
+    },
+    "0xfa6": {
+      "handler": "0x537bc0",
+      "name": "Cmd_PersnalRankInfoChanged",
+      "registration": "0x54fb1a"
+    },
+    "0xfab": {
+      "handler": "0x537f20",
+      "name": "Cmd_TRankInfoPerPageRes",
+      "registration": "0x54fb46"
+    },
+    "0xfad": {
+      "handler": "0x537fa0",
+      "name": "Cmd_TRankInfoSearchRes",
+      "registration": "0x54fb5c"
+    },
+    "0xfaf": {
+      "handler": "0x538040",
+      "name": "Cmd_HornorDetailInfoPerPageRes",
+      "registration": "0x54fb72"
+    },
+    "0xfb": {
+      "handler": "0x540b70",
+      "name": "Cmd_UnderCityStageAck",
+      "registration": "0x54d6a6"
+    },
+    "0xfb1": {
+      "handler": "0x5380c0",
+      "name": "Cmd_HornorDetailInfoSearchRes",
+      "registration": "0x54fb88"
+    },
+    "0xfb2": {
+      "handler": "0x537ca0",
+      "name": "Cmd_RankError",
+      "registration": "0x54fb30"
+    },
+    "0xfb3": {
+      "handler": "0x518810",
+      "name": "Cmd_WhisperDeny",
+      "registration": "0x54d3fc"
+    },
+    "0xfb5": {
+      "handler": "0x519de0",
+      "name": "Cmd_RentCarItemAck",
+      "registration": "0x54fb9e"
+    },
+    "0xfb6": {
+      "handler": "0x5348c0",
+      "name": "Cmd_RentCarStatPointListAck",
+      "registration": "0x54fbb4"
+    },
+    "0xfba": {
+      "handler": "0x539a30",
+      "name": "Cmd_ValentainChocolateReward",
+      "registration": "0x54fc90"
+    },
+    "0xfbb": {
+      "handler": "0x53b9a0",
+      "name": "Cmd_ValentainChocolateCheat",
+      "registration": "0x54fca6"
+    },
+    "0xfbe": {
+      "handler": "0x539aa0",
+      "name": "Cmd_PvpCollisionDamage",
+      "registration": "0x54fcbc"
+    },
+    "0xfc": {
+      "handler": "0x540cb0",
+      "name": "Cmd_UnderCitySuggest",
+      "registration": "0x54d6bc"
+    },
+    "0xfc0": {
+      "handler": "0x537610",
+      "name": "Cmd_NeoPvpDamage",
+      "registration": "0x54fcd2"
+    },
+    "0xfc2": {
+      "handler": "0x522790",
+      "name": "Cmd_AssistTransferUseAck",
+      "registration": "0x54fce8"
+    },
+    "0xfc3": {
+      "handler": "0x53e1a0",
+      "name": "Cmd_GMEventRush",
+      "registration": "0x54fcfe"
+    },
+    "0xfc4": {
+      "handler": "0x522880",
+      "name": "Cmd_PCBillStatusAck",
+      "registration": "0x54fd14"
+    },
+    "0xfcb": {
+      "handler": "0x539bc0",
+      "name": "Cmd_PvpStartRacing",
+      "registration": "0x54fd2a"
+    },
+    "0xfcf": {
+      "handler": "0x5228c0",
+      "name": "Cmd_QuickBattleNotifyAck",
+      "registration": "0x54fd40"
+    },
+    "0xfd": {
+      "handler": "0x540bd0",
+      "name": "Cmd_UnderCityAgree",
+      "registration": "0x54d6d2"
+    },
+    "0xfd1": {
+      "handler": "0x522930",
+      "name": "Cmd_MatchCompleteNotifyAck",
+      "registration": "0x54fd56"
+    },
+    "0xfd3": {
+      "handler": "0x5229b0",
+      "name": "Cmd_MatchDecisionAck",
+      "registration": "0x54fd6c"
+    },
+    "0xfd7": {
+      "handler": "0x522ac0",
+      "name": "Cmd_MatchTimeoutNotifyAck",
+      "registration": "0x54fe74"
+    },
+    "0xfd8": {
+      "handler": "0x522ba0",
+      "name": "Cmd_GetAttendance",
+      "registration": "0x54fe8a"
+    },
+    "0xfdc": {
+      "handler": "0x514560",
+      "name": "Cmd_GMInvisibleAck",
+      "registration": "0x54fea0"
+    },
+    "0xfde": {
+      "handler": "0x522bd0",
+      "name": "Cmd_RecipeResult",
+      "registration": "0x54feb6"
+    },
+    "0xfe": {
+      "handler": "0x540e00",
+      "name": "Cmd_UnderCityReject",
+      "registration": "0x54d6e8"
+    },
+    "0xfe0": {
+      "handler": "0x52ab30",
+      "name": "Cmd_Buff",
+      "registration": "0x54fd82"
+    },
+    "0xfe1": {
+      "handler": "0x52ab80",
+      "name": "Cmd_ContentLimit",
+      "registration": "0x54fd98"
+    },
+    "0xff": {
+      "handler": "0x540c10",
+      "name": "Cmd_UnderCityLoad",
+      "registration": "0x54d6fe"
+    }
+  },
+  "missing_2016": [],
+  "new_handlers": {
+    "0x156": {
+      "handler": "0x528220",
+      "name": "Cmd_ArbeitMatchRankListAck",
+      "registration": "0x54fdda"
+    },
+    "0x158": {
+      "handler": "0x528290",
+      "name": "Cmd_ArbeitMatchTeamRankListAck",
+      "registration": "0x54fdf0"
+    },
+    "0x15a": {
+      "handler": "0x51d410",
+      "name": "Cmd_ArbeitMatchInitByMitoAck",
+      "registration": "0x54fe06"
+    },
+    "0x15c": {
+      "handler": "0x51d510",
+      "name": "Cmd_ArbeitMatchInitByItemAck",
+      "registration": "0x54fe1c"
+    },
+    "0x15e": {
+      "handler": "0x51d570",
+      "name": "Cmd_ArbeitMatchMaxRecordAck",
+      "registration": "0x54fe32"
+    },
+    "0x160": {
+      "handler": "0x522cd0",
+      "name": "Cmd_ArbeitMatchStatusAck",
+      "registration": "0x54fe5e"
+    },
+    "0x186": {
+      "handler": "0x52ac60",
+      "name": "Cmd_MyContentQuestList",
+      "registration": "0x54fdc4"
+    },
+    "0x188": {
+      "handler": "0x522c20",
+      "name": "Cmd_ContentQuestRewardAck",
+      "registration": "0x54fdae"
+    },
+    "0x28a": {
+      "handler": "0x52acd0",
+      "name": "Cmd_Notice",
+      "registration": "0x54fe48"
+    },
+    "0xfc4": {
+      "handler": "0x522880",
+      "name": "Cmd_PCBillStatusAck",
+      "registration": "0x54fd14"
+    },
+    "0xfcb": {
+      "handler": "0x539bc0",
+      "name": "Cmd_PvpStartRacing",
+      "registration": "0x54fd2a"
+    },
+    "0xfcf": {
+      "handler": "0x5228c0",
+      "name": "Cmd_QuickBattleNotifyAck",
+      "registration": "0x54fd40"
+    },
+    "0xfd1": {
+      "handler": "0x522930",
+      "name": "Cmd_MatchCompleteNotifyAck",
+      "registration": "0x54fd56"
+    },
+    "0xfd3": {
+      "handler": "0x5229b0",
+      "name": "Cmd_MatchDecisionAck",
+      "registration": "0x54fd6c"
+    },
+    "0xfd7": {
+      "handler": "0x522ac0",
+      "name": "Cmd_MatchTimeoutNotifyAck",
+      "registration": "0x54fe74"
+    },
+    "0xfd8": {
+      "handler": "0x522ba0",
+      "name": "Cmd_GetAttendance",
+      "registration": "0x54fe8a"
+    },
+    "0xfdc": {
+      "handler": "0x514560",
+      "name": "Cmd_GMInvisibleAck",
+      "registration": "0x54fea0"
+    },
+    "0xfde": {
+      "handler": "0x522bd0",
+      "name": "Cmd_RecipeResult",
+      "registration": "0x54feb6"
+    },
+    "0xfe0": {
+      "handler": "0x52ab30",
+      "name": "Cmd_Buff",
+      "registration": "0x54fd82"
+    },
+    "0xfe1": {
+      "handler": "0x52ab80",
+      "name": "Cmd_ContentLimit",
+      "registration": "0x54fd98"
+    }
+  },
+  "original_sha256": "1c3c151bfe36914697ec7ebdf1d1a4de92477f364325a433a21f1f1bcaba917a",
+  "pe_timestamp": 1719991685,
+  "renamed_handlers": [],
+  "sections": [
+    [
+      ".text",
+      4198400,
+      1024,
+      6331392
+    ],
+    [
+      "        ",
+      10530816,
+      6332416,
+      663552
+    ],
+    [
+      "        ",
+      11194368,
+      6995968,
+      75264
+    ],
+    [
+      "        ",
+      12533760,
+      7071232,
+      12800
+    ],
+    [
+      ".edata",
+      12550144,
+      7084032,
+      2048
+    ],
+    [
+      ".idata",
+      12554240,
+      7086080,
+      2560
+    ],
+    [
+      ".rsrc",
+      12558336,
+      7088640,
+      12800
+    ],
+    [
+      ".themida",
+      12574720,
+      7101440,
+      5324800
+    ],
+    [
+      ".boot",
+      17899520,
+      12426240,
+      3296768
+    ],
+    [
+      ".SCY",
+      21196800,
+      15723008,
+      82432
+    ]
+  ],
+  "shared_with_2016": 514,
+  "unpacked_sha256": "081151f12735f3090b190b0604361ed4e4a5debf000920ecf928f37b81d8e634"
+}

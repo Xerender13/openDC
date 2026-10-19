@@ -39,6 +39,7 @@ import struct
 from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .items import add_money
 from .login import SVC, quest_list_frame, send
@@ -226,7 +227,7 @@ async def mother_complete(session, frame):
     money = sum(n for kind, n in r['rewards'] if kind == 'mito')
     if exp:
         await add_exp(c, exp)
-        send(session, Frame(0x7d1, struct.pack('<3IHi', c.exp, c.exp_next, c.exp_base, c.level, exp)))
+        send(session, Frame(0x7d1, pack_exp('<3IHi', c.exp, c.exp_next, c.exp_base, c.level, exp)))
     if money:
         await add_money(c, money)
         send(session, Frame(0x7d2, struct.pack('<qq', c.mito, money)))

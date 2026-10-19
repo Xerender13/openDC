@@ -29,6 +29,7 @@ import struct
 from ...handlers import on, on_open
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .items import new_item
 from .login import SVC, error, send, stat_frames
@@ -172,7 +173,7 @@ async def quest_reward(session, frame):
         from .items import mod_list
         send(session, mod_list(*((i, 1) for i in items)))
     idx = [i.table_idx for i in items] + [0] * (3 - len(items))
-    send(session, Frame(0x10b, struct.pack('<III3IHH3I', table_idx, exp, money, c.exp, c.exp_next, c.exp_base, c.level,
+    send(session, Frame(0x10b, pack_exp('<III3IHH3I', table_idx, exp, money, c.exp, c.exp_next, c.exp_base, c.level,
                                            len(items), *idx[:3])))
 
 

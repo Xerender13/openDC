@@ -75,6 +75,9 @@ async def check_in(session, frame):
     owner = member
     if ok:
         session.state['member'] = owner
+        # Character creation reads Apprentice before LoadChar (the avatar/name wizard).
+        from .game.login import game_setting
+        session.to_client(game_setting())
     session.log.note(f'check-in {member!r}: {"ok" if ok else "bad ticket"}')
     session.to_client(Frame(CHECK_IN_ACK, struct.pack('<II', 0 if ok else 1, 0)))
 
@@ -130,7 +133,12 @@ CREATE_SQL = (
     " OUTPUT INSERTED.CID INTO @c VALUES (%s, %s, UPPER(%s), %s, %s);"
     " SELECT @cid = cid FROM @c;"
     " EXEC PC_SKID_CREATECAR %s, @cid, %s, %s, %s, 1, 0, %s, 0, @carid OUTPUT;"
-    " IF @carid > 0 UPDATE SKID_CHARACTER_TB SET CURCAR = @carid WHERE SERVERID = %s AND CID = @cid;"
+    " IF @carid > 0 BEGIN"
+    " UPDATE SKID_CHARACTER_TB SET CURCAR = @carid WHERE SERVERID = %s AND CID = @cid;"
+    " IF %s <> 0 BEGIN"
+    " UPDATE SKID_CAR_TB SET SLOT = %s WHERE SERVERID = %s AND CID = @cid AND CARID = @carid;"
+    " UPDATE SKID_CHARACTER_TB SET LASTPOSSTATE=3, LASTCITYID=0, LASTAREA=-1"
+    " WHERE SERVERID = %s AND CID = @cid; END; END"
     " ELSE ROLLBACK;"
     " IF @@TRANCOUNT > 0 COMMIT;"
     " SELECT CASE WHEN @carid > 0 THEN @cid ELSE -1 END, ISNULL(@carid, -1);")
@@ -143,12 +151,15 @@ async def create_char(session, frame):
     avatar, car_type, color = struct.unpack_from('<HII', p, NAME_BYTES)
     member = session.state.get('member')
     cid, car_id = -1, -1
+    from .game.apprentice import TRAINING_TYPE, TRAINING_SLOT, enabled
+    training = car_type == TRAINING_TYPE and enabled()
     capacity = context.data.mitron_capacity(car_type)
     if member and capacity is not None and await name_free(name):
         try:
             cid, car_id = map(int, await context.db.row(CREATE_SQL, (
                 context.db.server_id, name, name, avatar, member,
-                context.db.server_id, name, car_type, color, capacity, context.db.server_id)))
+                context.db.server_id, name, car_type, color, capacity, context.db.server_id,
+                int(training), TRAINING_SLOT, context.db.server_id, context.db.server_id)))
         except Exception as e:                  # the transaction is rolled back; tell the client
             session.log.note(f'create {name!r} failed: {e}')
             cid, car_id = -1, -1

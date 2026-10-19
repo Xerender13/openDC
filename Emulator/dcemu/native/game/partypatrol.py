@@ -68,6 +68,7 @@ import time
 from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .login import SVC, send, stat_frames
 from .records import name_bytes
@@ -252,7 +253,7 @@ async def goal_place(session, pp, place):
         pp.limit += context.partypatrol['bonus_seconds']
     for s in pp.members:
         sc = s.state['player'].char
-        send(s, Frame(0x3ea, struct.pack('<III3IHI', pp.idx, place, exp if s is session else 0, sc.exp, sc.exp_next,
+        send(s, Frame(0x3ea, pack_exp('<III3IHI', pp.idx, place, exp if s is session else 0, sc.exp, sc.exp_next,
                                          sc.exp_base, sc.level, 0)))
         send(s, Frame(0xc27, struct.pack('<qII', c.cid, pp.posts[id(session)], int(pp.limit))))
     if len(pp.places) >= pp.total:
@@ -298,7 +299,7 @@ async def complete(pp):
             send(s, f)
         # no items in 0x3e5: its list pops a notice per item over the result window (user, 2026-10-17); the
         # result window 0xc1e shows the prize
-        send(s, Frame(0x3e5, struct.pack('<III3IHH3I', pp.idx, final, 0, c.exp, c.exp_next, c.exp_base, c.level,
+        send(s, Frame(0x3e5, pack_exp('<III3IHH3I', pp.idx, final, 0, c.exp, c.exp_next, c.exp_base, c.level,
                                          0, 0, 0, 0)))
         send(s, Frame(0x3e3, struct.pack('<I', pp.idx)))
         item_idx = t.item_info(t.item_index[prize[0]]).table_idx if prize else 0
@@ -375,7 +376,7 @@ async def quick_post_taken(session, frame):
                      f' {exp} exp, limit {pp.limit} s')
     for s in pp.members:
         sc = s.state['player'].char
-        send(s, Frame(0xc26, struct.pack('<III3IHI', k, post, exp if s is session else 0, sc.exp, sc.exp_next,
+        send(s, Frame(0xc26, pack_exp('<III3IHI', k, post, exp if s is session else 0, sc.exp, sc.exp_next,
                                          sc.exp_base, sc.level, int(pp.limit))))
 
 

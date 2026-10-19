@@ -65,7 +65,11 @@ FLAG_ALIASES = {'Main.Mix': 'Main.Combi'}
 # Etc.VShopSeason: the item shop (F4) layout. The client's tab list has type-3 tabs 6000/6100;
 # the tab mapping 0x671be0 knows them only for season >= 3 (-> slots 0x3a/0x3b of [shop+0x44]);
 # below that it falls back to slot 1 of [shop+0xe4], which is empty: crash at 0x698fe9.
-NEW_FLAGS = {'Etc.InventoryReform': 2, 'Main.NeoCityMainUI': 1, 'Etc.VShopSeason': 3, 'Etc.ColorSetReform': 3,
+NEW_FLAGS = {'Main.Apprentice': 1,  # Driver Dome -> training race -> permanent starter -> field intro
+             'Etc.InventoryReform': 2, 'Main.NeoCityMainUI': 1, 'Etc.VShopSeason': 3, 'Etc.ColorSetReform': 3,
+             # Video options: classic / ADV HUD selector (MainUIType). Both clients hide it below 2:
+             # 2011 0x55df8c, 2016 0x57637c test Main +0x8 bits 19-20 against 0x100000.
+             'Main.MainButtonAdvanced': 2,
              'Main.StatApply': 1000,   # StatApply: per mille of the stats the car's ram damage etc. use (0 = none)
              # every battle zone section open (the 2008 Contents.ini has 4X / 6X / 8X closed; user, 2026-10-13)
              'BattleZone.Channel4X': 1, 'BattleZone.Channel6X': 1, 'BattleZone.Channel8X': 1,

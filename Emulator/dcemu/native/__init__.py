@@ -64,6 +64,8 @@ def ticket_for(member):
 
 
 class Context:
+    client_version = 2011   # server-wide wire build, independent of nation
+    max_level_2016 = 100    # 2016 advertised cap and progression cap; 2011 keeps its existing rules
     db = None            # native.db.Database
     data = None          # native.data.Tables
     server_list = []     # native.auth.ServerEntry

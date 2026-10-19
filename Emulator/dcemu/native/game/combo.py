@@ -27,6 +27,7 @@ import time
 from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame
+from .records import pack_exp
 from .. import context
 from .items import CHANGED, NEW, STACK_SQL, mod_list, new_item, stack_for
 from .items import EXP_DRINK, holds
@@ -159,7 +160,7 @@ async def traffic_item_event(session, frame):
         session.state['combo_exp'] = frac - exp
         if exp > 0:
             up = await add_exp(c, exp)
-            send(session, Frame(0x410, struct.pack('<II3IHf', exp, 0, c.exp, c.exp_next, c.exp_base, c.level, got)))
+            send(session, Frame(0x410, pack_exp('<II3IHf', exp, 0, c.exp, c.exp_next, c.exp_base, c.level, got)))
             if up:
                 for f in stat_frames(p):
                     send(session, f)

@@ -2,6 +2,7 @@ import asyncio
 import os
 import struct
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from dcemu.native import context
 from dcemu.native.data import Tables
@@ -67,14 +68,18 @@ class PositionTest(unittest.TestCase):
         s = Session(Player(char(0)))
         f = self.run_handler(position.first_position, s)
         city, channel, x, y, z, w, state = ack(f)
-        self.assertEqual((city, channel, state), (1, -1, 1))
+        # A new character must keep state 0 so the client's introduction starts.
+        self.assertEqual((city, channel, state), (1, -1, position.NEW))
         self.assertIn((x, y), [(pytest_round(a), pytest_round(b)) for a, b, *_ in position.TUTORIAL_STARTS])
         self.assertEqual(len(f.payload) + 2, 31)                 # 2011 MyPositionAck
 
     def test_leaving_the_tutorial_goes_to_station_1(self):
         p = Player(char(1))
         s = Session(p)
-        f = self.run_handler(position.my_city_position, s, struct.pack('<iB', 0, 1))
+        # The license login has its own DB reads; this test covers position and saving.
+        with patch('dcemu.native.game.licenses.on_login', new_callable=AsyncMock) as license_login:
+            f = self.run_handler(position.my_city_position, s, struct.pack('<iB', 0, 1))
+        license_login.assert_awaited_once_with(s, p)
         city, channel, x, y, z, w, state = ack(f)
         self.assertEqual((city, channel, state), (1, 0, 2))
         self.assertAlmostEqual(x, -3379.0, 2)

@@ -30,10 +30,6 @@ class Client:
         self.root = root
         self.files = {}           # lower-case full path -> (source, archive raw, entry)
         sources = [(os.path.join(root, a), p) for a, p in PACKS]
-        patch_dir = os.path.join(root, 'Patch')
-        if os.path.isdir(patch_dir):
-            sources += [(os.path.join(patch_dir, f), '') for f in sorted(os.listdir(patch_dir))
-                        if f.lower().startswith('patch.0')]
         for path, prefix in sources:
             if not os.path.exists(path):
                 continue
@@ -41,6 +37,40 @@ class Client:
             for e in entries:
                 full = prefix + e[0]
                 self.files[full.lower()] = (os.path.relpath(path, root), raw, e)
+        # Dev Ed uses empty archive stubs plus loose Init / World/Data tables.
+        # Loose files override their archive entries; patch packs still take precedence.
+        for parts in (('Data', 'Init'), ('Data', 'World', 'Data'),
+                      ('Data_US', 'Init'), ('Data_US', 'World', 'Data')):
+            path = self._directory(*parts)
+            if path is None:
+                continue
+            for folder, dirs, files in os.walk(path):
+                dirs.sort()
+                for name in sorted(files):
+                    if name.lower().endswith(('.xlt', '.tdf')):
+                        relative = os.path.relpath(os.path.join(folder, name), root)
+                        full = relative.replace(os.sep, '\\')
+                        self.files[full.lower()] = (relative, None, (full,))
+        patch_dir = self._directory('Patch')
+        if patch_dir:
+            for name in sorted(os.listdir(patch_dir)):
+                if not name.lower().startswith('patch.0'):
+                    continue
+                path = os.path.join(patch_dir, name)
+                raw, entries = agt.index(path)
+                for e in entries:
+                    self.files[e[0].lower()] = (os.path.relpath(path, root), raw, e)
+
+    def _directory(self, *parts):
+        path = self.root
+        for part in parts:
+            if not os.path.isdir(path):
+                return None
+            found = next((n for n in sorted(os.listdir(path)) if n.lower() == part.lower()), None)
+            if found is None:
+                return None
+            path = os.path.join(path, found)
+        return path if os.path.isdir(path) else None
 
     def find(self, name):
         """Full path of the effective version of a table (file name, any case), or None."""
@@ -61,7 +91,13 @@ class Client:
         p = self.find(name)
         if not p:
             raise FileNotFoundError(name)
-        _, raw, entry = self.files[p]
+        return self.read_path(p)
+
+    def read_path(self, path):
+        source, raw, entry = self.files[path.lower()]
+        if raw is None:
+            with open(os.path.join(self.root, source), 'rb') as f:
+                return f.read()
         return agt.extract(raw, entry)
 
 

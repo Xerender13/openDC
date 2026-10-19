@@ -1,4 +1,4 @@
-"""The game service's records in the 2011 client's layouts.
+"""The game service's records in the selected 2011 / 2016 client layout.
 
 The 2008 layouts are from ZoneServer.pdb (Server/tools/dev/pdbtypes.py); the 2011 changes were
 found from the client's handlers and are described in dcemu/handlers/game.py and vshop.py (the
@@ -6,6 +6,8 @@ proxy translations). Fields the 2011 client added and we do not know yet are sen
 """
 import struct
 from dataclasses import dataclass, field
+
+from ..version import layout
 
 NAME_BYTES = 0x2a            # XiStrCharName: 20 UTF-16 characters + terminator
 CHAR_2011 = 0x11b            # XiStrCharInfo: 2008 0xe9, 8 new bytes @0x95, 12 @0xcd, 30 at the end
@@ -22,6 +24,18 @@ def wstr(text, size):
 
 def name_bytes(name):
     return wstr(name, NAME_BYTES)
+
+
+def pack_exp(fmt, *values):
+    """Pack a message with its adjacent EXP/next/base counters marked as `3I`.
+
+Only those three counters widen to u64 in 2016. Reward amounts, level fields,
+money, counts and the rest of each message retain their original formats.
+"""
+    if '3I' not in fmt:
+        raise ValueError('EXP packet format must mark its three EXP counters')
+    # A later 3I can be three reward item IDs (quest/instant rewards); keep those u32.
+    return struct.pack(fmt.replace('3I', '3Q', 1) if layout().year == 2016 else fmt, *values)
 
 
 @dataclass
@@ -64,11 +78,11 @@ class Car:
         return struct.pack('<6I2f', self.car_id, self.car_type, self.shown_color(), self.shown_grade(), self.slot,
                            self.auction_cnt, self.mitron, self.km)
 
-    def encode(self):
+    def encode(self, version=None):
         # 2011 +0x24 (new): a colour the client applies after building the car with Color and the default
         # glass 0x82CCCCCC (client 0x708054..0x708086, with Etc.ColorSetReform): the window tint here.
         return self.unit() + struct.pack('<II2f?', self.shown_color(), self.tint, self.max_mitron(), self.mileage(),
-                                        self.on_auction)
+                                        self.on_auction) + bytes(layout(version).car - CAR_2011)
 
 
 @dataclass
@@ -107,10 +121,12 @@ class Character:
     cars: list = field(default_factory=list)
     part_inven_idx: int = 0  # PARTINVENIDX: the last inventory index given to a new item
 
-    def encode(self):
-        """XiStrCharInfo, 2011 layout (0x11b bytes)."""
-        a = (struct.pack('<q', self.cid) + name_bytes(self.name)
-             + struct.pack('<iHH3IqqQ', self.last_date, self.avatar, self.level,
+    def encode(self, version=None):
+        """XiStrCharInfo: 2011 0x11b; 2016 0x141, longer name area and u64 EXP."""
+        wire = layout(version)
+        newer = wire.year == 2016
+        a = (struct.pack('<q', self.cid) + wstr(self.name, 0x40 if newer else NAME_BYTES)
+             + struct.pack('<iHH3QqqQ' if newer else '<iHH3IqqQ', self.last_date, self.avatar, self.level,
                            self.exp, self.exp_next, self.exp_base, self.mito, self.team_id, self.team_mark)
              + wstr(self.team_name, 26)
              + struct.pack('<ic6I', self.team_rank, self.ptype.encode('ascii')[:1] or b'N',
@@ -119,7 +135,7 @@ class Character:
                         self.pos_state, self.cur_car, *self.quick_slots[:2])
         c = struct.pack('<3i2iiiq', *self.team_dates, self.hancoin_inven, self.hancoin_garage, self.flags,
                         self.guild, self.mileage)
-        assert len(a) == 0x95 and len(a) + 8 + len(b) == 0xcd
+        assert len(a) == (0xb7 if newer else 0x95)
         # 2011: 8 new bytes @0x95 (QuickCnt @0x9d: race reward handler 0x514b21), and 12 more before the
         # last fields: the client reads two longs @0xe5 / 0xe9 (HancoinInven / HancoinGarage), Flags @0xed
         # (0x5a39e3 tests 0x4000000 = battle tutorial done; sent 12 bytes early, the battle zone asked
@@ -127,8 +143,8 @@ class Character:
         # QuickSlot2 and HancoinInven the 12 bytes sit is not known (the team dates there are 0 anyway); their first
         # 8 are quick slots 3 and 4 (@0xcd / @0xd1: the 0x7c handler 0x5278c3 restores the slots from @0xc5-0xd1).
         out = a + bytes(8) + b + struct.pack('<2I', *self.quick_slots[2:4]) + bytes(4) + c
-        assert len(out) == 0xfd
-        return out + bytes(CHAR_2011 - len(out))
+        assert len(out) == (0x11f if newer else 0xfd)
+        return out + bytes(wire.character - len(out))
 
 
 @dataclass
@@ -150,7 +166,7 @@ class Item:
     expire_tick: int = 0
     cdate: object = None        # SKID_ITEM_TB.CDATE (datetime, UTC): when the item was made (setparts.start_expiry)
 
-    def encode(self):
+    def encode(self, version=None):
         """XiStrMyItem, 2011 layout (0x5c bytes), from the client's tooltip 0x5c9370 (record at its struct + 0x52):
         @0 CarID, @4 state, @8 stack, @0xc random bonus, @0x10 .. @0x34 ten assist slots (Assist_Client row + 1;
         the 2008 Box / Belonging / Upgrade / UpgradePoint / ExpireTick places are assist slots now: values sent
@@ -188,7 +204,12 @@ class Item:
         box = 0 if dock else self.box             # a docking item's BOX column holds its white points
         tail = struct.pack('<IIiiIIII4x', box, 0, self.upgrade, bonus_points, expire, self.belonging, self.table_idx,
                            self.inven_idx)
-        return head + assists_ + tail
+        out = head + assists_ + tail
+        # 2016 adds an unknown dword before TableIdx; preserve Belonging at 0x4c
+        # provisionally (its order relative to the new field is not established).
+        if layout(version).year == 2016:
+            out = out[:0x50] + bytes(4) + out[0x50:]
+        return out
 
     def data(self):
         """XiStrIData: InvenIdx + 32 bytes of item data (the ASSIST_A text, as the 2008 server)."""
@@ -269,13 +290,13 @@ class Stats:
         handlers/game.NEW_FLAGS)."""
         return (0, 0, 0, 0, 0, 0)
 
-    def encode(self):
+    def encode(self, version=None):
         return struct.pack('<26i', *self.based, *self.equip, *self.char, *self.item_use, *self.total(),
-                           *self.combat()) + bytes(STAT_2011 - 104)
+                           *self.combat()) + bytes(layout(version).stats - 104)
 
 
-def enchant_bonus(add_speed=0.0):
+def enchant_bonus(add_speed=0.0, version=None):
     """XiStrEnChantBonus, 2011 layout (40 bytes). Only AddSpeed (float @0x10) is filled: the client adds the own
     (0x2f8 @0x6a, char +0xb80) and party (+0xba8) AddSpeed to the car's top speed (0x489057: car +0x928 = sum x
     car +0x16c; 0x47f62b), in the assist table's unit (speedup "Speed Up 6" = 6). See assists.py."""
-    return struct.pack('<16xf', add_speed).ljust(BONUS_2011, b'\0')
+    return struct.pack('<16xf', add_speed).ljust(layout(version).bonus, b'\0')

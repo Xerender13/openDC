@@ -32,3 +32,6 @@ replays/
 
 # Exact originals retained by the desktop editor; may contain private configuration
 editor_backups/
+
+# Isolated experimental 2016 tables, rebuilt with tools.prepare2016
+server_data_2016/

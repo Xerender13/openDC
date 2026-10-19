@@ -198,3 +198,63 @@ client-derived server tables, so keep the editor backups.
 Cached data and mode tuning take effect after **Restart emulator**, which disconnects connected players;
 patrol/delivery item rewards reload automatically. GM/account panels require the updated running emulator.
 Changes are not yet confirmed in game. Editor data/account tests: `.venv/bin/python -m unittest tests.test_editor`.
+
+## Optional 2016 client adaptation (experimental)
+
+The existing 2011 US/EU protocol remains the default. To prepare the separate 2016 tables, from `Emulator/`:
+
+```sh
+.venv/bin/python -m tools.prepare2016
+```
+
+This reads `../DriftCity Dev Ed`, copies server defaults and overlays that client's tables into
+`server_data_2016/`. It validates the result and refuses to overwrite an existing destination.
+Use `--client PATH`, `--baseline PATH`, or `--out PATH` for another location. It does not edit clients or the DB.
+
+Select the build in `emulator.ini`, then restart the server:
+
+```ini
+[client]
+version = 2016
+data_2016 = server_data_2016
+```
+
+Set `version = 2011` to use the existing 2011 protocol and `[native]` data paths again. One emulator
+instance serves one build; the login packets cannot distinguish them. Nation/publisher settings are separate.
+`launch.sh` / `launch.bat` still launch the existing 2011 clients; start the experimental client separately.
+
+The 2016 port covers shared character/car/item/stat records, content flags and widened EXP reward counters.
+Changed movement/room/crew packets and other tutorial paths still need adaptation and in-game validation.
+Use isolated test ports (111xx); see `docs/EMULATOR_NOTES.md` session 28. This is not full 2016 gameplay support.
+
+For the local test instance, a separate `SKDB2016TEST` database and clean snapshot
+`db/SKDB2016TEST_clean.bak` have been prepared (admin/admin, no characters in the snapshot).
+The active test database can contain test characters; live 2011 data stays in `SKDBTW`.
+
+```sh
+# Start the optional server, then the patched test client (Linux / Proton):
+.venv/bin/python -m dcemu -c tools/test2016.ini -q
+# In another terminal:
+.venv/bin/python -m tools.client2016 launch
+```
+
+`tools.prepare2016` supplies the separate test server list on 111xx. The test client tool validates the
+original build, writes `DriftCity2016Test.exe` alongside it and changes the auth socket port to 11105.
+When guided tutorial mode is selected, it also applies the Battle Zone Tutorial-button bypass.
+Use `--proton`, `--prefix` or `--client` for different paths. The original executable stays unchanged.
+`[client] max_level_2016 = 100` controls the 2016 cap; 2011 progression is unaffected.
+
+Both clients receive `Main.MainButtonAdvanced = 2` to expose the classic/ADV HUD selector in Video options.
+The 2011 launcher's `main_ui_type = 0` or `1` forces a layout on launch; `auto` keeps the saved client selection.
+Actual 2016 login, character creation and world entry work; the user confirmed legacy tutorial and level/EXP
+behavior. Movement and other changed gameplay records still require adaptation.
+
+New-character tutorial (both client versions): `Main.Apprentice` defaults to 1. New drivers start in the
+Driver Dome with a temporary training car, then choose a permanent starter after the tutorial race and
+continue with the field introduction. Set `Main.Apprentice = 0` in `[flags]` for legacy character creation.
+Existing characters keep their progress. The user confirmed the guided tutorial fix in game.
+Run `.venv/bin/python -m tools.tutorial_flow` to select guided flow in the local clients and bypass the
+Tutorial button when entering Battle Zone. Fully restart the client afterward. The intended sequence is
+a prompted tutorial race followed by a normal race, then starter selection and the field introduction.
+The server preserves the native local tutorial race setup rather than replacing it with ordinary practice.
+The complete starter-to-field transition still needs separate confirmation.
