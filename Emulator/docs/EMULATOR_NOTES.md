@@ -8,7 +8,12 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
-## Session 26 (2026-10-19): selling cars, Shark bought as V1, Undercity 120 %
+## Session 26 (2026-10-19): selling cars, Shark bought as V1, Undercity 120 %, channel battle fixes
+
+**User, end of session: "everything works properly now"** for the channel battle items below (challenger window,
+defence / attack names, Team Comparison, replays, ownership, timing), except the last one (the defence's VS splash, sent
+in order since; committed before a restart, so not yet tried). Selling cars / the Shark grade were not mentioned again.
+Test setup left in the database: TEAMPOINT 500000 for both crews (rank S). Newbie's account removed from adminlist.
 
 - **Selling a car at the dealership did nothing** (user): 0x57 SellCar had no handler ("no handler for 0x0057"). Client:
   sender 0x7e4d10 (name, u32 CarID @0x2a), called from 0x5d1db1 after its own checks (not on auction, no parts on
@@ -32,6 +37,115 @@ Paths in older entries say `Server/...`: that folder is now `Server2008/`. Movin
   (`Run.gain`: HUV, HUB, middle and result rewards; 0xbcc flag 1 = text 11114) and one is used up at the result
   (`use_uc120`, in `Run.end` for each member who got the bonus). Not changed. Known gap: a member who leaves before the
   result keeps the item after getting bonus exp.
+- **Test setup (user: RecompRule and Newbie crews to rank S):** SKID_TEAM_TB TEAMPOINT = 500000 for RecompsRule (TID
+  100000) and NewbieCrew (100001), server 100; the client's grade (crews.crew_level, 0x537e70: exp / 10 + points >=
+  500000 -> S). Was 0 for both (RecompsRule was A, NewbieCrew C). Set back to 0 to undo.
+- **Channel battle: Xerander raced alone though NewbieCrew had a room in the channel** (user; log 20261019-131226:
+  Channel 3 had no owner; Newbie made room 1 (not test mode, so it queues only by Ready with 4 members), Xerander's
+  test crew made room 2 and queued at once; at the battle the queue held only RecompsRule, so the test-mode rule "a
+  test crew alone attacks a channel whose owner has no room" made it race alone). Fix (`channels.waiting_defence`):
+  before a test crew attacks alone, a crew room with players that is not queued and not beaten (the first made) becomes
+  the defence (OnNewOwnerRoom: its crew owns the channel, as the 2008 first-challenger rule) and the test crew attacks
+  it. Script-tested (stub lobby / rooms: room present -> defence vs test crew). **Not yet confirmed in game.** (2nd try:
+  the crews were in different channels at the start, Newbie's room reached Channel 4 12 s late: not a bug.)
+- **No defence -> the attacker takes the channel without racing** (user: "if a crew attacks the channel and there is no
+  crew to defend it, the channel automatically becomes the attacker's without any racing"). Normal challengers already
+  did (2008 TryBattle: the first challenger becomes the defence and owner, OnNewOwnerRoom); only the test mode raced a
+  lone test crew round by round (lb.solo). Removed: try_battle now makes any challenger the defence / owner at once
+  (test mode too), and the new owner's room gets 20265 "Win the channel!" (*our choice*: the 2008 notice on taking it is
+  not known). The crew then defends against later challengers. Script-tested (alone -> owner at once, no round, WAIT;
+  room present -> that room defends, round vs the test crew). **Not yet confirmed in game.**
+- **The defence crew was listed among the challenging crews** (user): the channel's room list (0x1d0, `list_frame`) had
+  every crew room. Now without the defence room (owner_room) and the owner crew's room; the list is sent again to the
+  channel's watchers whenever the lobby changes (with 0x386). Script-tested (list_frame). **Not yet confirmed in game.**
+  To watch: the defence crew's other members join with 0x371 (channel only, no room id); whether the client lets them
+  press Join with their room missing from the list is not tested.
+- **The attacker's crew name did not show when the challenge started** (user; log 20261019-140047): 0x386 (attack name
+  @0x3c, client 0x6a6120 copies @0x12 / @0x3c) and 0x390 (record defence @0x1c, attack @0x36, client 0x6a64f0) both held
+  "NewbieCrew"; the channel list 0x35d (ChallengeTeam @0x79 per channel) was only sent when the window asked (0x35c,
+  before the challenger existed). Now `lobby_tick` sends 0x35d (act 0x3ed) again to the channel's crew rooms and
+  watchers whenever the lobby changes (client handler 0x5315e0 refreshes the window 0x6a5de0 / 0x6b7100). Script-tested
+  (the record's ChallengeTeam). **Not yet confirmed in game; which window the user meant is to be confirmed.**
+- **Check of the 14:00 test (user: "NewbieCrew also got channel 1, though attacked only channel 3")**: not a bug. Log
+  20261019-135651 13:59:39: Newbie (test mode) made a NewbieCrew room in Channel 1 during that battle, nobody defended,
+  so it took Channel 1 at once (the new rule; 20265 shown); it then left and challenged Channel 3. Channel 1 stayed its
+  own at that battle's end (no challenger). A crew can have one room at a time (checks), but may own several channels.
+  Bug found: "Win the channel!" (20265) three times in a second at the round that took Channel 3 (end_battle's notice,
+  new_owner_room's, then end_channel_battle's as the battle time was over). Now new_owner_room alone tells it on a take,
+  and end_channel_battle does not repeat it within 30 s (lb.won_at). Not script-tested beyond the import. **Not yet
+  confirmed in game.** The round after the battle time ended still ran (atk 1 win: the match finishes, as written).
+- **Open (user, 14:20 test): the attacking crew's room window is the blue (defence) one, not red; the round result
+  feels slow.** Found so far: the client tells sides by crew NAME: 0x386 defence name @0x12 -> window(0x2ac)+0x70,
+  attack @0x3c -> +0x92 (0x6a6120); 0x6a82b0 compares them with the player's crew name (player+0x5e, set by 0x530960);
+  the challenger list (0x6a9d00..0x6aa040) compares the attack name with player+0x1974; the Enter button 0x6a3eb0 picks
+  create / join by the channel's owner (window + ch*0x75 + 0xc0 from 0x35d) vs the player's crew id (player+0x4e).
+  0x6a8900 (after each 0x386) shows / hides the panels +0x2974 / +0x2b90 together. The blue / red choice itself not
+  found yet. Timing of round 1 (log 20261019-141312): first finish 14:17:58.9, the other racer's client ended 20.0 s
+  later (the 0x1ef 20 s finish countdown), result at once, then END_SHOW 10 s, REST 5 s.
+- **Team Comparison window empty ("BIG3 vs BIG3", no rows; user screenshot, the T button in a channel battle race)**:
+  the client sends 0xe24 (i64 crew, i64 crew; new in 2011, no 2008 handler) and had no answer. Now
+  `channels.team_compare` answers 0xe25 (0xb8; client 0x5199f0, layout in the code comment): names, masters, Rank
+  (TEAMRANKING, 0 here: never computed), members, channels owned (OWNCHANNEL), and " %dTotal %dWin %dLose" from
+  SKID_CBATTLELOG_TB, which `log_match` now fills at the end of every match (2008 columns: DEF/ATK team, names,
+  members, round wins as points, rounds, match). The i64s are crew A, crew B, mark A, mark B (first sent as crew,
+  mark, crew, mark: the client then asked GetImage 0x3f5 for crew 100001 with "mark" 100000, the second icon stayed
+  empty; user screenshot 15:00; fixed, **not yet confirmed**). Rows user-confirmed (screenshot: names, record, masters).
+  Script-tested against the database (insert in a rolled-back transaction; answer bytes). **Not yet confirmed in
+  game.** The record starts empty (no match was logged before).
+- **Channel battle round result 10 s sooner** (user: "shorten it by 10 seconds", for channel battle races): the finish
+  countdown after the first finisher (0x1ef PvpFinish = end time + N; the other client gives up when it runs out: it
+  ended exactly 20.0 s after the first finish in the 14:17 round) is 10 s for channel battle races (`channels.FINISH_MS`,
+  room.finish_ms; rooms.race_end), 20 s elsewhere. Then (user: "5 more seconds") 5 s. **Not yet confirmed in game.**
+  - **Reverted** (user: "the race ending countdown should be normal 20 seconds, the problem is the delay after the
+    countdown"): the countdown is 20 s again (room.finish_ms left in rooms.py, not set). The wait was after the result:
+    ENDBATTLE 10 s + REST 5 s (log 14:06: result 14:06:07.5, next round's 0x1e7 14:06:23.5). Now END_SHOW = REST_SECONDS
+    = 0: the next round or the channel decision on the next lobby tick (about 1 s). **Not yet confirmed in game.**
+- **The challenging crew's window had the "Channel Owning Crew" layout and said "Channel 0"** (user screenshot, 14:33:
+  RecompsRule queued against NewbieCrew in Channel 3). 0x386's two u32 at @0xa / @0xe were swapped: the client keeps
+  @0xe at window +0x3c and prints it as "Channel %d" (+1; Semi-channels -9 / -14, 0x6a8abc), so it got the race area
+  (-1 while waiting). Now @0xa area, @0xe channel. Whether that also picks the owner / challenger layout is not known
+  (the layout switch was not found; the window's panels +0x2974 / +0x2b90 carry the same labels). **Not yet confirmed
+  in game.**
+  - Retest (user screenshot 14:37): "Channel 3" right now, still the owner layout for the challenger. Cause: the window
+    takes 0x386's attack crew id (@0x56 -> window +0x60) and compares it with the player's crew id (player +0x4e;
+    0x6a7f87, also its Ready button); a queued challenger was not the attack until its round was paired, so it got
+    the owner's window. Now `Lobby.send_state` sends, while no round is paired, each challenging crew room's members
+    a 0x386 with their own crew as the attack (others / watchers get the real state); `watch` uses it too.
+    Script-tested (per-recipient frames). **Not yet confirmed in game; emulator not restarted (user testing).**
+  - Retest (user screenshot 14:51): the challenger now saw "NewbieCrew VS RecompsRule" but still the owner's window.
+    The real switch: 0x6a7db0 finds the player's serial among the crew room's seats (0x6a7e0a ..) and shows the
+    owner's window (+0x2b8c) for an even seat, the challenger's (+0x2970) for an odd one: as the race seats the
+    defence even / attack odd. Every crew room seated from 0. Now `free_seat` seats the defence (owner_room, or the
+    owner crew's room) on even seats and challengers on odd ones (create, join, back from a race); `reseat` moves a
+    room's members when its role changes (each lobby change) and casts 0x1be. Crew rooms stay 16 seats (8 per role,
+    the window's 8 rows). Script-tested (seats, swap). **User-confirmed 2026-10-19: the challenger gets the red
+    window.** (The 0x386 own-attack change
+    stays: the window also uses the attack crew id for its Ready button.)
+  - The defence saw no attack name until the round (user): while no round is paired, 0x386 to the defence and the
+    watchers now names the next queued challenger (with players); challengers still get their own crew.
+    Script-tested. **Not yet confirmed in game.**
+  - Retest (user screenshot 15:04): the defence's round-start VS splash (0x6a1f21: window +0x70 / +0x92 -> controls
+    +0x2d70 / +0x2d74) had no attack name: Newbie queued at 15:04:12.41 and the round started at the next tick
+    (12.90), whose 0x390 + 0x1e7 went out before that tick's 0x386. start_round now sends the state (with the pair)
+    before the round's broadcast and 0x1e7. **Not yet confirmed in game.**
+- **A crew that left the channel kept owning it** (user: "they don't lose it automatically like it's said to happen";
+  the client's text: "If there are no waiting members, you will lose Channel ownership"). try_battle only dropped the
+  empty defence room (and sent DEFENCE_LOST to nobody). Now, when the owner crew's defence room has nobody left (checked
+  in try_battle: from the battle time, in WAIT every second and after each round's REST), the crew loses the channel
+  (set_owner None: SKID_CHANNEL_TB / OWNCHANNEL saved); the next challenger then takes it without a race. Not during a
+  round (the members are in the race room then). Script-tested (stub lobby). **Not yet confirmed in game.**
+- **"Server records no Channel Battle replays"** (user): the rounds were recorded (Emulator/replays: 5 today, index.json),
+  but 0x395's u32 was read as a channel filter. It is a list version: the client keeps 0x396's first u32 (App+0x174
+  +0x1c, 0x52dbf0) and sends it back (0x58ddac); with 0 = "Channel 1" every list came back empty (22 requests, all 0).
+  Now every replay is listed, newest first, version = the newest replay's time. Script-tested (5 entries). **Not yet
+  confirmed in game.**
+  - Retest (user screenshot 14:47): the list and playback work; the replay's header showed placeholder crew names
+    ("ÆÀ ¾ß½ºÅ¸...", cp949 bytes of the client's default text), scores 6 / 3 and ROUND 3. The header is the spectator
+    state 0x1bf (crew names, ids, round states; 0x52e160), and the recordings began with 0x26d + 0x1be only. Now
+    start_recording adds race.obs_state_frame() after 0x1be (round state of the round = 1 is set before). The 5
+    replays of today were patched (0x1bf made from their 0x1be + index.json crews, round state 1; originals in
+    Emulator/replays/backup_20261019, index sizes updated); the running emulator keeps the old sizes until restarted.
+    **Not yet confirmed in game.**
 
 ## Session 25b (2026-10-19): small ST cars' hit box, all tracks in every section, GM damage text, EU chart
 

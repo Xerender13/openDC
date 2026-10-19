@@ -4,7 +4,16 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Latest handoff: 2026-10-19 (sessions 25-25b, end of day)
+## Latest handoff: 2026-10-19 (session 26)
+
+Details: "Session 26" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). Selling cars (0x57), bought cars at their
+class grade (Shark V7), and channel battles made playable with two crews: no-defence takes the channel, crew room seats
+by role (the owner / challenger window), 0x386 channel / area order, Team Comparison (0xe24 / 0xe25, SKID_CBATTLELOG_TB),
+replay list + replay headers, ownership lost when the defence leaves, no extra wait after a round's result. The user
+confirmed the channel battle fixes in game. Open: the defence's VS splash order fix (not tried), crew ranking
+(TEAMRANKING never computed: "Rank 0"), selling cars / Shark grade not confirmed.
+
+## Previous handoff: 2026-10-19 (sessions 25-25b, end of day)
 
 Details: "Session 25" and "Session 25b" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). **Everything up to the
 editor / gift box / port work was committed and pushed (f450cc4 on main).** This handoff note itself is not committed.

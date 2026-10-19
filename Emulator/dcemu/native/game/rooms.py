@@ -1455,9 +1455,10 @@ async def race_end(session, frame):
     frames = [Frame(0x1eb, struct.pack('<IiifI', m.serial, end_type, end_time, record, rank) + p[0x14:0x4a])]
     if end_type == FINISHED and room.first_end is None:
         room.first_end = end_time
-        frames.append(Frame(0x1ef, struct.pack('<i', end_time + FINISH_MS)))
+        finish_ms = getattr(room, 'finish_ms', FINISH_MS)     # channel battle races: 10 s (channels.py)
+        frames.append(Frame(0x1ef, struct.pack('<i', end_time + finish_ms)))
         room.cancel_timer()
-        room.timer = asyncio.ensure_future(after(room, FINISH_MS / 1000 + RESULT_GRACE, RACING))
+        room.timer = asyncio.ensure_future(after(room, finish_ms / 1000 + RESULT_GRACE, RACING))
     room.cast(*frames)
     room.waiting.discard(m.serial)
     await progress(room)

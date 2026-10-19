@@ -42,8 +42,10 @@ Tax (2008 CalcTax with the new tax flag; the client's texts 11400 / 11402 / 1140
   20 % (0x2d4 sale flag bits 4 / 2; the client's "Channel Capture Discount" texts 10867 / 10868).
 Test mode (user, 2026-10-18: "just 1 player is enough to attack a channel"; emulator.ini [cbattle] test = 1 or per
   character the GM chat command gmcbtest on): a test player's crew needs no Challenge Coupon or crew rank, its room
-  queues as soon as it is made (no Ready), and when a test crew is the only challenger and the channel's owner has no
-  room (or nobody owns the channel) it attacks alone: each round is a race alone, a finish wins it, 2 wins take the channel.
+  queues as soon as it is made (no Ready). Like any challenger, with no defence room it takes the channel at once without
+  a race (user, 2026-10-19: "if a crew attacks the channel and there is no crew to defend it, the channel automatically
+  becomes the attacker's"); until then a test crew alone raced each round by itself. If another crew has a room with
+  players in the channel (made first, not queued), that room defends instead and the test crew races against it.
   GM: gmcbattle now [minutes to the battle] [battle minutes] | start [battle minutes] (the battle at once) | end | owner <channel 1-13> <crew name | none> | status.
 
 Messages (2011; offsets with the type; C>S payloads 2 less):
@@ -60,7 +62,8 @@ Messages (2011; offsets with the type; C>S payloads 2 less):
 0x371 CBattleRoomJoin (UserInfo @2, XiCarAttr @0xe, channel @0x1a) -> 0x26e, 0x1be of the crew's room.
 0x372 EnterCBattleChannel (channel) / 0x373 ExitCBattleChannel: the channel's crew room list (0x1d0) and state.
 0x384 CBattleRoomReady (u32 channel, u32 state 0 / 1), both ways: to the crew room (client 0x5307d0 keeps the state).
-0x386 CBattleState (0x76; client 0x6a6120): battle time @2, end @6, channel @0xa, area @0xe, defence: wchar[13] name
+0x386 CBattleState (0x76; client 0x6a6120): battle time @2, end @6, area @0xa, channel @0xe (window +0x3c: "Channel %d"
+    0x6a8abc; they were swapped until 2026-10-19: the crew window said "Channel 0"), defence: wchar[13] name
     @0x12, i64 crew @0x2c, i64 mark @0x34; attack @0x3c / @0x56 / @0x5e; i32 round state[4] @0x66 (1 racing, 2 defence
     won, 3 attack won). To the crew rooms and the channel's watchers when it changes.
 0x390 CBattleBroadcast: u32 offset @2, u32 n @6, n x XiBattleRecord (0x6a; client 0x6a61b0): u32 time, u32 kind (0 a
@@ -101,14 +104,16 @@ MAJOR = 2                                   # Major channels 0-1
 GATES = [(0, 0, 3000), (1, 0, 3000)]
 EMPTY_SETTING = struct.pack('<q', -1) + bytes(0x32 - 8)
 NONE_, PREPARE, BATTLE, ENDBATTLE, REST, WAIT = 'none', 'prepare', 'battle', 'endbattle', 'rest', 'wait'
-END_SHOW, REST_SECONDS = 10, 5              # BS_CBattleLobby: ENDBATTLE 10 s, m_restTerm 5
+END_SHOW, REST_SECONDS = 0, 0               # 2008 BS_CBattleLobby: ENDBATTLE 10 s, m_restTerm 5; user, 2026-10-19:
+                                            # 15 s less (the next round / the decision right after the result)
 ATTACK_WINS = 2                             # straight round wins that take a channel (user, 2026-10-18)
 OPEN_STATE = 3                              # bit 0: shown and open
 CREW_ROOM, BATTLE_ROOM = 0x18, 0x28         # 2008 room kinds: a crew's waiting room, the race room (crew battle)
-CREW_CAPACITY, BATTLE_CAPACITY = 16, 32
+CREW_CAPACITY, BATTLE_CAPACITY = 16, 32      # crew rooms: 8 even seats (defence) or 8 odd (challengers), the window's 8 rows
 CREW_CHANNEL, BATTLE_CHANNEL = 1000, 2000   # rooms.Room channel numbers (+ the channel), out of the battle zone lists
 COUPON = 'i_n_00037'                        # Challenge Coupon (UseItemClient: "redeemed when the battle is started")
 RECORDS = 20
+ACT_INFO = 0x3ed                            # 0x35c from the Channel Battle window
 ACT_SET = 0x3f1                             # 0x38e from the owner's track settings
 TEST_CREW = -2                              # gmcbattle owner N test: an owner crew that never comes
 FULL_DAY = 86400
@@ -231,7 +236,8 @@ class Lobby:
         self.fee_paid = set()           # characters whose Challenge Coupon is used up this battle
         self.race = None                # the round's rooms.Room
         self.attack_racers = 0
-        self.solo = False               # test mode: the attack races alone
+        self.won_at = 0                 # time.time() of the last "Win the channel!" (once per take)
+        self.solo = False               # the attack races alone (no longer set: a challenger with no defence takes the channel)
         self.watchers = set()           # sessions that entered the channel (0x372)
         self.spectators = set()         # sessions spectating the battle (0x38b), kept from round to round
         self.stakes = {}                # Major channels: cid -> Stake (a part each racer puts at stake)
@@ -277,22 +283,45 @@ class Lobby:
     def broadcast_frame(self):
         return Frame(0x390, struct.pack('<II', 0, len(self.records)) + b''.join(self.records))
 
-    def state_frame(self):
+    def state_frame(self, attack=None):
+        """0x386; attack: the crew shown as the attack while no round is paired (see send_state)."""
         def side(tid):
             t = self.team(tid) if tid is not None else None
             return wstr(t['name'] if t else '', 26) + struct.pack('<qq', t['tid'] if t else 0, t['mark'] if t else 0)
         area = self.race.area if self.race else -1
-        return Frame(0x386, struct.pack('<iiii', self.battle_time, self.end_time, self.ch, area) + side(self.owner_room)
-                     + side(self.challenger_room) + struct.pack('<4i', *self.result.sub))
+        atk = self.challenger_room if self.challenger_room is not None else attack
+        return Frame(0x386, struct.pack('<iiii', self.battle_time, self.end_time, area, self.ch) + side(self.owner_room)
+                     + side(atk) + struct.pack('<4i', *self.result.sub))
 
     def send_state(self, sessions_=None):
-        out = self.state_frame()
+        """The client picks its crew window's layout by 0x386's attack crew (0x6a7f87: attack crew id == the player's
+        crew -> the challenging crew's window; else the owner's). While no round is paired, a challenging crew's members
+        get their own crew as the attack (user, 2026-10-19: a queued challenger had the "Channel Owning Crew" window)."""
+        # the defence / watchers: the next challenger in the queue (user, 2026-10-19: no attack name for the defence
+        # until the round)
+        nxt = next((tid for tid in self.queue if self.humans(tid)), None)
+        out = self.state_frame(nxt)
+        own = {}
+        if self.challenger_room is None:
+            for tid in list(self.crew_rooms):
+                if tid != self.owner_room and not (self.owner and self.owner['tid'] == tid):
+                    for m in self.humans(tid):
+                        own[m.session] = tid
+        frames = {}
         for s in sessions_ if sessions_ is not None else self.recipients():
-            send(s, out)
+            tid = own.get(s)
+            if tid is None:
+                send(s, out)
+            else:
+                if tid not in frames:
+                    frames[tid] = self.state_frame(tid)
+                send(s, frames[tid])
 
     def list_frame(self):
-        from . import rooms
-        found = [r for r in (self.room(t) for t in list(self.crew_rooms)) if r]
+        """0x1d0: the challenging crews' rooms. The defence (its room, or the owner crew's room) is not listed: it is
+        shown as the channel's defence (user, 2026-10-19)."""
+        defence = {self.owner_room, self.owner['tid'] if self.owner else None}
+        found = [r for r in (self.room(t) for t in list(self.crew_rooms) if t not in defence) if r]
         return Frame(0x1d0, struct.pack('<IIIi', 0, 0, len(found), now()) + b''.join(r.list_entry() for r in found))
 
     def channel_record(self, session):
@@ -387,6 +416,11 @@ LAST_SQL = ("SELECT TOP 1 MASTERTEAM_ID, SUCCESSIVE_WIN FROM SKID_CBATTLE_TB WHE
 WIN_SQL = """DELETE FROM SKID_CBATTLE_TB WHERE SERVERID=%s AND CHANNELID=%s AND BATTLEID=%s;
 INSERT INTO SKID_CBATTLE_TB(SERVERID, CHANNELID, BATTLEID, MASTERTEAM_ID, SUCCESSIVE_WIN, BATTLE_ODATE)
 VALUES (%s, %s, %s, %s, %s, GetDate())"""
+LOG_SQL = ("INSERT INTO SKID_CBATTLELOG_TB(SERVERID, CHANNELID, BATTLE_ODATE, BATTLEID, CDATE, DEF_TEAMID, ATK_TEAMID,"
+           " DEF_TEAMNAME, ATK_TEAMNAME, DEF_MEMBERS, ATK_MEMBERS, DEF_POINT, ATK_POINT, NROUND, NMATCH)"
+           " VALUES (%s, %s, SYSDATETIME(), %s, GetDate(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+RECORD_SQL = ("SELECT COUNT(*), SUM(CASE WHEN (DEF_TEAMID=%s AND DEF_POINT>0) OR (ATK_TEAMID=%s AND ATK_POINT>=2)"
+              " THEN 1 ELSE 0 END) FROM SKID_CBATTLELOG_TB WHERE SERVERID=%s AND (DEF_TEAMID=%s OR ATK_TEAMID=%s)")
 TEAM_WIN_SQL = "UPDATE SKID_TEAM_TB SET CHANNELWINCNT=ISNULL(CHANNELWINCNT, 0) + 1 WHERE SERVERID=%s AND TID=%s"
 OWN_SQL = "UPDATE SKID_TEAM_TB SET OWNCHANNEL=%s WHERE SERVERID=%s AND TID=%s"
 TAX_PAY_SQL = """UPDATE SKID_CHARACTER_TB SET GOLD=GOLD+%s WHERE SERVERID=%s AND CID=%s;
@@ -502,7 +536,11 @@ async def lobby_tick(lb):
             await end_channel_battle(lb)
     if lb.dirty:
         lb.dirty = False
+        reseat(lb)
         lb.send_state()
+        send_list(lb)
+        for s in lb.recipients():       # the channel list again: its defence / challenging crew changed (user,
+            send(s, info_frame(s, ACT_INFO))    # 2026-10-19: the attacker's name did not show; the window asks only once)
 
 
 def prepare(lb):
@@ -529,32 +567,45 @@ def owner_absent(lb):
     return lb.owner is None or lb.owner['tid'] not in lb.crew_rooms
 
 
+def waiting_defence(lb):
+    """Test mode: the crew room (with players, not queued, not beaten) that was made first in the channel, or None. It
+    defends against the test crew (user, 2026-10-19: Xerander raced alone though Newbie's crew had a room in the
+    channel; a room that is not a test crew's queues only by Ready with 4 members)."""
+    rooms_ = [(lb.room(tid).id, tid) for tid in list(lb.crew_rooms)
+              if lb.room(tid) is not None and lb.humans(tid) and tid not in lb.queue and tid not in lb.defeated
+              and tid != lb.challenger_room]
+    return min(rooms_)[1] if rooms_ else None
+
+
 async def try_battle(lb):
     """BS_CBattleLobby::TryBattle: the defence and the next challenger, and their next round."""
     if lb.owner_room is not None and not lb.humans(lb.owner_room):
-        lb.notice(lb.owner_room, DEFENCE_LOST)
-        lb.owner_room = None
+        # the defence left the channel: "If there are no waiting members, you will lose Channel ownership"
+        # (OnNewOwnerRoom's notice; user, 2026-10-19: the crew kept the channel after leaving it)
+        gone, lb.owner_room = lb.owner_room, None
+        if lb.owner and lb.owner['tid'] == gone:
+            log(f'{channel_name(lb.ch)}: {lb.owner["name"]} left the channel: ownership lost')
+            await set_owner(lb, None)
         lb.dirty = True
     if lb.challenger_room is not None and not lb.humans(lb.challenger_room):
         lb.defeated.add(lb.challenger_room)
         lb.challenger_room = None
         lb.dirty = True
     new_pair = False
-    if lb.owner_room is None and not lb.solo:
-        # test mode: a test crew alone attacks a channel whose owner did not come
-        if lb.challenger_room is None and lb.queue and owner_absent(lb):
-            first = next((tid for tid in lb.queue if lb.humans(tid) and getattr(lb.room(tid), 'test', False)), None)
-            if first is not None and len([tid for tid in lb.queue if lb.humans(tid)]) == 1:
-                lb.queue.remove(first)
-                lb.challenger_room, lb.solo, new_pair = first, True, True
-                log(f'{channel_name(lb.ch)}: test mode, {lb.team(first)["name"]} attacks alone')
-        if not lb.solo:
-            if lb.challenger_room is not None:
-                lb.owner_room, lb.challenger_room = lb.challenger_room, None
-            else:
-                lb.owner_room = pop_challenger(lb)
-            if lb.owner_room is not None:
-                await new_owner_room(lb)
+    if lb.owner_room is None:
+        # no defence: the first challenger takes the channel at once, without a race (user, 2026-10-19; 2008 TryBattle)
+        # and defends it from now on. Test mode: a crew room already here that is not queued (it would need Ready and 4
+        # members) defends against the test crew instead
+        defence = waiting_defence(lb) if any(getattr(lb.room(tid), 'test', False) for tid in lb.queue) else None
+        if defence is not None:
+            lb.owner_room = defence
+            log(f'{channel_name(lb.ch)}: test mode, {lb.team(defence)["name"]} (room here, not queued) defends')
+        elif lb.challenger_room is not None:
+            lb.owner_room, lb.challenger_room = lb.challenger_room, None
+        else:
+            lb.owner_room = pop_challenger(lb)
+        if lb.owner_room is not None:
+            await new_owner_room(lb)
     if lb.owner_room is None and not lb.solo:
         if lb.state != WAIT:
             lb.set_state(WAIT)
@@ -576,6 +627,8 @@ async def new_owner_room(lb):
     t = lb.team(lb.owner_room)
     if t and (not lb.owner or lb.owner['tid'] != t['tid']):
         await set_owner(lb, t, lb.battle_time)
+        lb.notice(lb.owner_room, CHANNEL_WON)       # our choice: the 2008 text for the channel taken (20265)
+        lb.won_at = time.time()
     lb.dirty = True
 
 
@@ -667,7 +720,8 @@ async def start_round(lb):
         stake_parts(lb, race)
     start_recording(lb, race, n)
     lb.set_state(BATTLE)
-    lb.record(0)
+    lb.send_state()     # the pair first: the round's VS splash (0x6a1f21) shows 0x386's names (user, 2026-10-19: the
+    lb.record(0)        # defence's splash had no attack crew when the round came at the tick the challenger queued)
     log(f'{channel_name(lb.ch)}: round {n + 1}, {lb.team(lb.owner_room)["name"] if lb.owner_room is not None else "nobody"}'
         f' against {lb.team(lb.challenger_room)["name"]}, track {map_id}, {len(race.members)} racers')
     race.state = rooms.LOADING
@@ -723,7 +777,7 @@ async def round_over(lb, win):
             if back is None:
                 m.session.state.pop('room', None)
                 continue
-            free = next((i for i, v in enumerate(back.seats) if v == rooms.OPEN), None)
+            free = free_seat(lb, back)
             if free is not None:
                 back.seats[free] = m.serial
             m.ready = m.serial == back.master
@@ -740,21 +794,37 @@ async def round_over(lb, win):
     lb.set_state(ENDBATTLE)
 
 
+async def log_match(lb, atk_won):
+    """2008 SKID_CBATTLELOG_TB: one row per finished match (the Team Comparison's Total / Win / Lose, 0xe24)."""
+    d, a = lb.team(lb.owner_room), lb.team(lb.challenger_room)
+    if not d or not a or lb.solo:
+        return
+    r, db = lb.result, context.db
+    battle_id = int(time.strftime('%Y%m%d', time.gmtime(lb.battle_time - CLOCK_SHIFT)))
+    names = lambda tid: ','.join(m.name for m in lb.humans(tid))[:200]
+    try:
+        await db.execute(LOG_SQL, (db.server_id, lb.ch, battle_id, d['tid'], a['tid'], d['name'], a['name'],
+                                   names(lb.owner_room), names(lb.challenger_room), r.def_wins, r.atk_wins, r.round,
+                                   lb.match))
+    except Exception as e:                  # the record must not stop the battle
+        log(f'{channel_name(lb.ch)}: match log: {e!r}')
+
+
 async def end_battle(lb):
     """BS_CBattleLobby::EndBattle: after the result's 10 s, the match goes on, or a crew is out."""
     r = lb.result
     lb.set_state(REST)
+    if r.win and r.atk_wins < ATTACK_WINS:
+        return
+    await log_match(lb, bool(r.win))
     if r.win:
-        if r.atk_wins < ATTACK_WINS:
-            return
         # the attack takes the channel and defends it from now on
         if lb.owner_room is not None:
             lb.notice(lb.owner_room, DEFENCE_LOST)
             close_room(lb, lb.owner_room)
         await settle_stakes(lb, 1)
         lb.owner_room, lb.challenger_room, lb.solo = lb.challenger_room, None, False
-        lb.notice(lb.owner_room, CHANNEL_WON)
-        await new_owner_room(lb)
+        await new_owner_room(lb)                    # tells the new owner "Win the channel!"
         lb.match += 1
         lb.result = Result()
         return
@@ -824,7 +894,7 @@ async def end_channel_battle(lb):
         battle_id = int(time.strftime('%Y%m%d', time.gmtime(lb.battle_time - CLOCK_SHIFT)))
         await db.execute(WIN_SQL, (db.server_id, lb.ch, battle_id, db.server_id, lb.ch, battle_id, t['tid'], lb.successive))
         await db.execute(TEAM_WIN_SQL, (db.server_id, t['tid']))
-        if lb.owner_room is not None:
+        if lb.owner_room is not None and time.time() > lb.won_at + 30:     # not again right after taking it
             lb.notice(lb.owner_room, CHANNEL_WON)
         log(f'{channel_name(lb.ch)}: {t["name"]} holds the channel ({lb.successive} week(s) in a row)')
     for tid in list(lb.crew_rooms):
@@ -952,7 +1022,9 @@ def watch(session, lb):
         old.watchers.discard(session)
     session.state['cb_watch'] = lb
     lb.watchers.add(session)
-    send(session, lb.list_frame(), lb.state_frame(), lb.broadcast_frame())
+    send(session, lb.list_frame())
+    lb.send_state([session])
+    send(session, lb.broadcast_frame())
 
 
 @on(SVC, C2S, 0x372)
@@ -1037,6 +1109,37 @@ def crew_room(lb, t, test):
     return r
 
 
+def is_defence(lb, tid):
+    return tid == lb.owner_room or (lb.owner is not None and lb.owner['tid'] == tid and lb.owner_room is None)
+
+
+def free_seat(lb, r):
+    """A crew room seat by the crew's role: the client shows the owner's window ("Channel Owning Crew", blue) for an
+    even seat and the challenger's (red) for an odd one (0x6a7e0a: the player's serial among the room's seats, bit 0),
+    as the race seats the defence on even seats (user, 2026-10-19: a challenger had the owner's window)."""
+    from . import rooms
+    first = 0 if is_defence(lb, r.crew['tid']) else 1
+    return next((i for i in range(first, rooms.SEATS, 2) if r.seats[i] == rooms.OPEN), None)
+
+
+def reseat(lb):
+    """Each crew room's members on the seats of its role (after the defence changed); the room told if moved."""
+    from . import rooms
+    for tid in list(lb.crew_rooms):
+        r = lb.room(tid)
+        if r is None:
+            continue
+        parity = 0 if is_defence(lb, tid) else 1
+        wrong = [i for i, v in enumerate(r.seats) if v not in (rooms.OPEN, rooms.LOCKED) and i % 2 != parity]
+        if not wrong:
+            continue
+        for i in wrong:
+            serial, r.seats[i] = r.seats[i], rooms.OPEN
+            seat = free_seat(lb, r)
+            r.seats[seat if seat is not None else i] = serial
+        r.cast(r.state_frame())
+
+
 @on(SVC, C2S, 0x370)
 async def room_create(session, frame):
     """0x370 CBattleRoomCreate (the crew master / first class): the crew's room in the channel, or into it."""
@@ -1059,7 +1162,8 @@ async def room_create(session, frame):
     m = rooms.Member(session, p[0:rooms.USER_INFO], rooms.car_attr_of(pl.car) if pl.car else bytes(12))
     m.ready = True
     r.members.append(m)
-    r.seats[0] = r.master = m.serial
+    r.master = m.serial
+    r.seats[free_seat(lb, r)] = m.serial
     session.state['room'] = r.id
     owner = lb.owner and lb.owner['tid'] == t['tid']
     session.log.note(f'channel battle {channel_name(ch)}: room {r.id} of crew {t["name"]!r}'
@@ -1079,7 +1183,7 @@ def join_room(session, lb, r, user_info, car_attr):
     from . import rooms
     if r.member(session):
         return send(session, r.master_frame(), r.state_frame())
-    seat = next((i for i, v in enumerate(r.seats) if v == rooms.OPEN), None)
+    seat = free_seat(lb, r)
     if seat is None:
         return error(session, '20039')
     rooms.leave(session)
@@ -1391,7 +1495,8 @@ async def battle_items(session, frame):
 # payload): moves 0x221, jumps 0x225, objects 0x2d0, traffic 0x21e / 0x220 / 0x223, AI 0x21f, and the result 0x1ec.
 # Here the server records each channel battle round so (area.recorders) into Emulator/replays/<key>.r0, listed in
 # replays/index.json.
-#   0x395 ReplayList (u32 channel) -> 0x396 ReplayListAck (client 0x52dbf0): u32 channel, offset, total, n @0xe,
+#   0x395 ReplayList (u32 version) -> 0x396 ReplayListAck (client 0x52dbf0): u32 version (the client sends it back),
+#       offset, total, n @0xe,
 #       n x 0xec @0x12: char[32] key, char[16] channel number @0x20 (the price: Major 1000, Minor 500, Semi free,
 #       client 0x78cfb0), u32 match @0x30, round @0x34, wchar[66] "%d %d %I64d %I64d %31s %31s" @0x38 (round, match,
 #       defence crew, attack crew, their names; client 0x58ee60 shows "Match %d"), u32 @0xbc time, @0xc0 size, @0xc4
@@ -1440,6 +1545,9 @@ def start_recording(lb, race, n):
     from ..area import recorders
     head = bytearray(struct.pack('<H', 0x26d) + race.modify_frame().payload)
     head += struct.pack('<H', 0x1be) + race.state_frame().payload
+    # the replay's header (crew names, round states) is the spectator state's (0x1bf, 0x52e160); without it the client
+    # showed its placeholder names (user, 2026-10-19)
+    head += struct.pack('<H', 0x1bf) + race.obs_state_frame().payload
     for m in race.humans:
         head += struct.pack('<HI', 0x329, 1) + m.info()
     battle = time.strftime('%y%m%d%H%M', time.gmtime(lb.battle_time - CLOCK_SHIFT))
@@ -1496,11 +1604,15 @@ def replay_entry(r):
 
 @on(SVC, C2S, 0x395)
 async def replay_list(session, frame):
-    ch, = struct.unpack_from('<i', frame.payload) if len(frame.payload) >= 4 else (-1,)
-    found = [r for r in reversed(replays()) if not 0 <= ch < len(board().lobbies) or r['ch'] == ch]
+    """The u32 is not a channel: the client keeps 0x396's first u32 (App+0x174 +0x1c, 0x52dbf0) and sends it back with
+    its next 0x395 (0x58ddac): a list version. It was read as a channel filter, so every list came back empty (the
+    client always had 0 = Channel 1; user, 2026-10-19: "server records no Channel Battle replays"). All replays are
+    sent, newest first; the version is the newest replay's time."""
+    found = list(reversed(replays()))
+    version = max((r.get('time', 0) for r in found), default=0) & 0x7fffffff
     for off in range(0, max(len(found), 1), 20):
         part = found[off:off + 20]
-        send(session, Frame(0x396, struct.pack('<iIII', ch, off, len(found), len(part))
+        send(session, Frame(0x396, struct.pack('<iIII', version, off, len(found), len(part))
                             + b''.join(replay_entry(r) for r in part)))
 
 
@@ -1616,9 +1728,8 @@ def gm_test(session, args):
     session.state['cb_test'] = on_
     if not on_:
         return 'channel battle test mode off'
-    return ('channel battle test mode on: no Challenge Coupon or crew rank needed, your crew room queues at once, and alone '
-            'against an absent owner your crew attacks by itself (finish a round to win it, 2 wins take the channel). '
-            'Open a battle now with: gmcbattle now')
+    return ('channel battle test mode on: no Challenge Coupon or crew rank needed, your crew room queues at once; with no '
+            'crew to defend the channel your crew takes it when the battle starts. Open a battle now with: gmcbattle now')
 
 
 async def gm_command(session, args):
@@ -1693,3 +1804,36 @@ async def gm_command(session, args):
         return f'{channel_name(lb.ch)}: owned by {t["name"]}'
     return ('usage: gmcbattle now [minutes to the battle] [battle minutes] | start [battle minutes] | end | owner <channel> <crew|test|none> | '
             'stakes [on|off] | replays | status')
+
+
+# ---- Team Comparison ----------------------------------------------------------------------------------------------
+# 0xe24 TeamCompare (i64 crew, i64 crew; the battle's T button, new in 2011: no 2008 handler) -> 0xe25 (0xb8; client
+# 0x5199f0): i64 crew @0 / @8, i64 mark @0x10 / @0x18 (the client asks 0x40 GetImage 0x3f5 with crew @0 and mark @0x10:
+# user, 2026-10-19: the second crew's icon was missing while it was crew, mark, crew, mark), wchar[13] names @0x20 / @0x3a, masters @0x54 / @0x6e, then i32 pairs (first, second): ranking @0x88 ("Rank
+# %d"), members @0x90, channels owned @0x98, matches @0xa0, won @0xa8, lost @0xb0 (" %dTotal %dWin %dLose", 12033).
+# The record counts SKID_CBATTLELOG_TB (written by log_match since 2026-10-19): a defence wins a match with any round,
+# an attack with ATTACK_WINS rounds.
+@on(SVC, C2S, 0xe24)
+async def team_compare(session, frame):
+    from .crews import team
+    if len(frame.payload) < 16:
+        return
+    db = context.db
+    sides = []
+    for tid in struct.unpack_from('<qq', frame.payload):
+        t = await team(tid) if tid > 0 else None
+        total = won = 0
+        if t:
+            r = await db.row(RECORD_SQL, (tid, tid, db.server_id, tid, tid))
+            total, won = (int(r[0] or 0), int(r[1] or 0)) if r else (0, 0)
+        sides.append((tid, t, total, won))
+    out = struct.pack('<qq', *(tid for tid, _, _, _ in sides))
+    out += struct.pack('<qq', *(t['mark'] if t else 0 for _, t, _, _ in sides))
+    out += b''.join(wstr(t['name'] if t else '', 26) for _, t, _, _ in sides)
+    out += b''.join(wstr(t['master_name'] if t else '', 26) for _, t, _, _ in sides)
+    owned = lambda t: len([x for x in t['channels'].split(',') if x.strip()]) if t else 0
+    for f in (lambda x: x[1]['ranking'] if x[1] else 0, lambda x: x[1]['count'] if x[1] else 0,
+              lambda x: owned(x[1]), lambda x: x[2], lambda x: x[3], lambda x: x[2] - x[3]):
+        out += struct.pack('<ii', *(f(x) for x in sides))
+    session.log.note(f'team compare {[(x[1]["name"] if x[1] else x[0], x[2], x[3]) for x in sides]}')
+    send(session, Frame(0xe25, out))
