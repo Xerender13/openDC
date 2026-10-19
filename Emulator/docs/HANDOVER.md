@@ -466,7 +466,8 @@ The local EMULATOR_NOTES.md is the redacted version (the second test account's p
 `Client US/`, `Client EU/`, `Server2008/`, `Handoff/`, `.ticket_secret`, `logs/`, `client_backup/`, client-derived
 `server_data/` files (except `server_data/Init/` and `server_data/tables/UseItemClient.tdf`: kept in git since
 2026-10-19 at the user's request, they hold the tables `tools/port2016.py` wrote), or database backups other than
-`db/SKDBTW_clean.bak` (`.gitignore` covers these). The tools
+`db/SKDBTW_clean.bak` (`.gitignore` covers these). `server_data_2016/` (the experimental 2016 tables) is in git since
+2026-10-19 under the same rules as `server_data/`: its client-copied `tables/`, `teammark/` and pid files stay out. The tools
 that change client files are in git, so those changes can be made again on another machine (see §5).
 
 ## 5. State at the handover

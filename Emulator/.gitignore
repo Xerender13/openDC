@@ -33,5 +33,16 @@ replays/
 # Exact originals retained by the desktop editor; may contain private configuration
 editor_backups/
 
-# Isolated experimental 2016 tables, rebuilt with tools.prepare2016
-server_data_2016/
+# Experimental 2016 server data (tools.prepare2016): same rules as server_data/ above
+server_data_2016/*.pid
+server_data_2016/teammark/
+server_data_2016/tables/*
+!server_data_2016/tables/Contents.ini
+!server_data_2016/tables/InstantDrop_Server.tdf
+!server_data_2016/tables/ItemDropServer.tdf
+!server_data_2016/tables/ItemServer.tdf
+!server_data_2016/tables/ItemUpgradeServer.tdf
+!server_data_2016/tables/LevelServer.tdf
+!server_data_2016/tables/rushtimetable.txt
+!server_data_2016/tables/UseItemServer.tdf
+!server_data_2016/tables/UseItemClient.tdf

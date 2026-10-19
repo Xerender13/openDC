@@ -1,0 +1,84 @@
+# Item rewards for completing a patrol (read by the emulator whenever this file changes).
+#
+# Columns (tab separated; '#' starts a comment):
+#   patrol  Instant_Client row (TableIdx), or * = every patrol
+#   item    an inventory item id (ItemClient / UseItemClient: parts, usable items; see the item catalog);
+#           - = nothing
+#   count   how many
+#   the rest is not read (type, level range, posts to patrol, the giver's post)
+# Add a line (copy one) to give more than one item. The patrol result lists up to 3 items (each shown once,
+# whatever the count); more still go to the inventory.
+# Example: 5	i_n_00003	1	move	4-1000	50	post_1st_00052
+# Written by tools/reward_tables.py (which keeps the lines that name an item).
+#
+# patrol	item	count	type	levels	posts	giver's post
+5	-	0	move	4-1000	40	post_1st_00654
+6	-	0	move	4-1000	40	post_1st_00655
+7	-	0	move	4-1000	40	post_1st_00656
+8	-	0	move	4-1000	40	post_1st_00657
+14	-	0	move	8-1000	80	post_1st_00654
+15	-	0	move	8-1000	80	post_1st_00655
+16	-	0	move	8-1000	80	post_1st_00656
+17	-	0	move	8-1000	80	post_1st_00657
+23	-	0	move	13-1000	160	post_2nd_00591
+24	-	0	move	13-1000	160	post_2nd_00592
+25	-	0	move	13-1000	160	post_2nd_00593
+26	-	0	move	13-1000	160	post_2nd_00594
+31	-	0	move	18-1000	160	post_2nd_00591
+32	-	0	move	18-1000	160	post_2nd_00592
+33	-	0	move	18-1000	160	post_2nd_00593
+34	-	0	move	18-1000	160	post_2nd_00594
+39	-	0	move	22-1000	160	post_2nd_00591
+40	-	0	move	22-1000	160	post_2nd_00592
+41	-	0	move	22-1000	160	post_2nd_00593
+42	-	0	move	22-1000	160	post_2nd_00594
+47	-	0	move	28-1000	160	post_3rd_00597
+48	-	0	move	28-1000	160	post_3rd_00598
+49	-	0	move	28-1000	160	post_3rd_00599
+50	-	0	move	28-1000	160	post_3rd_00600
+55	-	0	move	33-1000	160	post_3rd_00597
+56	-	0	move	33-1000	160	post_3rd_00598
+57	-	0	move	33-1000	160	post_3rd_00599
+58	-	0	move	33-1000	160	post_3rd_00600
+63	-	0	move	39-1000	160	post_3rd_00597
+64	-	0	move	39-1000	160	post_3rd_00598
+65	-	0	move	39-1000	160	post_3rd_00599
+66	-	0	move	39-1000	160	post_3rd_00600
+71	-	0	move_ROO	46-1000	160	post_4rd_00509
+72	-	0	move_ROO	46-1000	160	post_4rd_00511
+77	-	0	move	56-1000	160	post_4rd_00510
+78	-	0	move_ROO	56-1000	160	post_4rd_00509
+79	-	0	move_ROO	56-1000	160	post_4rd_00511
+91	-	0	party_move	4-1000	80	post_1st_00654
+92	-	0	party_move	4-1000	80	post_1st_00655
+93	-	0	party_move	4-1000	80	post_1st_00656
+94	-	0	party_move	4-1000	80	post_1st_00657
+95	-	0	party_move	13-1000	160	post_2nd_00591
+96	-	0	party_move	13-1000	160	post_2nd_00592
+97	-	0	party_move	13-1000	160	post_2nd_00593
+98	-	0	party_move	13-1000	160	post_2nd_00594
+99	-	0	party_move	18-1000	160	post_2nd_00591
+100	-	0	party_move	18-1000	160	post_2nd_00592
+101	-	0	party_move	18-1000	160	post_2nd_00593
+102	-	0	party_move	18-1000	160	post_2nd_00594
+103	-	0	party_move	22-1000	160	post_2nd_00591
+104	-	0	party_move	22-1000	160	post_2nd_00592
+105	-	0	party_move	22-1000	160	post_2nd_00593
+106	-	0	party_move	22-1000	160	post_2nd_00594
+107	-	0	party_move	28-1000	160	post_3rd_00597
+108	-	0	party_move	28-1000	160	post_3rd_00598
+109	-	0	party_move	28-1000	160	post_3rd_00599
+110	-	0	party_move	28-1000	160	post_3rd_00600
+111	-	0	party_move	33-1000	160	post_3rd_00597
+112	-	0	party_move	33-1000	160	post_3rd_00598
+113	-	0	party_move	33-1000	160	post_3rd_00599
+114	-	0	party_move	33-1000	160	post_3rd_00600
+115	-	0	party_move	39-1000	160	post_3rd_00597
+116	-	0	party_move	39-1000	160	post_3rd_00598
+117	-	0	party_move	39-1000	160	post_3rd_00599
+118	-	0	party_move	39-1000	160	post_3rd_00600
+119	-	0	party_move_ROO	46-1000	160	post_4rd_00509
+120	-	0	party_move_ROO	46-1000	160	post_4rd_00511
+121	-	0	party_move	54-1000	160	post_4rd_00510
+122	-	0	party_move_ROO	54-1000	160	post_4rd_00509
+123	-	0	party_move_ROO	56-1000	160	post_4rd_00511

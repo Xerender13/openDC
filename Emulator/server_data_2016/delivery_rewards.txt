@@ -1,0 +1,371 @@
+# Item rewards for completing a delivery job, by medal (read by the emulator whenever this file changes).
+#
+# Columns (tab separated; '#' starts a comment):
+#   job     ArbeitClient id (a_00001 ..), or * = every job
+#   medal   gold / silver / bronze / none (slower than bronze), or * = every medal
+#   item    an inventory item id (ItemClient / UseItemClient: parts, usable items; see the item catalog);
+#           - = nothing
+#   count   how many
+#   the rest is not read (the job's title, its medal time limit in seconds)
+# Add a line (copy one) to give more than one item. The delivery result shows the first item's name and icon;
+# the others go to the inventory without a notice (the client's result message has room for one item).
+# Example: a_00001	gold	i_n_00003	1	Pizza Delivery
+# Written by tools/reward_tables.py (which keeps the lines that name an item).
+#
+# job	medal	item	count	title	time limit (s)
+a_00001	gold	-	0	Pizza Delivery	92
+a_00001	silver	-	0	Pizza Delivery	99
+a_00001	bronze	-	0	Pizza Delivery	118
+a_00001	none	-	0	Pizza Delivery	
+a_00002	gold	-	0	Mittron Battery Delivery	83
+a_00002	silver	-	0	Mittron Battery Delivery	90
+a_00002	bronze	-	0	Mittron Battery Delivery	109
+a_00002	none	-	0	Mittron Battery Delivery	
+a_00003	gold	-	0	Chinese Food Delivery	94
+a_00003	silver	-	0	Chinese Food Delivery	100
+a_00003	bronze	-	0	Chinese Food Delivery	120
+a_00003	none	-	0	Chinese Food Delivery	
+a_00004	gold	-	0	Handing Out Pamplets	87
+a_00004	silver	-	0	Handing Out Pamplets	94
+a_00004	bronze	-	0	Handing Out Pamplets	113
+a_00004	none	-	0	Handing Out Pamplets	
+a_00005	gold	-	0	Purified Water Delivery	82
+a_00005	silver	-	0	Purified Water Delivery	88
+a_00005	bronze	-	0	Purified Water Delivery	108
+a_00005	none	-	0	Purified Water Delivery	
+a_00006	gold	-	0	Event Prizes Delivery	78
+a_00006	silver	-	0	Event Prizes Delivery	85
+a_00006	bronze	-	0	Event Prizes Delivery	104
+a_00006	none	-	0	Event Prizes Delivery	
+a_00007	gold	-	0	Cake Delivery	99
+a_00007	silver	-	0	Cake Delivery	105
+a_00007	bronze	-	0	Cake Delivery	125
+a_00007	none	-	0	Cake Delivery	
+a_00008	gold	-	0	Book Delivery	98
+a_00008	silver	-	0	Book Delivery	104
+a_00008	bronze	-	0	Book Delivery	124
+a_00008	none	-	0	Book Delivery	
+a_00009	gold	-	0	DVD Delivery	79
+a_00009	silver	-	0	DVD Delivery	86
+a_00009	bronze	-	0	DVD Delivery	105
+a_00009	none	-	0	DVD Delivery	
+a_00010	gold	-	0	Vegetable Juice Delivery	92
+a_00010	silver	-	0	Vegetable Juice Delivery	99
+a_00010	bronze	-	0	Vegetable Juice Delivery	118
+a_00010	none	-	0	Vegetable Juice Delivery	
+a_00011	gold	-	0	Flower Delivery	95
+a_00011	silver	-	0	Flower Delivery	101
+a_00011	bronze	-	0	Flower Delivery	121
+a_00011	none	-	0	Flower Delivery	
+a_00012	gold	-	0	Mittron Battery Delivery	78
+a_00012	silver	-	0	Mittron Battery Delivery	85
+a_00012	bronze	-	0	Mittron Battery Delivery	104
+a_00012	none	-	0	Mittron Battery Delivery	
+a_00013	gold	-	0	Fried Chicken Delivery	98
+a_00013	silver	-	0	Fried Chicken Delivery	104
+a_00013	bronze	-	0	Fried Chicken Delivery	124
+a_00013	none	-	0	Fried Chicken Delivery	
+a_00014	gold	-	0	Milk Delivery	112
+a_00014	silver	-	0	Milk Delivery	118
+a_00014	bronze	-	0	Milk Delivery	138
+a_00014	none	-	0	Milk Delivery	
+a_00015	gold	-	0	Dog Food Delivery	94
+a_00015	silver	-	0	Dog Food Delivery	100
+a_00015	bronze	-	0	Dog Food Delivery	120
+a_00015	none	-	0	Dog Food Delivery	
+a_00016	gold	-	0	Dry Cleaning Delivery	85
+a_00016	silver	-	0	Dry Cleaning Delivery	91
+a_00016	bronze	-	0	Dry Cleaning Delivery	111
+a_00016	none	-	0	Dry Cleaning Delivery	
+a_00017	gold	-	0	Prawn Movie Theater Advertisements	88
+a_00017	silver	-	0	Prawn Movie Theater Advertisements	95
+a_00017	bronze	-	0	Prawn Movie Theater Advertisements	114
+a_00017	none	-	0	Prawn Movie Theater Advertisements	
+a_00018	gold	-	0	Fruit Basket Delivery	100
+a_00018	silver	-	0	Fruit Basket Delivery	107
+a_00018	bronze	-	0	Fruit Basket Delivery	126
+a_00018	none	-	0	Fruit Basket Delivery	
+a_00019	gold	-	0	Koinonia Souvenir Delivery	95
+a_00019	silver	-	0	Koinonia Souvenir Delivery	101
+a_00019	bronze	-	0	Koinonia Souvenir Delivery	121
+a_00019	none	-	0	Koinonia Souvenir Delivery	
+a_00020	gold	-	0	Postal Service Delivery	130
+a_00020	silver	-	0	Postal Service Delivery	137
+a_00020	bronze	-	0	Postal Service Delivery	156
+a_00020	none	-	0	Postal Service Delivery	
+a_00021	gold	-	0	French Loaf Delivery	120
+a_00021	silver	-	0	French Loaf Delivery	126
+a_00021	bronze	-	0	French Loaf Delivery	146
+a_00021	none	-	0	French Loaf Delivery	
+a_00022	gold	-	0	Fruit Basket Delivery	116
+a_00022	silver	-	0	Fruit Basket Delivery	122
+a_00022	bronze	-	0	Fruit Basket Delivery	142
+a_00022	none	-	0	Fruit Basket Delivery	
+a_00023	gold	-	0	Dog Food Delivery	92
+a_00023	silver	-	0	Dog Food Delivery	99
+a_00023	bronze	-	0	Dog Food Delivery	118
+a_00023	none	-	0	Dog Food Delivery	
+a_00024	gold	-	0	Handing Out Wanted Flyers	126
+a_00024	silver	-	0	Handing Out Wanted Flyers	133
+a_00024	bronze	-	0	Handing Out Wanted Flyers	152
+a_00024	none	-	0	Handing Out Wanted Flyers	
+a_00025	gold	-	0	Delivery of shopping bag to C Mart	101
+a_00025	silver	-	0	Delivery of shopping bag to C Mart	108
+a_00025	bronze	-	0	Delivery of shopping bag to C Mart	127
+a_00025	none	-	0	Delivery of shopping bag to C Mart	
+a_00026	gold	-	0	Mittron gas delivery	103
+a_00026	silver	-	0	Mittron gas delivery	109
+a_00026	bronze	-	0	Mittron gas delivery	129
+a_00026	none	-	0	Mittron gas delivery	
+a_00027	gold	-	0	Delivery of fire safety campaign flyers	124
+a_00027	silver	-	0	Delivery of fire safety campaign flyers	130
+a_00027	bronze	-	0	Delivery of fire safety campaign flyers	150
+a_00027	none	-	0	Delivery of fire safety campaign flyers	
+a_00028	gold	-	0	"Looking for a relationship" flyer delivery	121
+a_00028	silver	-	0	"Looking for a relationship" flyer delivery	127
+a_00028	bronze	-	0	"Looking for a relationship" flyer delivery	147
+a_00028	none	-	0	"Looking for a relationship" flyer delivery	
+a_00029	gold	-	0	Chicken delivery	152
+a_00029	silver	-	0	Chicken delivery	159
+a_00029	bronze	-	0	Chicken delivery	178
+a_00029	none	-	0	Chicken delivery	
+a_00030	gold	-	0	GC delivery service	151
+a_00030	silver	-	0	GC delivery service	157
+a_00030	bronze	-	0	GC delivery service	177
+a_00030	none	-	0	GC delivery service	
+a_00031	gold	-	0	Rocking chair (wooden)	176
+a_00031	silver	-	0	Rocking chair (wooden)	182
+a_00031	bronze	-	0	Rocking chair (wooden)	202
+a_00031	none	-	0	Rocking chair (wooden)	
+a_00032	gold	-	0	Seedlings	148
+a_00032	silver	-	0	Seedlings	155
+a_00032	bronze	-	0	Seedlings	174
+a_00032	none	-	0	Seedlings	
+a_00033	gold	-	0	Delivery of mineral water	178
+a_00033	silver	-	0	Delivery of mineral water	185
+a_00033	bronze	-	0	Delivery of mineral water	204
+a_00033	none	-	0	Delivery of mineral water	
+a_00034	gold	-	0	Delivery of dumbbells	138
+a_00034	silver	-	0	Delivery of dumbbells	144
+a_00034	bronze	-	0	Delivery of dumbbells	164
+a_00034	none	-	0	Delivery of dumbbells	
+a_00035	gold	-	0	Delivery of Cras souvenir	152
+a_00035	silver	-	0	Delivery of Cras souvenir	159
+a_00035	bronze	-	0	Delivery of Cras souvenir	178
+a_00035	none	-	0	Delivery of Cras souvenir	
+a_00036	gold	-	0	Delivery of fire safety campaign flyers	181
+a_00036	silver	-	0	Delivery of fire safety campaign flyers	186
+a_00036	bronze	-	0	Delivery of fire safety campaign flyers	195
+a_00036	none	-	0	Delivery of fire safety campaign flyers	
+a_00037	gold	-	0	Olivia's Time Attack. 1	186
+a_00037	silver	-	0	Olivia's Time Attack. 1	192
+a_00037	bronze	-	0	Olivia's Time Attack. 1	212
+a_00037	none	-	0	Olivia's Time Attack. 1	
+a_00038	gold	-	0	Olivia's Time Attack. 2	204
+a_00038	silver	-	0	Olivia's Time Attack. 2	211
+a_00038	bronze	-	0	Olivia's Time Attack. 2	230
+a_00038	none	-	0	Olivia's Time Attack. 2	
+a_00039	gold	-	0	Olivia's Time Attack. 3	190
+a_00039	silver	-	0	Olivia's Time Attack. 3	196
+a_00039	bronze	-	0	Olivia's Time Attack. 3	216
+a_00039	none	-	0	Olivia's Time Attack. 3	
+a_00040	gold	-	0	Olivia's Time Attack. 4	163
+a_00040	silver	-	0	Olivia's Time Attack. 4	169
+a_00040	bronze	-	0	Olivia's Time Attack. 4	189
+a_00040	none	-	0	Olivia's Time Attack. 4	
+a_00041	gold	-	0	Olivia's Time Attack. 5	156
+a_00041	silver	-	0	Olivia's Time Attack. 5	163
+a_00041	bronze	-	0	Olivia's Time Attack. 5	182
+a_00041	none	-	0	Olivia's Time Attack. 5	
+a_00042	gold	-	0	Olivia's Time Attack. 6	176
+a_00042	silver	-	0	Olivia's Time Attack. 6	182
+a_00042	bronze	-	0	Olivia's Time Attack. 6	202
+a_00042	none	-	0	Olivia's Time Attack. 6	
+a_00043	gold	-	0	Cake Delivery	156
+a_00043	silver	-	0	Cake Delivery	163
+a_00043	bronze	-	0	Cake Delivery	182
+a_00043	none	-	0	Cake Delivery	
+a_00044	gold	-	0	GC Home Delivery	157
+a_00044	silver	-	0	GC Home Delivery	164
+a_00044	bronze	-	0	GC Home Delivery	183
+a_00044	none	-	0	GC Home Delivery	
+a_00045	gold	-	0	Mittron Battery Delivery	166
+a_00045	silver	-	0	Mittron Battery Delivery	173
+a_00045	bronze	-	0	Mittron Battery Delivery	192
+a_00045	none	-	0	Mittron Battery Delivery	
+a_00046	gold	-	0	Desert Home Delivery	155
+a_00046	silver	-	0	Desert Home Delivery	161
+a_00046	bronze	-	0	Desert Home Delivery	181
+a_00046	none	-	0	Desert Home Delivery	
+a_00047	gold	-	0	Mittron Gas Delivery	155
+a_00047	silver	-	0	Mittron Gas Delivery	161
+a_00047	bronze	-	0	Mittron Gas Delivery	181
+a_00047	none	-	0	Mittron Gas Delivery	
+e_v_001	gold	-	0	Deliver the Easter Egg	94
+e_v_001	silver	-	0	Deliver the Easter Egg	100
+e_v_001	bronze	-	0	Deliver the Easter Egg	120
+e_v_001	none	-	0	Deliver the Easter Egg	
+e_v_002	gold	-	0	Deliver the Easter Egg	78
+e_v_002	silver	-	0	Deliver the Easter Egg	85
+e_v_002	bronze	-	0	Deliver the Easter Egg	104
+e_v_002	none	-	0	Deliver the Easter Egg	
+e_v_003	gold	-	0	Deliver the Easter Egg	79
+e_v_003	silver	-	0	Deliver the Easter Egg	86
+e_v_003	bronze	-	0	Deliver the Easter Egg	105
+e_v_003	none	-	0	Deliver the Easter Egg	
+e_v_004	gold	-	0	Deliver the Easter Egg	78
+e_v_004	silver	-	0	Deliver the Easter Egg	85
+e_v_004	bronze	-	0	Deliver the Easter Egg	104
+e_v_004	none	-	0	Deliver the Easter Egg	
+e_v_005	gold	-	0	Deliver the Easter Egg	94
+e_v_005	silver	-	0	Deliver the Easter Egg	100
+e_v_005	bronze	-	0	Deliver the Easter Egg	120
+e_v_005	none	-	0	Deliver the Easter Egg	
+e_v_006	gold	-	0	Deliver the Easter Egg	100
+e_v_006	silver	-	0	Deliver the Easter Egg	107
+e_v_006	bronze	-	0	Deliver the Easter Egg	126
+e_v_006	none	-	0	Deliver the Easter Egg	
+e_v_007	gold	-	0	Deliver the Easter Egg	120
+e_v_007	silver	-	0	Deliver the Easter Egg	126
+e_v_007	bronze	-	0	Deliver the Easter Egg	146
+e_v_007	none	-	0	Deliver the Easter Egg	
+e_v_008	gold	-	0	Deliver the Easter Egg	126
+e_v_008	silver	-	0	Deliver the Easter Egg	133
+e_v_008	bronze	-	0	Deliver the Easter Egg	152
+e_v_008	none	-	0	Deliver the Easter Egg	
+e_v_009	gold	-	0	Deliver the Easter Egg	124
+e_v_009	silver	-	0	Deliver the Easter Egg	130
+e_v_009	bronze	-	0	Deliver the Easter Egg	150
+e_v_009	none	-	0	Deliver the Easter Egg	
+e_v_010	gold	-	0	Deliver the Easter Egg	151
+e_v_010	silver	-	0	Deliver the Easter Egg	157
+e_v_010	bronze	-	0	Deliver the Easter Egg	177
+e_v_010	none	-	0	Deliver the Easter Egg	
+e_v_011	gold	-	0	Deliver the Easter Egg	178
+e_v_011	silver	-	0	Deliver the Easter Egg	185
+e_v_011	bronze	-	0	Deliver the Easter Egg	204
+e_v_011	none	-	0	Deliver the Easter Egg	
+e_v_012	gold	-	0	Deliver the Easter Egg	181
+e_v_012	silver	-	0	Deliver the Easter Egg	186
+e_v_012	bronze	-	0	Deliver the Easter Egg	195
+e_v_012	none	-	0	Deliver the Easter Egg	
+e_v_013	gold	-	0	Deliver the Easter Egg	190
+e_v_013	silver	-	0	Deliver the Easter Egg	196
+e_v_013	bronze	-	0	Deliver the Easter Egg	216
+e_v_013	none	-	0	Deliver the Easter Egg	
+e_v_014	gold	-	0	Deliver the Easter Egg	176
+e_v_014	silver	-	0	Deliver the Easter Egg	182
+e_v_014	bronze	-	0	Deliver the Easter Egg	202
+e_v_014	none	-	0	Deliver the Easter Egg	
+e_v_016	gold	-	0	Deliver the Easter Egg	155
+e_v_016	silver	-	0	Deliver the Easter Egg	161
+e_v_016	bronze	-	0	Deliver the Easter Egg	181
+e_v_016	none	-	0	Deliver the Easter Egg	
+a_00048	gold	-	0	Apartment Laundry Delivery EX	72
+a_00048	silver	-	0	Apartment Laundry Delivery EX	75
+a_00048	bronze	-	0	Apartment Laundry Delivery EX	87
+a_00048	none	-	0	Apartment Laundry Delivery EX	
+a_00049	gold	-	0	Drinking Water Delivery EX	85
+a_00049	silver	-	0	Drinking Water Delivery EX	88
+a_00049	bronze	-	0	Drinking Water Delivery EX	100
+a_00049	none	-	0	Drinking Water Delivery EX	
+a_00050	gold	-	0	Mittron Gas Delivery EX	86
+a_00050	silver	-	0	Mittron Gas Delivery EX	90
+a_00050	bronze	-	0	Mittron Gas Delivery EX	101
+a_00050	none	-	0	Mittron Gas Delivery EX	
+a_00051	gold	-	0	Stadium Chicken Delivery EX	75
+a_00051	silver	-	0	Stadium Chicken Delivery EX	79
+a_00051	bronze	-	0	Stadium Chicken Delivery EX	91
+a_00051	none	-	0	Stadium Chicken Delivery EX	
+a_00052	gold	-	0	Fire Prevention Campaign Leaflet Delivery EX	69
+a_00052	silver	-	0	Fire Prevention Campaign Leaflet Delivery EX	73
+a_00052	bronze	-	0	Fire Prevention Campaign Leaflet Delivery EX	85
+a_00052	none	-	0	Fire Prevention Campaign Leaflet Delivery EX	
+a_00053	gold	-	0	Apartment Baguette Delivery EX	78
+a_00053	silver	-	0	Apartment Baguette Delivery EX	82
+a_00053	bronze	-	0	Apartment Baguette Delivery EX	94
+a_00053	none	-	0	Apartment Baguette Delivery EX	
+a_00054	gold	-	0	Mittron Battery Delivery EX	72
+a_00054	silver	-	0	Mittron Battery Delivery EX	75
+a_00054	bronze	-	0	Mittron Battery Delivery EX	87
+a_00054	none	-	0	Mittron Battery Delivery EX	
+a_00055	gold	-	0	GC Delivery EX	117
+a_00055	silver	-	0	GC Delivery EX	121
+a_00055	bronze	-	0	GC Delivery EX	133
+a_00055	none	-	0	GC Delivery EX	
+a_00056	gold	-	0	Chinese Food Delivery EX	104
+a_00056	silver	-	0	Chinese Food Delivery EX	108
+a_00056	bronze	-	0	Chinese Food Delivery EX	120
+a_00056	none	-	0	Chinese Food Delivery EX	
+a_00057	gold	-	0	Postal Delivery EX	91
+a_00057	silver	-	0	Postal Delivery EX	95
+a_00057	bronze	-	0	Postal Delivery EX	107
+a_00057	none	-	0	Postal Delivery EX	
+a_00058	gold	-	0	Laundry Delivery EX	117
+a_00058	silver	-	0	Laundry Delivery EX	121
+a_00058	bronze	-	0	Laundry Delivery EX	133
+a_00058	none	-	0	Laundry Delivery EX	
+a_00059	gold	-	0	Mittron Gas Delivery EX	143
+a_00059	silver	-	0	Mittron Gas Delivery EX	147
+a_00059	bronze	-	0	Mittron Gas Delivery EX	159
+a_00059	none	-	0	Mittron Gas Delivery EX	
+g_event_autumn_01	gold	-	0	Fall Harvest Delivery	94
+g_event_autumn_01	silver	-	0	Fall Harvest Delivery	100
+g_event_autumn_01	bronze	-	0	Fall Harvest Delivery	120
+g_event_autumn_01	none	-	0	Fall Harvest Delivery	
+g_event_autumn_02	gold	-	0	Fall Harvest Delivery	78
+g_event_autumn_02	silver	-	0	Fall Harvest Delivery	85
+g_event_autumn_02	bronze	-	0	Fall Harvest Delivery	104
+g_event_autumn_02	none	-	0	Fall Harvest Delivery	
+g_event_autumn_03	gold	-	0	Fall Harvest Delivery	79
+g_event_autumn_03	silver	-	0	Fall Harvest Delivery	86
+g_event_autumn_03	bronze	-	0	Fall Harvest Delivery	105
+g_event_autumn_03	none	-	0	Fall Harvest Delivery	
+g_event_autumn_04	gold	-	0	Fall Harvest Delivery	78
+g_event_autumn_04	silver	-	0	Fall Harvest Delivery	85
+g_event_autumn_04	bronze	-	0	Fall Harvest Delivery	104
+g_event_autumn_04	none	-	0	Fall Harvest Delivery	
+g_event_autumn_05	gold	-	0	Fall Harvest Delivery	94
+g_event_autumn_05	silver	-	0	Fall Harvest Delivery	100
+g_event_autumn_05	bronze	-	0	Fall Harvest Delivery	120
+g_event_autumn_05	none	-	0	Fall Harvest Delivery	
+g_event_autumn_06	gold	-	0	Fall Harvest Delivery	100
+g_event_autumn_06	silver	-	0	Fall Harvest Delivery	107
+g_event_autumn_06	bronze	-	0	Fall Harvest Delivery	126
+g_event_autumn_06	none	-	0	Fall Harvest Delivery	
+g_event_autumn_07	gold	-	0	Fall Harvest Delivery	120
+g_event_autumn_07	silver	-	0	Fall Harvest Delivery	126
+g_event_autumn_07	bronze	-	0	Fall Harvest Delivery	146
+g_event_autumn_07	none	-	0	Fall Harvest Delivery	
+g_event_autumn_08	gold	-	0	Fall Harvest Delivery	126
+g_event_autumn_08	silver	-	0	Fall Harvest Delivery	133
+g_event_autumn_08	bronze	-	0	Fall Harvest Delivery	152
+g_event_autumn_08	none	-	0	Fall Harvest Delivery	
+g_event_autumn_09	gold	-	0	Fall Harvest Delivery	124
+g_event_autumn_09	silver	-	0	Fall Harvest Delivery	130
+g_event_autumn_09	bronze	-	0	Fall Harvest Delivery	150
+g_event_autumn_09	none	-	0	Fall Harvest Delivery	
+g_event_autumn_10	gold	-	0	Fall Harvest Delivery	151
+g_event_autumn_10	silver	-	0	Fall Harvest Delivery	157
+g_event_autumn_10	bronze	-	0	Fall Harvest Delivery	177
+g_event_autumn_10	none	-	0	Fall Harvest Delivery	
+g_event_autumn_11	gold	-	0	Fall Harvest Delivery	178
+g_event_autumn_11	silver	-	0	Fall Harvest Delivery	185
+g_event_autumn_11	bronze	-	0	Fall Harvest Delivery	204
+g_event_autumn_11	none	-	0	Fall Harvest Delivery	
+g_event_autumn_12	gold	-	0	Fall Harvest Delivery	181
+g_event_autumn_12	silver	-	0	Fall Harvest Delivery	186
+g_event_autumn_12	bronze	-	0	Fall Harvest Delivery	195
+g_event_autumn_12	none	-	0	Fall Harvest Delivery	
+g_event_autumn_13	gold	-	0	Fall Harvest Delivery	190
+g_event_autumn_13	silver	-	0	Fall Harvest Delivery	196
+g_event_autumn_13	bronze	-	0	Fall Harvest Delivery	216
+g_event_autumn_13	none	-	0	Fall Harvest Delivery	
+g_event_autumn_14	gold	-	0	Fall Harvest Delivery	176
+g_event_autumn_14	silver	-	0	Fall Harvest Delivery	182
+g_event_autumn_14	bronze	-	0	Fall Harvest Delivery	202
+g_event_autumn_14	none	-	0	Fall Harvest Delivery	
+g_event_autumn_15	gold	-	0	Fall Harvest Delivery	155
+g_event_autumn_15	silver	-	0	Fall Harvest Delivery	161
+g_event_autumn_15	bronze	-	0	Fall Harvest Delivery	181
+g_event_autumn_15	none	-	0	Fall Harvest Delivery	
