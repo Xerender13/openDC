@@ -144,7 +144,9 @@ async def answer_login(session, member, password_field):
     ticket = ticket_for(member) if result == OK else secrets.randbits(31) | 1
     session.log.note(f'login {member!r}: result {result}')
     ack = struct.pack('<Ii', ticket, result) + bytes(0x4c - 8)
-    host = session.client_w.get_extra_info('sockname')[0]
+    # the address the client reached us at, unless set (in a container that is the container's own address, which a
+    # client outside cannot reach: a Windows user's lobby never connected, LoginAck said 172.19.0.3)
+    host = context.public_host or session.client_w.get_extra_info('sockname')[0]
     servers = b''.join(s.encode(context.ranking_port, host) for s in context.server_list)
     body = ack + struct.pack('<HI', SERVER_LIST, len(context.server_list)) + servers
     session.to_client(Frame(LOGIN_ACK, body))

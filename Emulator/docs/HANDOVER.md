@@ -11,7 +11,7 @@ class grade (Shark V7), and channel battles made playable with two crews: no-def
 by role (the owner / challenger window), 0x386 channel / area order, Team Comparison (0xe24 / 0xe25, SKID_CBATTLELOG_TB),
 replay list + replay headers, ownership lost when the defence leaves, no extra wait after a round's result. The user
 confirmed the channel battle fixes in game. Open: the defence's VS splash order fix (not tried), crew ranking
-(TEAMRANKING never computed: "Rank 0"), selling cars / Shark grade not confirmed.
+(TEAMRANKING never computed: "Rank 0"). Selling cars and the bought cars' grade: user-confirmed.
 
 ## Previous handoff: 2026-10-19 (sessions 25-25b, end of day)
 
@@ -228,6 +228,8 @@ launch.bat restore-db db\SKDBTW_2026-10-18.bak
 launch.bat
 ```
 
+In the container the emulator tells clients DCEMU_PUBLIC_HOST (default 127.0.0.1: a client on the same machine) as
+the lobby / game address; for players on the network set it to the machine's address (environment or `.env`).
 `launch.bat` / `launch.ps1` passed PowerShell's parser but have **not been run on real Windows yet**; expect to fix
 small things the first time. `./launch.sh restore-db` is new (2026-10-16) and was not run against the live
 database (`backup-db` was); it uses the same SQL as the Windows one, which was tested on a scratch database.

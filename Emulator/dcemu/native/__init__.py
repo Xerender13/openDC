@@ -69,6 +69,8 @@ class Context:
     server_list = []     # native.auth.ServerEntry
     secret = _secret()   # for ticket_for
     ranking_port = 0
+    public_host = ''         # emulator.ini [native] public_host / DCEMU_PUBLIC_HOST: sent for serverlist.txt's 127.x
+                             # addresses instead of the address the client reached (a container's own address)
     start_time = now()   # sent in LoadCharAck (m_ServerStartTime)
     delete_wait_days = None  # emulator.ini [native] delete_wait_days; None = what the client asks
     race_traffic = None      # native.race.RaceTraffic, when barea is native

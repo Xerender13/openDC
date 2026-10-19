@@ -12,8 +12,16 @@ Paths in older entries say `Server/...`: that folder is now `Server2008/`. Movin
 
 **User, end of session: "everything works properly now"** for the channel battle items below (challenger window,
 defence / attack names, Team Comparison, replays, ownership, timing), except the last one (the defence's VS splash, sent
-in order since; committed before a restart, so not yet tried). Selling cars / the Shark grade were not mentioned again.
+in order since; committed before a restart, so not yet tried). Selling cars and the class grade of bought cars:
+**user-confirmed 2026-10-19**.
 Test setup left in the database: TEAMPOINT 500000 for both crews (rank S). Newbie's account removed from adminlist.
+
+- **A Windows user could not reach the lobby** (their log 20261019-113650, the emulator in the Docker container): login
+  'admin' result 0, then no lobby connection. The LoginAck's server list gave 172.19.0.3 (the container's own address)
+  for game / lobby / area / barea: serverlist.txt says 127.0.0.1, and auth sends loopback entries as the socket's own
+  address (right on the host, wrong in a container). New: emulator.ini `[native] public_host` / env DCEMU_PUBLIC_HOST
+  (docker-compose.yml sets it to 127.0.0.1 by default, `${DCEMU_PUBLIC_HOST:-127.0.0.1}`), sent instead. Script-tested
+  (encode). **Not yet confirmed by the Windows user** (needs `launch.bat` again so the container is recreated).
 
 - **Selling a car at the dealership did nothing** (user): 0x57 SellCar had no handler ("no handler for 0x0057"). Client:
   sender 0x7e4d10 (name, u32 CarID @0x2a), called from 0x5d1db1 after its own checks (not on auction, no parts on
@@ -23,7 +31,7 @@ Test setup left in the database: TEAMPOINT 500000 for both crews (rank S). Newbi
   reached; here: Sellable 0), CalcMoney "SELLCAR", delete from SKID_CAR_TB, the car's key item removed. New
   `cars.sell_car`: also NUMCAR - 1 and the drift items on the car removed (as the auction does). `data.py` reads
   CloseSell. Shark V7 sells for 110000. Script-tested with stub session / DB (sale, key removed, 0x58 bytes; selling the
-  current car refused). **Not yet confirmed in game.** *(guess: the Sell / CloseSell choice; the client's own price
+  current car refused). **User-confirmed 2026-10-19.** *(guess: the Sell / CloseSell choice; the client's own price
   text in the sell dialog was not looked up.)*
 - **EU: a Shark listed as V7 in the dealership was bought as V1** (user): Shark's VehicleUpgrade V1-V6 rows have
   capacity but no stats, so `start_grade` (first row with capacity) gave V1 (log: "buy car 160 (Shark) V1 for 10000").
@@ -31,7 +39,7 @@ Test setup left in the database: TEAMPOINT 500000 for both crews (rank S). Newbi
   at its VehicleList class (Lvl, the dealership tab; the listed stats equal that grade's): Shark V7 (550000), Lupin V2,
   Liner V6, Compact / V-STAR V8, ICINCO / JIMMY V9 (JIMMY V8 has stats too), WILD F V7 (V4-V6 have stats). Cars with
   stats from V1 (2016 cars, Kicker ...) still start at V1. Same rule for US and EU (one server table). Script-tested.
-  **Not yet confirmed in game.**
+  **User-confirmed 2026-10-19.**
 - **Undercity 120 %** (user: should be used up at the end of an Undercity run, giving the bonus): already in
   `undercity.py` (session 2026-10-14): a held i_n_00064 adds its value (20 %) to every Undercity exp / Mito gain
   (`Run.gain`: HUV, HUB, middle and result rewards; 0xbcc flag 1 = text 11114) and one is used up at the result

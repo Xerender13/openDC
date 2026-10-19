@@ -34,6 +34,10 @@ services:
     environment:
       - "DCEMU_DB_HOST=db"
       - "DCEMU_DB_PORT=1433"
+      # the address clients get for the lobby / game / area (serverlist.txt's 127.0.0.1): inside the container the
+      # emulator only knows its own Docker address. 127.0.0.1 = a client on this machine; for players on the network
+      # use this machine's LAN / public address
+      - "DCEMU_PUBLIC_HOST=${DCEMU_PUBLIC_HOST:-127.0.0.1}"
     volumes:
       - ./:/emu                  # emulator.ini, server_data/, logs/ stay on the host
       - "../Client US:/client:ro"   # only for the table copy (the US client): docker compose run --rm emulator python -m tools.sync_data /client server_data

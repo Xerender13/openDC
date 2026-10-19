@@ -49,6 +49,7 @@ def native_setup(cp):
     context.data = Tables(os.path.join(HERE, n['data']), os.path.join(HERE, n['server_data']),
                           os.path.join(HERE, n['admin_list']))
     context.server_list = load_server_list(os.path.join(HERE, n['server_list']))
+    context.public_host = (os.environ.get('DCEMU_PUBLIC_HOST') or n.get('public_host', '')).split(';')[0].strip()
     from .handlers.game import FLAGS_2011_TABLE
     context.extra_flags = {}
     if cp.has_section('flags'):
