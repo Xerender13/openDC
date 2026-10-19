@@ -6,12 +6,15 @@ criticalcrash 3, untouchable 7, crashsaving 15, overturbo 18, bonusreal 19, bonu
 battle / field kinds ..) and the stat sum 0x720650 (bonusspeed 9 / bonusaccel 10 / bonuscrash 11 / bonusboost 12,
 and partycrashup 8 / partyspeedup 16 into a second stat group). The kind numbers are the client's assist type list
 (UTF-16 names at 0x93da44, 0x74 bytes each; 2008 AssistTypeStrToVar 0x59a3e0 has the same order).
-It does nothing with saving 4, gage 5, chance 13 and exp 17: the 2008 server did them
+It does nothing with saving 4, gage 5, chance 13, speedup 14 and exp 17: the 2008 server did them
 (XiRealMatchStat::CalcAssist 0x59f0e0, from XiRealMatchStat::EnChantUpdate 0x59fe00 over the items on the car:
 assist A and B of each, and an option's own assist (item types 6-10, XiStrItem.SetAssist)):
     saving 4   MitronEfficiency += value  (XiCsCharInfo::GetMitronEfficiency 0x5c2030; "Improves mileage by 1%")
     gage 5     MitronCapacity += value    (GetMitronCapacity 0x5c2060: capacity x (100 + bonus) / 100, the current car)
     chance 13  Drop += value              (parts drop chance %)
+    speedup 14 AddSpeed += value          (the MPH converts, "Speed Up 6"; sent to the player in 0x2f8's own
+                                           XiStrEnChantBonus @0x10, a float in 2011: client 0x489057 adds own +
+                                           party AddSpeed x car +0x16c to car +0x928, the top speed (0x47f62b))
     exp 17     Exp += value x 0.01        (exp gained x (1 + Exp))
     partycrashup 8 / partyspeedup 16: the party bonus, every member's summed (BS_Party::EnChantUpdate 0x5d9860)
         and sent to the party as 0x2f9 PartyEnChantUpdate (XiStrEnChantBonus: Speed, Crash, Accel, Boost, AddSpeed
@@ -19,6 +22,8 @@ assist A and B of each, and an option's own assist (item types 6-10, XiStrItem.S
 Here: the same kinds from the same sources (convert.option_assist for an option's own assist; the drift items'
 assist slots, records.VisualItem.assist_slots) for the car being driven:
   - chance -> licenses.drop_bonus (combo / traffic / chase drops), exp -> items.play_bonus, both in %.
+  - speedup -> own_bonus: AddSpeed of the 0x2f8 StatUpdate (login.stat_frames); it was sent as 0 before
+    (session 27: MPH converts did nothing).
   - gage / saving -> records.Car.fuel_bonus / mileage_bonus of the current car (Player.apply_paints): the capacity and
     efficiency the server sends (XiStrCarInfo, 0x425, 0x2d4) and keeps to (fuel bought, Mitron items, drive info).
     Efficiency is distance per Mitron (VehicleUpgrade V1 4.0 .. V9 0.2), so saving multiplies it up.
@@ -30,7 +35,7 @@ from collections import defaultdict
 
 from .. import context
 
-SERVER_KINDS = ('saving', 'gage', 'chance', 'exp', 'partyspeedup', 'partycrashup')
+SERVER_KINDS = ('saving', 'gage', 'chance', 'exp', 'speedup', 'partyspeedup', 'partycrashup')
 PASSIVE_CATEGORIES = (40, 41)        # drift items whose assist slots count in any state (client 0x72961f)
 
 _by_index = None
@@ -77,6 +82,12 @@ def totals(p):
         if kind in SERVER_KINDS:
             out[kind] += value
     return out
+
+
+def own_bonus(p):
+    """The player's own XiStrEnChantBonus for 0x2f8: AddSpeed = the car's speedup assists (see the module text)."""
+    from .records import enchant_bonus
+    return enchant_bonus(totals(p)['speedup'])
 
 
 def party_bonus(session):

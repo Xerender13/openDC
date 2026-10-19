@@ -9,8 +9,9 @@ logs/
 # Original client packs kept for the tools' "reset" (copies of the game's files)
 client_backup/
 
-# Copied from the client by `./launch.sh setup` / `launch.bat setup` (tools/sync_data.py): rebuilt on each machine
-server_data/Init/
+# Copied from the client by `./launch.sh setup` / `launch.bat setup` (tools/sync_data.py): rebuilt on each machine.
+# server_data/Init/ is kept in git (user, 2026-10-19): it holds the tables tools/port2016.py wrote (2016 cars, tires,
+# tracks), which a setup from an unported client would not give.
 server_data/teammark/
 server_data/tables/*
 # ... except the 2008 server's own tables, which only this repository has
@@ -22,6 +23,7 @@ server_data/tables/*
 !server_data/tables/LevelServer.tdf
 !server_data/tables/rushtimetable.txt
 !server_data/tables/UseItemServer.tdf
+!server_data/tables/UseItemClient.tdf
 
 # Database backups other than the clean one (they hold accounts and characters)
 db/*.bak

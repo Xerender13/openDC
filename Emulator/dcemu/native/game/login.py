@@ -147,12 +147,12 @@ def stat_frames(p):
     session = p.session
     if session is None:
         return Frame(0x2f8, p.stats().encode() + enchant_bonus()), Frame(0x2f9, enchant_bonus())
-    from .assists import party_bonus, send_party
+    from .assists import own_bonus, party_bonus, send_party
     from .social import party_of
     car = p.car
     before = (car.max_mitron(), car.mileage()) if car else None
     p.apply_paints()
-    frames = [Frame(0x2f8, p.stats().encode() + enchant_bonus()), Frame(0x2f9, party_bonus(session))]
+    frames = [Frame(0x2f8, p.stats().encode() + own_bonus(p)), Frame(0x2f9, party_bonus(session))]
     if car and before != (car.max_mitron(), car.mileage()):
         from .cars import visual_update
         frames.append(visual_update(session, car))

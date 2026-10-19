@@ -44,7 +44,9 @@ Packs are rewritten with header bytes 20-31 kept; the first original of each is 
 `eu` before the command does the same for the European client (Client EU: its own packs, Data_EU_eng/World.agt for the
 keys, DriftCityEU.exe; backups <name>_ClientEU...orig); its server tables are the US run's.
 
-usage: .venv/bin/python -m tools.port2016 [us|eu] tracks | cars [dry-run folder] | exe [exe] | small | reset
+`tires`: the ported tires' icons (game.nui 2650000 + uitex pieces; `cars` left them out), see port_tire_icons.
+
+usage: .venv/bin/python -m tools.port2016 [us|eu] tracks | cars [dry-run folder] | exe [exe] | small | tires | reset
        (small: the ported small ST cars labelled SMALL in VehicleList, see small_cars)
 """
 import os
@@ -1027,6 +1029,30 @@ def reset():
     print('uitex.agt: run tools/semi_tooltips.py / ui_texture.py reset as needed (the added pieces are harmless)')
 
 
+def port_tire_icons():
+    """The icons of the tires `cars` added to TireList (user, 2026-10-19: the new wheels showed in the shop without
+    icons and buying one crashed the client). A Tire Wheel item (i_g_tire_*) lists the TireList rows with Listing 1
+    and shows each by its UIIconID (GTire_PlyNNNN_1), a control of game.nui dialog 2650000 like the drift shop icons
+    (GTire_PlyNNNN); `cars` copied only the aero icons from the 2016 dialog 2880000. Only tires the 2011 TireList
+    lacks; the 2016 client has no icon for PANZER / PIETAS / AQUA / ACROBAT (Listing 0, never listed)."""
+    init = tpath('DATA', T['init'])
+    orig = read_entry(backup_path(init), INIT_ENTRY % 'TireList')
+    cur = read_entry(init, INIT_ENTRY % 'TireList')
+    old = {cells(l)[1] for l in xlt_lines(orig)[3:] if len(cells(l)) > 1}
+    names = set()
+    for l in xlt_lines(cur)[3:]:
+        c = cells(l)
+        if len(c) > 10 and c[1] not in old and c[10].strip():
+            icon = c[10].strip()
+            names |= {icon, icon[:-2] if icon.endswith('_1') else icon}
+    ui = Interface()
+    done = ui.copy_controls('2880000', '2650000', sorted(names))
+    print(f'  game.nui dialog 2650000: {len(done)} tire icons ({", ".join(done) or "nothing new"})')
+    if getattr(ui, 'skipped', None):
+        print('  no picture for', ', '.join(ui.skipped))
+    ui.save()
+
+
 def main():
     global T
     if len(sys.argv) > 1 and sys.argv[1] in TARGETS:
@@ -1040,6 +1066,8 @@ def main():
         return patch_exe(sys.argv[2] if len(sys.argv) > 2 else tpath(T['exe']))
     if cmd == 'small':
         return apply_small()
+    if cmd == 'tires':
+        return port_tire_icons()
     if cmd == 'reset':
         return reset()
     sys.exit(__doc__)

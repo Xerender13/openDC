@@ -274,6 +274,8 @@ class Stats:
                            *self.combat()) + bytes(STAT_2011 - 104)
 
 
-def enchant_bonus():
-    """XiStrEnChantBonus (party enchant), none: 2011 layout."""
-    return bytes(BONUS_2011)
+def enchant_bonus(add_speed=0.0):
+    """XiStrEnChantBonus, 2011 layout (40 bytes). Only AddSpeed (float @0x10) is filled: the client adds the own
+    (0x2f8 @0x6a, char +0xb80) and party (+0xba8) AddSpeed to the car's top speed (0x489057: car +0x928 = sum x
+    car +0x16c; 0x47f62b), in the assist table's unit (speedup "Speed Up 6" = 6). See assists.py."""
+    return struct.pack('<16xf', add_speed).ljust(BONUS_2011, b'\0')

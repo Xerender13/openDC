@@ -23,8 +23,9 @@ warranty (text 11415 "Retain the current settings through the Converting Warrant
 every convert showed that text each time), anything else = a normal convert (MODE_NORMAL).
 The user (2026-10-13): parts and option parts only, not docking parts or set parts.
 The assists are stored as ids in SKID_ITEM_TB.ASSIST_A / ASSIST_B (2008) and sent in the record's assist slots
-@0x10 / @0x14; the stat ones (bonusspeed / bonuscrash / bonusaccel / bonusboost points) count for a part on the
-car (assist_bonus, player.stats).
+@0x10 / @0x14; the stat ones (bonusspeed / bonuscrash / bonusaccel / bonusboost points, and Over Turbo's value as boost points as
+the client's stat sum 0x720650 does) count for a part on the car (assist_bonus, player.stats); speedup (the MPH
+converts) is sent as AddSpeed in 0x2f8 (assists.own_bonus).
 """
 import os
 import random
@@ -45,7 +46,8 @@ MODE_KEPT, MODE_NORMAL = 0, 2       # 0x1ab mode (client 0x51546f)
 SOLUTION_TYPE = {'i_n_00040': 0, 'i_n_00041': 1, 'i_n_00042': 2}      # A, B, C -> column pair
 OPTION_SOLUTION = {'i_n_00116': 'N', 'i_n_00117': 'S', 'i_n_00118': 'H'}
 OPTION_PAIR = {'op_S': 0, 'op_A': 1}                                   # the other options: pair 2
-STAT_KINDS = {'bonusspeed': 0, 'bonuscrash': 1, 'bonusaccel': 2, 'bonusboost': 3}
+STAT_KINDS = {'bonusspeed': 0, 'bonuscrash': 1, 'bonusaccel': 2, 'bonusboost': 3,
+              'overturbo': 3}       # the client's stat sum 0x720650 also adds Over Turbo's value to boost, truncated
 ASSIST_SQL = ("UPDATE SKID_ITEM_TB SET ASSIST_A=%s, ASSIST_B=%s, BELONGING=%s WHERE SERVERID=%s AND CID=%s"
               " AND INVENIDX=%s")
 
@@ -108,7 +110,7 @@ def assist_bonus(it):
     for aid in (it.assist_a, it.assist_b, option_assist(it)):
         a = assists().get((aid or '').strip())
         if a and a[1] in STAT_KINDS:
-            out.append((STAT_KINDS[a[1]], int(a[2])))
+            out.append((STAT_KINDS[a[1]], int(a[2])))   # 0x8955b8 truncates
     return out
 
 

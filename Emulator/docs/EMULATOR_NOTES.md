@@ -8,6 +8,48 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 27 (2026-10-19): MPH converts, convert effects checked, ported tires, server tables re-synced
+
+- **MPH converts did nothing** (user: an Enigma with a Speed Up (MPH) convert gave nothing; the other Enigma's 32-point
+  bonusspeed convert gave ~2 mph). The client's assist code ignores speedup (kind 14): 0x70f970's switch (table
+  0x7100ac) and the stat sum 0x720650 (table 0x720934) have no case for it, so session 20's note "speedup is
+  client-side" was wrong. 2008 (XiRealMatchStat::CalcAssist 0x59f0e0) summed it as AddSpeed (+0x60 of the
+  enchant bonus) and sent it. The 2011 client reads AddSpeed from XiStrEnChantBonus @0x10 **as a float**: 0x2f8
+  StatUpdate copies its own bonus (@0x6a) to char +0xb80 (0x72a390 -> 0x71c600), 0x2f9 the party one to +0xba8;
+  0x488e00 / 0x489057 sets car +0x928 = (own + party AddSpeed) x car +0x16c, and +0x928 is added to the top speed
+  (0x47f62b, 0x45ded5). The emulator sent the own bonus as zeros. Now `assists.own_bonus` fills AddSpeed with the
+  car's speedup assists (converts, option and drift item assists alike; "Speed Up 6" = 6.0, the table's unit) in
+  every 0x2f8 (`login.stat_frames`). Script-tested (stub: two Speed Up 6 slots -> 12.0 @0x10 of the 40 bytes).
+  **Not yet confirmed in game.**
+- **The other convert effects checked** (user): PartModify_Client.tdf gives bonusspeed / speedup (A), bonusaccel
+  (B), overturbo + bonuscrash (C), and qstart (column 1, 5 rows). Driving uses the server's 0x2f8 totals (char
+  +0xb58 = Total speed, 0x488e14), which include bonusspeed / bonuscrash / bonusaccel (convert.assist_bonus):
+  fine. qstart (0x70f9c2, +0x910) and overturbo's booster time (0x70fa10, +0x930) are applied by the client.
+  Gap fixed: the client's own stat sum also adds overturbo's value, truncated (0x8955b8), to boost (kind 18 ->
+  0x7208f3); the server's totals did not, so a 1.0-1.2 s Over Turbo showed 1 boost point more in the client's
+  sum than the server's. convert.STAT_KINDS now has overturbo -> boost. Script-tested (C row 34: accel 40,
+  boost 1). **Not yet confirmed in game.**
+- **Server tables out of date on this machine:** `server_data/Init/` (gitignored, rebuilt by `launch.sh setup`)
+  held the vanilla 2011 tables of 10-15, while Client US had the `port2016.py` ones (PVPTrackInfo, TireList,
+  VehicleDisplay, VehicleList, VehicleUpgrade, VisualItem, VShopItem; tables/UseItemClient.tdf for the keys). So
+  the emulator knew no 2016 car, track or aero set. Copied from the client (`sync_data` into a scratch folder,
+  only those 8 files). **User: keep server_data/Init in git** (.gitignore changed; UseItemClient.tdf too).
+- **Ported wheels without icons; buying one crashed the client** (user; drift shop, Tire Wheel items: wheels that
+  were already in 2011 work). A Tire Wheel item (i_g_tire_*) lists the TireList rows with Listing 1 and shows each
+  by its UIIconID (GTire_PlyNNNN_1), a control of game.nui dialog 2650000; the look chosen is the item text (the
+  Tire ID, misc.visual_item). `port2016.py cars` added 20 tires (Tire ID 57-78) but copied only the aero icons
+  from the 2016 dialog 2880000. New `port2016.py tires`: the icon controls (GTire_PlyNNNN and _1) of the tires
+  the 2011 TireList lacks, with their uitex pieces: 34 controls (the 2016 client has none for PANZER, PIETAS,
+  ACROBAT: Listing 0, never listed). Axis / ECO / Mento had 2011 icons; they now show the 2016 ones. Applied to
+  Client US only (`eu tires` not run). The crash cause is *a guess*: the missing icon control (Allied, Tire ID 56,
+  a vanilla 2011 tire, also has no VisualItem / VShopItem row but has its icon; to test: buying Allied works ->
+  the item rows are not needed). No crash record in DriftCityUS_Log and no 0x4b3 in the log: it crashed before
+  sending the purchase. Also found: the VisualItem manager appends rows per category in file order (0x769190) and
+  0x769460 takes number N as the category's row N-1, so the "index" column is not used for that lookup.
+  client_backup/game.nui.before_tires = the game.nui before this (already ported; no vanilla game.nui.orig on
+  this machine). **Not yet confirmed in game; restart the client.** Changed files for the user:
+  ../openDC_client_changes_2026-10-19_tire_icons.zip (game.nui, uitex.agt).
+
 ## Session 26 (2026-10-19): selling cars, Shark bought as V1, Undercity 120 %, channel battle fixes
 
 **User, end of session: "everything works properly now"** for the channel battle items below (challenger window,
