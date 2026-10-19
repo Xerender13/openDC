@@ -2,15 +2,15 @@
 
 ![Open Drift City](https://github.com/Xerender13/openDC/blob/d05ced31e936e77c70660c8ca0f6aef5ba121735/openDC_logo_white.png)
 
-Drift City (Skid Rush) Stage 2 Emulation Project: a server emulator for the **2011 Drift City client**: the US version and the European (EU) version.
+Drift City (Skid Rush) Stage 2/Stage 3 Emulation Project: a server emulator for the **2011 (2016 in development as well) Drift City client**: the US version and the European (EU) version.
 
 **DISCLAIMER: This project is all entirely made with Claude Code (vibecoded)**
 
-**It's still early stage work in progress!**
+**It's still work in progress, so expect bugs and unimplemented stuff!**
 
 The emulator is a native server written in Python. It keeps the original server's architecture from the leaked 2008 files (separate auth /
 lobby / game / area / battle-area services, the original SQL Server database tables), reads the server tables in the
-2011 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
+2011/2016 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
 the rest itself.
 
 [Link to the US client download](https://drive.google.com/file/d/1DuUoUYBxbkfMKcHAjyUvPmea_wrZgnDZ/view?usp=sharing)
@@ -24,7 +24,7 @@ the rest itself.
 
 ## Quick start
 
-1. Get the client and unpack it as `Client US/` in this folder.
+1. Get the client and unpack it as `Client US/Client EU` in this folder.
 2. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / macOS) or podman / docker
    with compose (Linux; also Python 3.10+).
 3. Start it:
@@ -53,14 +53,16 @@ To let other players join, put your address in their `DriftCityLauncher.ini` and
 The emulator recognises each client's nation and applies the EU rules only to EU clients (`emulator.ini` `[nation]`;
 `allow = eu` or `us` makes a server for one version only).
 
-## Current emulator progress (18.10.2026):
+## Current emulator progress (19.10.2026):
 
 **Game features that haven't been done yet:**
-- GT Tournament
+- Neo City
+- Other 2016 version features
 - Seasonal Events
 - Some of the items that are not activated in the current version
 
 **Features that still require testing and might work with issues:**
+- GT Tournament
 - Channels and Channel Battle
 - Crew management
 
