@@ -1,0 +1,111 @@
+# Gameplay rewards and timers previously defined in Python. Read once at emulator startup.
+# Cities: 1 Moon Palace, 2 Koinonia, 3 Cras, 4 Oros. Lists/tuples use zero-based indices.
+# Only documented fields are accepted. Keep mode, field and index unchanged. Restart after saving.
+# mode	field	index	value	description
+undercity	FEES	1	600	Entry fee in Mito; city 1 Moon Palace, 2 Koinonia, 3 Cras, 4 Oros
+undercity	FEES	2	1200	Entry fee in Mito; city 1 Moon Palace, 2 Koinonia, 3 Cras, 4 Oros
+undercity	FEES	3	2100	Entry fee in Mito; city 1 Moon Palace, 2 Koinonia, 3 Cras, 4 Oros
+undercity	FEES	4	4200	Entry fee in Mito; city 1 Moon Palace, 2 Koinonia, 3 Cras, 4 Oros
+undercity	AGREE_SECONDS	-	14.5	Seconds for party members to agree to entry
+undercity	PATROL_REWARD	1.0	2	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	1.1	2	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	1.2	5	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	2.0	4	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	2.1	8	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	2.2	12	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	3.0	7	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	3.1	15	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	3.2	20	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	4.0	11	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	4.1	23	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	PATROL_REWARD	4.2	29	Per city: 0 EXP per HUB, 1 Mito per HUB, 2 Mito per red HUB
+undercity	MAIN_HUB_EXP	1	77	Main HUB completion EXP by city
+undercity	MAIN_HUB_EXP	2	154	Main HUB completion EXP by city
+undercity	MAIN_HUB_EXP	3	231	Main HUB completion EXP by city
+undercity	MAIN_HUB_EXP	4	308	Main HUB completion EXP by city
+undercity	MIDDLE_REWARD	1.0	9	Per city: 0 EXP per caught HUV, 1 Mito per caught HUV
+undercity	MIDDLE_REWARD	1.1	3	Per city: 0 EXP per caught HUV, 1 Mito per caught HUV
+undercity	MIDDLE_REWARD	2.0	12	Per city: 0 EXP per caught HUV, 1 Mito per caught HUV
+undercity	MIDDLE_REWARD	2.1	4	Per city: 0 EXP per caught HUV, 1 Mito per caught HUV
+undercity	MIDDLE_REWARD	3.0	16	Per city: 0 EXP per caught HUV, 1 Mito per caught HUV
+undercity	MIDDLE_REWARD	3.1	7	Per city: 0 EXP per caught HUV, 1 Mito per caught HUV
+undercity	MIDDLE_REWARD	4.0	22	Per city: 0 EXP per caught HUV, 1 Mito per caught HUV
+undercity	MIDDLE_REWARD	4.1	11	Per city: 0 EXP per caught HUV, 1 Mito per caught HUV
+undercity	BOSS_EXP	1.0	6000	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	1.1	100	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	1.2	33	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	2.0	6000	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	2.1	110	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	2.2	60	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	3.0	16666	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	3.1	120	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	3.2	166	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	4.0	13333	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	4.1	200	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_EXP	4.2	266	Per city boss EXP coefficients; see game/undercity.py reward formula
+undercity	BOSS_SHARE	2	0.25	Boss EXP sharing ratio by party size
+undercity	BOSS_SHARE	3	0.14286	Boss EXP sharing ratio by party size
+undercity	BOSS_SHARE	4	0.1	Boss EXP sharing ratio by party size
+undercity	WAVE_SECONDS	1	240	Seconds before the next HUV wave, by wave number
+undercity	WAVE_SECONDS	2	240	Seconds before the next HUV wave, by wave number
+undercity	WAVE_SECONDS	3	300	Seconds before the next HUV wave, by wave number
+undercity	WAVE_SECONDS	4	360	Seconds before the next HUV wave, by wave number
+undercity	BOSS_SECONDS	-	900	Boss chase time in seconds
+rush	CITY_MONEY	1	30000	Winner Mito prize by city
+rush	CITY_MONEY	2	50000	Winner Mito prize by city
+rush	CITY_MONEY	3	80000	Winner Mito prize by city
+rush	CITY_MONEY	4	100000	Winner Mito prize by city
+rush	WIN_ITEMS	0.0	random_skb	Winner item prizes: each pair is item ID then count
+rush	WIN_ITEMS	0.1	3	Winner item prizes: each pair is item ID then count
+rush	WIN_ITEMS	1.0	i_n_00061	Winner item prizes: each pair is item ID then count
+rush	WIN_ITEMS	1.1	5	Winner item prizes: each pair is item ID then count
+vchase	CITY_ITEMS	1.0	i_n_00043	Winner enhancer by city: item ID then count
+vchase	CITY_ITEMS	1.1	10	Winner enhancer by city: item ID then count
+vchase	CITY_ITEMS	2.0	i_n_00043	Winner enhancer by city: item ID then count
+vchase	CITY_ITEMS	2.1	30	Winner enhancer by city: item ID then count
+vchase	CITY_ITEMS	3.0	i_n_00044	Winner enhancer by city: item ID then count
+vchase	CITY_ITEMS	3.1	1	Winner enhancer by city: item ID then count
+vchase	CITY_ITEMS	4.0	i_n_00044	Winner enhancer by city: item ID then count
+vchase	CITY_ITEMS	4.1	3	Winner enhancer by city: item ID then count
+vchase	SUGGEST_SECONDS	-	30	Party registration agreement timeout in seconds
+chase	TIME_TABLE	0.0	2	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	0.1	2	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	0.2	2	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	0.3	2	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	1.0	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	1.1	2	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	1.2	2	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	1.3	2	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	2.0	4	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	2.1	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	2.2	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	2.3	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	3.0	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	3.1	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	3.2	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	3.3	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	4.0	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	4.1	4	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	4.2	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	4.3	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	5.0	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	5.1	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	5.2	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	5.3	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	6.0	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	6.1	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	6.2	4	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	6.3	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	7.0	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	7.1	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	7.2	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	7.3	3	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	8.0	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	8.1	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	8.2	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	8.3	4	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	9.0	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	9.1	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	9.2	5	HUV chase time table; rows are level bands and columns are stage indices
+chase	TIME_TABLE	9.3	5	HUV chase time table; rows are level bands and columns are stage indices
+daymission	TOKEN	-	i_n_00049	Daily mission reward token item ID

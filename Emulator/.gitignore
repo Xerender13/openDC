@@ -27,3 +27,6 @@ server_data/tables/*
 db/*.bak
 !db/SKDBTW_clean.bak
 replays/
+
+# Exact originals retained by the desktop editor; may contain private configuration
+editor_backups/

@@ -11,6 +11,7 @@ usage (from Emulator/): python3 -m tools.gmctl [-c emulator.ini] COMMAND ...
     unban ACCOUNT-or-NAME
     item NAME ITEM-ID [count] [+LEVEL] [A|B|C [TIER]]   as gmitem: a part at +LEVEL (up to 20), converted
                                  with type A / B / C row TIER (1-34, none = 34)
+    car NAME CAR-NAME [V1-V9]    as gmcar: a car and its key by its shown name (AXIS ST), model name, pc_0199s or number
     coin ACCOUNT-or-NAME amount  G Coin (Hancoin) to the account (below 0 takes it); chat: gmcoin [name] amount
     realmatch open|close|in MINUTES|auto|status   Real Match opening, over emulator.ini (in: opening notices, then open)
 """

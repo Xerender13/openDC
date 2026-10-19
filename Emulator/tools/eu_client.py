@@ -40,7 +40,12 @@ UseItemClient, Instant_Client). Run `setup` again after a client patch.
 `us` writes Client US/DriftCityUS.exe for the US client instead of the ASProtect DriftCity.exe: the unpacked exe as it
 came (nation 1, Data_US), with the dname.chk check skipped as in the EU setup (user, 2026-10-18: it listed the
 original Data_US packs, so a rewritten Data_US/Init_us.agt (tools/shop_rows.py) gave "Invalid Files Detected."), and
-with GameGuard off on disk:
+with GameGuard off on disk, and every battle zone track offered in every section (`us` / `tracks on|off`; user,
+2026-10-19: "allow the usage of all tracks in the lower level racing lobbies"): the track list asks
+MakeTrackList_GetCanGoCity 0x5bc2d0 per track; it allows a track when the client's nation is 7-10 (EU: so the EU client
+already lists every track) or the track is in Taipei, else by section (Newbie: Moon Palace only; Pro 4X / 6X / 8X:
+cities up to 2 / 3 / 4; the other sections by the section number). The two branches that skip "allowed = 1" for
+other nations (0x5bc320 jl, 0x5bc325 jg) become NOPs. The server does not check a room's track against its section;
 the protection class of nation 1 (table 0x4e1210, byte 0x4e1211) 2 (GameGuard) -> 0 (the object whose checks all
 succeed, as the EU nations get). No ASProtect, so the launcher's code-checked workarounds are not needed for it
 (its breakpoint finds the class already 0). Select it with DriftCityLauncher.ini [client] exe = DriftCityUS.exe.
@@ -99,6 +104,8 @@ usage: python3 Emulator/tools/eu_client.py [client dir] setup [de|eng|fr|es]   (
        python3 Emulator/tools/eu_client.py [client dir] assists       the assist texts (converts, options) in km/h
        python3 Emulator/tools/eu_client.py [client dir] physics [new|old]   the driving physics model (default: emulator.ini)
        python3 Emulator/tools/eu_client.py [client dir] cbattle       the channel battle grades and texts from emulator.ini
+       python3 Emulator/tools/eu_client.py [client dir] chart [us|eu] Performance Graph Total: stat sum (us) or assists
+       python3 Emulator/tools/eu_client.py "Client US" tracks [on|off]  every battle zone track in every section (`us` applies it too)
        python3 Emulator/tools/eu_client.py [client dir] status
        python3 Emulator/tools/eu_client.py [client dir] reset         the original exe back (the data folder stays)
 """
@@ -116,6 +123,7 @@ BACKUP = os.path.join(HERE, '..', 'client_backup', 'DriftCityEU.exe.orig')
 NATION_AT = 0x4e4106                      # virtual address of the 22 bytes
 ORIGINAL = bytes.fromhex('b801000000' '889e68010000' '89866c010000' 'a380d89400')
 FILECHECK_AT, FILECHECK, FILECHECK_OFF = 0x4ed620, bytes.fromhex('558bec'), bytes.fromhex('31c0c3')
+ALLTRACKS_AT, ALLTRACKS, ALLTRACKS_ON = 0x5bc320, bytes.fromhex('7c0a83f80a7f05'), bytes.fromhex('909083f80a9090')
 SPEEDO_PIECE = '272,267~512,512_ui_play01.dds'
 TW_PICTURE = '406'
 TW_SAVED = os.path.join(HERE, '..', 'client_backup', 'tw_speedometer_406.dds')
@@ -536,6 +544,16 @@ def set_physics(client, new=None):
     print(f'EU driving physics: {"new" if new else "old"} model (NEWVEHICLESTAT {int(new)}); restart the EU client')
 
 
+def set_chart(client, us=True):
+    """GlobalContent CarChartAdv of the EU columns (user, 2026-10-19: the US total): the dealership's Performance Graph
+    (game.nui dialog 2940000, Total cells 2940038-46, filled by 0x5cfba0) shows the sum of the four stats with 0 (US)
+    and each grade's assists with 1 (EU: V1-V8 "-", odd text at V9 for the 2016 cars)."""
+    import global_content
+    for col in EU_GC_COLUMNS:
+        global_content.set_values(client, col, {'CarChartAdv': 0 if us else 1})
+    print(f'Performance Graph Total: {"stat sum (US)" if us else "assists (EU)"}; restart the EU client')
+
+
 def cbattle_rules():
     """emulator.ini [cbattle] eu.main and eu.semi.N -> (main (max level, min grade, max grade), {N: (...)})."""
     cp = ini()
@@ -569,6 +587,11 @@ def set_cbattle(client):
         '11409': f'"Semi-channel {taxes}: Mittron charging fees <COLOR #FFC38B1A> 1 %</COLOR>\n'
                  f'<COLOR #FF407F94>The charging fees apply to all players.</COLOR>"'})
     set_semi_buttons(client, semi)
+    try:                                 # the Semi-channel tooltips (uitex.agt) from the same rules; needs Pillow
+        import semi_tooltips
+        semi_tooltips.apply('eu')
+    except ImportError:
+        print('Semi-channel tooltips skipped (no Pillow): run .venv/bin/python -m tools.semi_tooltips eu')
     print('EU channel battle:', rules.replace('\n', '; '))
 
 
@@ -607,6 +630,14 @@ def set_semi_buttons(client, semi):
         print(f'{folder}/gameui/game.nui: Semi-channel buttons shown: {", ".join(map(str, shown)) or "none"}')
 
 
+def all_tracks(exe, on):
+    """exe (bytearray) with every battle zone track offered in every section (on) or the original rule (off)."""
+    at = file_offset(exe, ALLTRACKS_AT)
+    if exe[at:at + 7] not in (ALLTRACKS, ALLTRACKS_ON):
+        sys.exit(f'unknown code at {ALLTRACKS_AT:#x}: {exe[at:at + 7].hex()} (nothing written)')
+    exe[at:at + 7] = ALLTRACKS_ON if on else ALLTRACKS
+
+
 def make_us(client):
     """Client/DriftCityUS.exe: the original unpacked exe (the backup, else DriftCityEU.exe while unchanged), nation 1,
     GameGuard class 0, the dname.chk data file check skipped."""
@@ -624,12 +655,17 @@ def make_us(client):
     if exe[at:at + 3] not in (FILECHECK, FILECHECK_OFF):
         sys.exit(f'{src}: unknown code at {FILECHECK_AT:#x} (nothing written)')
     exe[at:at + 3] = FILECHECK_OFF
+    all_tracks(exe, True)
     dst = os.path.join(client, US_EXE)
     tmp = dst + '.tmp'
     open(tmp, 'wb').write(bytes(exe))
     shutil.copymode(src, tmp)
     os.replace(tmp, dst)
-    print(f'{US_EXE}: from {os.path.basename(src)}, nation 1 (US), GameGuard off, data file check (dname.chk) skipped')
+    print(f'{US_EXE}: from {os.path.basename(src)}, nation 1 (US), GameGuard off, data file check (dname.chk) skipped, '
+          f'every track in every battle zone section')
+    import port2016
+    if port2016.cars_ported():                   # the 2016 cars need the raised car limit (tools/port2016.py)
+        port2016.patch_exe(dst)
 
 
 def main():
@@ -640,8 +676,17 @@ def main():
     elif args and args[0] == 'us':
         client = os.path.join(HERE, '..', '..', 'Client US')
     if not args or args[0] not in ('setup', 'status', 'reset', 'us', 'f2', 'speedo', 'grades', 'kph', 'assists',
-                                   'physics', 'cbattle'):
+                                   'physics', 'cbattle', 'tracks', 'chart'):
         sys.exit(__doc__)
+    if args[0] == 'tracks':                     # tracks on|off: every track in every section (the US exe)
+        path = os.path.join(client, US_EXE if os.path.exists(os.path.join(client, US_EXE)) else EXE)
+        exe = bytearray(open(path, 'rb').read())
+        all_tracks(exe, (args[1:] or ['on'])[0] != 'off')
+        tmp = path + '.tmp'
+        open(tmp, 'wb').write(bytes(exe))
+        shutil.copymode(path, tmp)
+        os.replace(tmp, path)
+        return print(f'{os.path.basename(path)}: every track in every section {(args[1:] or ["on"])[0]}')
     if args[0] == 'status':
         n = nation_of(open(os.path.join(client, EXE), 'rb').read())
         name = {v: k for k, v in NATIONS.items()}.get(n, '?')
@@ -677,6 +722,8 @@ def main():
         return set_physics(client, None if len(args) < 2 else args[1] == 'new')
     if args[0] == 'cbattle':
         return set_cbattle(client)
+    if args[0] == 'chart':                      # chart [us|eu]: the Performance Graph Total column
+        return set_chart(client, (args[1:] or ['us'])[0] != 'eu')
     if args[0] == 'reset':
         if not os.path.exists(BACKUP):
             sys.exit('no backup: the exe was never changed by this tool')
@@ -692,7 +739,11 @@ def main():
     set_assist_kph(client)
     set_physics(client)
     set_cbattle(client)
+    set_chart(client)
     set_nation(client, NATIONS[lang])
+    import port2016
+    if port2016.cars_ported():                   # the US tables copied above list the 2016 cars (Unique Ids >= 300)
+        port2016.patch_exe(os.path.join(client, EXE))
     set_filecheck(client, True)
     set_f2(client, True)
     if os.path.exists(TW_SAVED):                         # the Km/h dial, once taken from the TW client

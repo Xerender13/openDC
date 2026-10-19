@@ -17,6 +17,11 @@
 # Needs Docker Desktop (running). Settings: emulator.ini; the clients': ..\Client US\ and ..\Client EU\DriftCityLauncher.ini.
 param([string]$Command = 'all', [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)
 $ErrorActionPreference = 'Continue'   # docker writes progress to stderr: exit codes are checked instead
+# no extra arguments: $Rest is $null and $Rest[0] threw "Cannot index into a null array" after the server had started
+# (a Windows user, 2026-10-19: launch.bat closed right away); an empty array gives $null for $Rest[0]
+if (-not $Rest) { $Rest = @() }
+# any other script error: exit 1, so launch.bat keeps the window open (it pauses on errorlevel 1)
+trap { Write-Host "launch: $_" -ForegroundColor Red; exit 1 }
 Set-Location $PSScriptRoot
 $ClientDir = Join-Path $PSScriptRoot '..\Client US'      # the US client: setup copies its tables
 $ClientEuDir = Join-Path $PSScriptRoot '..\Client EU'    # the EU client (tools\eu_client.py)

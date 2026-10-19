@@ -8,6 +8,316 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 25b (2026-10-19): small ST cars' hit box, all tracks in every section, GM damage text, EU chart
+
+- **Cars drove through lamps / trees, in races and the city; invisible hits elsewhere** (user; "the issue is the car hit
+  box", fine with an original car, fine before the port): the 2016 VehicleList marks its small ST cars (Murago ST,
+  Wave ST ... 47 cars) "GOTCHA_SMALL" with size 80 x 80 x 80 = a percentage of the base car (column 12). The 2011 client
+  scales size, model and engine sound from the base car only for an exact "SMALL" (strcmpi at 0x4c6xxx, 0x4d2xxx,
+  0x4a9800; loader 0x84a4f5 keeps column 12 at +0x218); the 2016 client tests "GOTCHA_SMALL" next to "SMALL"
+  (0x4b3f16 / 0x4b3f25, 0x4cc76b / 0x4cc77a ...). So the 2011 client took 80 as the size: an 8 cm collision box.
+  `port2016.py [us|eu] small` (small_cars; also in port_vehicle_list for later runs) writes "SMALL" for those rows
+  whose size is < 1000 (PRANA ST has a real 4310 size and keeps its label): Client US Init_us.agt, Client EU
+  Init_eueng.agt, server_data (the server does not read the label). Needs a client restart. **Not yet confirmed in
+  game.** Side effect: those cars are drawn at their scale (80 %) as the 2016 client draws them.
+- **Every battle zone track in every section** (user: "make a client patch to allow the usage of all tracks in the lower
+  level racing lobbies"): MakeTrackList_GetCanGoCity 0x5bc2d0 allows a track when the nation is 7-10 (EU: the EU
+  client already listed every track) or the track is in Taipei, else by section. `eu_client.py "Client US" tracks
+  on|off` NOPs the two branches that skip "allowed = 1" (0x5bc320 jl, 0x5bc325 jg); `eu_client.py us` applies it
+  when it rebuilds the exe. Applied to Client US/DriftCityUS.exe (rebuilt from the original by `us`: dname.chk off,
+  GameGuard off, car limit re-applied; checked). The server never checked a room's track against its section. **Not
+  yet confirmed in game.**
+- **"[A] Collision damage / [B] Penalty - Wall / [A-B] Dmg, Cur HP" during races**: the client's own debug print
+  (UTF-16 strings 0x8ecf1c / 0x8ecea0 / 0x8ece10, code 0x776920 ..) shown only when the character's PType byte
+  (char +0x7c) is below 'N', i.e. GM accounts. User: no patch for GMs. Left as is.
+- **Performance graph Total column (dealership car detail, game.nui dialog 2940000, Total cells 2940038-2940046,
+  filled by FUN_005cfba0)**: US fine (user). In the EU client V1-V8 show "-" and V9 odd text for Murago ST, while EU
+  Hunter ST shows a number at V9. With GlobalContent CarChartAdv on (EU) the column shows assists (row +0x17c / +0x180
+  pointers, "%.1f" / "%.1f%s", "-" when none) instead of the stat sum. The EU VehicleUpgrade and Assist_Client tables
+  are identical to the US ones, and Murago ST's car assists (VehicleList column 76: a_00118 a_00500) exist in both.
+  Loader note: LoadVehicleUpgradeList 0x4cd710 zeroes its row buffer once, not per car, and fills an option pointer
+  only for a non-empty name. Cause of the V9 text not found; the user chose the US layout instead: `eu_client.py
+  chart us` (part of `setup`) sets CarChartAdv 0 in the four EU columns of Client EU Patch.000 (was 1; US 0), so the
+  Total column shows the stat sum as in the US client. Needs an EU client restart. **Not yet confirmed in game.**
+- **Windows: launch.bat closed right after "emulator: listening"** (a Windows user's screenshot, Portuguese Windows:
+  "Não é possível indexar em uma matriz nula", launch.ps1:75 `'all' { Start-Server; Start-Client $Rest[0] }`): with no
+  extra arguments PowerShell leaves `$Rest` (ValueFromRemainingArguments) at $null, and `$Rest[0]` throws "Cannot index
+  into a null array"; the server was already up, only the client did not start, and the script ended with exit 0, so
+  launch.bat (pauses on errorlevel 1 only) closed. Fix: `if (-not $Rest) { $Rest = @() }` after param, plus a trap that
+  exits 1 on terminating errors (the window then stays open). **Not tested: no PowerShell here; needs the Windows user.**
+
+## Session 25 (2026-10-19): race traffic on every track, bought car grades, gift boxes, Semi tooltip, GM doc
+
+- **Race traffic on the new tracks** (user: "traffic during races on the new tracks added last time"): 18 battle zone
+  tracks had no server path file (server_data/race/PVP_map*.index): the 10 tracks of session 24b and 2011 ones the 2008
+  server never had (oros_track9 / 10, koinonia_track11 / 12, cras_track11 / 12, moonpalace_track12_r, the Taipei
+  tracks). Server2008/tools/make_traffic_paths.py's fixed-offset chpath reader breaks on their chunked layout. New
+  `tools/race_paths.py`: reads the client's own Data/World/<city>.agt PVP_map*.chpath in the chunked layout (as
+  city_traffic.read_chpath, keeping each point's progress), resamples to one point per progress unit, writes only
+  missing .index files; Taipei also gets trafficCarSettingForTrack_5.txt (TrafficFlowControl's Taipei models).
+  101 tracks with traffic (was 83). taipei_track2 (PVP_map5_03.chpath) has no paths in the client: no traffic there.
+  Script-tested (engine Race on tracks 97 / 99 / 101: 28-53 cars, 6-9 near a car, like an old track). **Not yet
+  confirmed in game.**
+- **Bought cars' grade** (user: a new car listed as V9 in the dealership came as V1; then "The 2016 client has all
+  cars start at V1"): the dealership's V tabs are VehicleList column 23, the car's class (record +0x138, tab buttons
+  at window +0x140 + class * 4, 0x5db6xx; also the CarShopSellMaxGrade filter, 0x5d3c00). 2016 has V9 there for
+  Murago ST too, so V9 tab + V1 car is the 2016 behaviour. Found on the way: 77 sold 2011 cars (Utopia, Gigas, Rotary
+  ...) have empty VehicleUpgrade rows (stats and capacity 0) below their class, and buy_car made every car grade 1
+  for the V1 price (Utopia: V1 for 1000 instead of V9 for 100000). Now cars.start_grade: the first grade with a real
+  row (capacity > 0) and its price, for buying and for create_car (gift boxes, gmcar; gmcar's reply names the grade
+  given). 2016 cars stay V1. Script-checked (Utopia 9, Drifter 1, Murago ST 1, Rotary 5, TRIO 7). **Not yet confirmed
+  in game.**
+- **Blank tooltip under EU Semi Channel 2** (user screenshot): the spot is the hidden Semi-channel 3 button; the
+  window still shows the tooltip under the mouse, and semi_tooltips drew a blank bubble for Semi-channels without a
+  rule. Now those pieces are fully transparent (US 4-5, EU 3-5). Applied to both clients; needs a client restart.
+  **Not yet confirmed in game.**
+- **Gift boxes in the editor** (user: "add the ability to make Car gift Boxes", then "gift boxes with items from a list
+  of items and with % chance for each item"): new `tools/giftbox.py` (docstring = the layout) and the Server Workshop
+  dialog Items / Cars > New gift box. A box = a UseItemClient row (kind giftbox, appended at the same row in
+  server_data, US Patch.004 and EU Data_EU_eng/World.agt; refused unless the three tables match row for row) + its
+  RewardGroup group (server_data and both Init packs) + an icon control in game.nui dialog 270000 (the Serpens box
+  picture with a label, both clients). Lines: car (key + Etc_Value grade), item, drift, mito, exp. Each line's own
+  chance uses the existing roll rules: a sub-group [item c, n/a 100 - c] linked by a RewardGroup row of 100 (no server
+  change). Tested end to end on copies of the packs in the scratchpad (rows, groups, icons, refusals) and with
+  tests/test_editor.py (new GiftBoxes test; also a missing translation, 셋 = Set, made an old test fail). No box was
+  created in the real files. **Not yet used in game.**
+- **GM Commands doc**: the old Claude Doc was on the user's other account; a new one, "openDC GM Commands"
+  (https://claude.ai/code/artifact/d53089bd-4fd4-479e-80cd-a8eb956c26c3), adds gmcar, gmcbattle (status / now / start
+  / end / owner / stakes / replays), gmcbstart, the gmctl car / cbattle / level / exp / money / test / account commands
+  and gift boxes.
+- **"disable debug information during races in battle zone"**: found in session 25b (GM-only client text; left as is).
+  Earlier search notes: The server sends no chat notes
+  during races. Client facts: debug text printer 0x4e3410 / 0x4e34c0 draws only when the dev mode *(0x94d16c)
+  (getter 0x4e1f80) is not 0 / is 0x29 (AI racer "MIND: / ACTION: / WaitTime:" text at 0x47c0c0); the mode is
+  set only by code that sets it to 1 for one print and restores it (0x7737d0, 0x78ce70: replay texts) and 0x4ff5be
+  (0x4b). Waiting for a screenshot from the user.
+
+## Session 24d (2026-10-19): gmcbattle start, track pictures, cars and tracks for the EU client
+
+- **gmcbattle start [battle minutes]** (alias `gmcbstart`; control port `cbattle start`; user: "start channel battle
+  right away"): with registration open (PREPARE) the battle time becomes now (the lobbies try a round on the next
+  tick); with nothing open, registration and battle open together (schedule(now, 1 s, length)); refused while a
+  battle is on. Script-tested (Board with the real config: none -> prepare -> wait at once). Not yet used in game.
+- **Track list showed the same picture for every track** (user screenshot, battle zone room; seen live with the
+  client: with Recommend off the slider moves through the tracks but the picture never changes). The battle zone
+  room's track pictures are game.nui dialog 1060000's first controls (1060001-1060106, all at one place); the client
+  shows the selected one among the controls before the dialog's other controls (1060107 frame ...). port2016.py had
+  removed the two 2011 controls it replaced (koinonia_track12, taipei_track4) and appended its controls after the
+  dialog's other ones, so they stayed drawn on top. Now: replaced controls keep their place and id, added ones go
+  after the last original track picture (Interface.place_tracks; the original order kept, checked against
+  client_backup/game.nui.orig). Applied to both clients. **Not yet confirmed in game.** (Recommend ticked shows the
+  Recommend column's tracks only; that is the client's filter.)
+- **Cras / Oros tabs empty ("No maps available"; user): not a bug.** MakeTrackList_GetCanGoCity (0x5bc2d0, called per
+  track by the list builder 0x5bd660): track +0x98 = city (5 Taipei always allowed); in the Pro section (channel
+  12, lobby section value 0xc) the room type's tier bit decides: 0x20000 4X -> cities <= 2 (Moon Palace, Koinonia),
+  0x40000 6X -> <= 3 (Cras), 0x80000 8X -> <= 4 (Oros), 0x100000 16X -> all. The user's room was type 0x20080 (4X);
+  log: Koinonia (flags 0x108) and Mitro (0x800) tabs gave tracks, Cras (0x200) / Oros (0x400) map 0. Explained to
+  the user; no change.
+- **Cars and tracks for the EU client** (user: "The new cars work without issues, port them to EU client as well"):
+  `port2016.py eu tracks|cars` with the EU paths (Client EU's own Data/vehicles.agt, Data/World/*.agt,
+  Data_EU_eng/Init_eueng.agt, Data_EU_eng/World.agt for the keys, Data_EU_eng/gameui, Data_EU_eng/audio/engine,
+  DriftCityEU.exe patched the same way: same program); backups <name>_ClientEU...orig (DriftCityEU.exe.orig, the
+  vanilla exe other tools build from, untouched). The tracks were ported too: the EU client shares the server and
+  would otherwise list tracks it has no files for. Checked: the EU client runs past loading (45 s, no failure).
+  Not yet confirmed in game.
+
+## Session 24c (2026-10-19): gmcar
+
+User: "add a gm command to be able to give player a car based on its name". Chat `gmcar [name] car name [V1-V9]`,
+control port / `tools.gmctl car NAME CAR-NAME [V1-V9]` (misc.gm_car, find_cars): the car is found by its shown name
+(VehicleList UI Name, e.g. AXIS ST), model name (Car Name, e.g. Kubelwagen), model file (pc_0199s) or Unique Id;
+an exact shown name wins, else every car containing the words (several -> listed, nothing given). Given as a gift box
+gives a car (cars.create_car: full Mittron, needs garage space; its key with the CarID; 0x62 RewardCar), grade V1
+unless given. Script-tested with stubs (AXIS ST V5, pc_0442s V9, ambiguity, unknown name); not yet used in game.
+
+## Session 24b (2026-10-19): 2016 tracks ported; the 2016 player cars hit a client limit
+
+User: "Port the tracks and all the new cars that are absent in 2011 (player cars only)".
+- **Tracks (done, `tools/port2016.py tracks`; docstring = the details; not yet confirmed in game):** the 9 tracks of
+  the 2016 PVPTrackInfo the 2011 one lacks (ids 93-102): Oros Track19, Koinonia Track24 / 25, Cras Track24 / 25 with
+  their folders, PVP_map*.chpath and 44 new Obj files appended to Data/World/oros|koinonia|cras.agt (originals in
+  client_backup/<pack>.orig; the other entries' compressed data copied as is, checked byte-identical on a copy);
+  Taipei Track3 / 5 / 7 and Koinonia Track23, whose files were already in the 2011 packs, only needed rows. 134 rows
+  appended to Init_us.agt PVPTrackInfo.xlt (Count 1265, TrackCnt 103) and server_data. Track pictures are found by
+  name (PVPTrackInfo "name"): controls copied from 2016 game.nui dialogs 1170000/1180000/1190000 to 2011
+  1060000/1070000/1080000, 15 picture pieces added to uitex.agt; 2016 pieces whose 2011 namesake holds another
+  picture are renamed "..._p16<atlas>". Found: **uitex.agt container = byte sum of the lower-case atlas name % 16**
+  (8526 / 8533 pieces). The client reads PVPTrackInfo into a growing array (0x83f970, 0x308-byte rows), no track
+  count limit seen. The 2016 models are the same Gamebryo 20.0.0.4 with no block type 2011 lacks. Not done: race
+  traffic on the new tracks (no 2008 .index files), the EU client (its packs are separate files).
+- **Cars: 218 player cars of the 2016 VehicleList are not in 2011** (Unique Ids 94, 127, 198-442 ...; 2350 files,
+  890 MB uncompressed: player/, texture/, neon/; 20 new tire models / TireList rows; 156 engine sounds; per car:
+  VehicleList row (2016 adds column 77 "Color Group Name"), 9 VehicleUpgrade rows, VehicleDisplay row (2016 adds
+  "Category"), UseItemClient key row, aero sets pc_XXXXs_01-03 (VisualItem + VShopItem rows; _01 = the basic body),
+  4 interface pictures found by name (game.nui 1800000 key icon, 2610000 / 2620000 / 2630000 name images; 2016 1990000
+  / 2840000-2860000). **Limit: the 2011 VisualItem keeps one byte per car type per item at +0x7c of a 0x1ac-byte
+  record, car index < 300 (0x7694f6, cache 300 x 56 at +0x710, 0x769ee7).** 2011 uses 148 car types, so 152 more
+  fit; all 218 need a client code change (record size / limits). User chose: patch the client limit.
+- **Cars ported with the limit raised (`tools/port2016.py cars`; not yet confirmed in game).** Read with the EU decomp's
+  Ghidra output (../DriftCityEU-decomp/raw/src, same program): LoadVisualItemList 0x84ad00 maps each car column to
+  `local_670[col]` = VisualItem **row 2 ("Engine sound") = the car's Unique Id**, and stores the item's Exist byte at
+  record +0x7c + Unique Id (`auStack_144[300]`); the record ends with a float at +0x1a8 (0x84c5e0: the size of "T"
+  items). So the limit is on the Unique Id (< 300), not on the number of cars. Patch (`port2016.py exe`, code
+  tools/p16_cars.s, new section .p16 at 0xa1e000, SizeOfImage 0x620000): record 0x1ac -> 0x27c (all stride / copy
+  sites in 0x7690c0-0x769ea5), loader replaced (column map 1024, record in .p16), default-part cache getter 0x769080
+  falls back to FindDefaultPart 0x7694e0 for Ids 300-511, Id checks 300 -> 512 at 0x7694a8 / 0x7694f6 / 0x769bd9 /
+  0x679b7d / 0x602202 / 0x67dbf9 / 0x68ed76 (the others comparing with 300 are unrelated: 0x4a42f8 frame time,
+  0x57b83c text, 0x6e73eb mesh, 0x7bd12e, 0x778dea world objects). None of these functions is replaced by the decomp
+  version.dll. Unique Ids 300-303 (RACHEL BT, ACROBAT, Impact MINI, TITAN MINI) would share bytes with the float:
+  renumbered 102-105 (free in 2011 and 2016). Engine sounds are idle%u / mid%u.wav by Unique Id (0x547290).
+  Applied: 218 VehicleList rows (364 player cars), 1962 VehicleUpgrade rows, 227 VehicleDisplay rows, 20 tires,
+  363 VisualItem car columns (2011 cells unchanged: 182420 checked), 282 aero items + VShopItem rows, 218 keys in
+  Patch.004 UseItemClient.tdf, 1776 files (577 MB) into Data/vehicles.agt (now 388 MB), 154 engine sounds, 991 picture
+  pieces (the 2016 Dev Ed tex lacks most car name images: taken from ~/Drift City World's uitex.agt). Checked: the
+  server's Tables load them (364 player cars, keys, aero fits only its car, paints fit new cars); the exe patch
+  disassembled from the patched file. **Not tested: the client loading the tables / drawing the cars.**
+  tools/shop_rows.py now keeps rows other tools added; eu_client.py `us` / `setup` re-apply the exe patch.
+  EU client not updated: an EU client near a US player driving a new car lacks its model and table rows.
+- **Crash at start after the port (user: "The game crashes on loading"; fixed):** the client exited with code 3 after
+  `__security_error_handler` (no server connection). Found by running the client under Proton without the launcher
+  (token = md5 of the 5-minute CLOCK_MONOTONIC window) with gdb on the stack cookie check's failure jump 0x895c6c:
+  the return address 0x84a284 = the VehicleDisplay row reader 0x84a240 (format "%s%s%d%d%d%d" into two 32-byte stack
+  buffers, called from 0x4cd630 `Init/VehicleDisplay`); the 2016 name "MITSUBISHI LANCER Evolution III 1995" (36
+  bytes) overwrote the cookie. port2016.py now clips new names to 31 bytes (VehicleList / VehicleUpgrade /
+  VehicleDisplay) and 34 (VisualItem / VShopItem: the 2011 maximum), and chooses the cars against the original
+  VehicleList so a second run rebuilds all of them. Checked: the client then ran past loading (45 s, no cookie
+  failure, under gdb). Not yet checked: logging in, garage, dealership, driving a new car.
+- **New cars showed only their wheels (user, dealership screenshot of AXIS ST; fixed):** an "s" car's body is its
+  basic aero set (pc_XXXXs_01, VisualItem category 6; ST / BT variants use the base car's set, e.g. AXIS ST 199 ->
+  pc_0198s_01). The client takes the car's default part with FindDefaultPart 0x7694e0 = the first row of the category
+  whose byte for the car is 1, in table order. The generic rows pc_Aeroset1 / pc_Aeroset2 / pc_AeroMK2 / pc_Aero /
+  pc_Aero2 / pc_AeroMK2+ (Index 0) fit every car and stand after the car rows; port2016.py had appended the new rows
+  after them, so the generic set became the body. Now inserted after the category's last pc_NNNN row (the 2016
+  order). Checked: every new car's first fitting category-6 row is its own set; the 2011 cars' defaults unchanged
+  (vanilla compared; 201-203 were columns without a 2011 car). Not yet confirmed in game.
+
+## Session 24 (2026-10-19): Semi-channel tooltips in the channel battle window
+
+User (screenshot, US client, Crew Center > Semi Channel tab): "fix the client UI bugs in Crew center Enter Channel
+battle screen on semi channels. They appear on both US and EU client." The screenshot showed red digits "05 / 16"
+with a line to the Semi Channel 1 button, next to the list.
+- **Cause: a vanilla client art bug.** While the Semi-channel list is open the window (UI+0x2ac, 0x6a3330) shows game.nui
+  dialog 2030000 for every nation but JP (2) and, under the mouse, the Semi-channel button's tooltip: controls
+  2030001-2030005 (ID_TC_SEMICHANNEL_TOOLTIP_1..5; window +0x20b8 / +0x20bc.., read at 0x6ab9a5), pictures
+  "3,625~179,697_ui_contents56.dds" .. "3,917~179,989_ui_contents56.dds". In the 2011 US uitex.agt (unchanged: same md5
+  as client_backup/uitex.agt.orig) those pieces hold the kill counter's digits ("0 5 / 1 6", "2 7", "3 8", "4 9",
+  "KILL"); the EU folder is built from it. The 2016 client (DriftCity Dev Ed, Data_US/gameui/tex/F.ntx) has the real
+  pieces: a speech bubble "Crew Member / with V3 ~ V6 Vehicle / level 40 or less" (V3-V8 / 60, V3-V9 / 70, then two
+  more), i.e. the 2016 rules, not the 2011 ones (US: levels only; EU: V1-V3 / V1-V6).
+- **Fix (client packs, asked for by the user):** new `tools/semi_tooltips.py`: the 2016 bubble (cached as
+  client_backup/semi_tooltip_N.dds; a drawn bubble when the 2016 client is absent), text cleared, the server's rules
+  written in its colours: US "Crew Member / level 40|60|70 or less", EU "Crew Member / with V1 ~ V3|V6 Vehicle / no
+  level limit"; Semi-channels without a rule get a blank bubble. Only those 5 pieces change (checked against the
+  backup: 8533 pieces, 5 differ); header bytes 20-31 kept; `reset` puts the original pieces back.
+  `eu_client.py cbattle` runs it for the EU folder. Applied to Client US and Client EU. Needs a client restart.
+  **Not yet confirmed in game.**
+- Not bugs (the client's own design, left as is): the panel title says "Channel 1" for Semi-channel 1 (text 10324
+  "Channel %u" with index - 9, 0x6a6fb5; the Regular tab uses the same text with index + 1); the crew rows stay empty
+  while the channel has no owner (0x6a6a4e: owner crew id <= 0 skips them). Switching to the Semi tab selects
+  Semi-channel 1 (0x6a3b49) without sending 0x372; clicking a Semi button sends 0x372 with 10 + N - 1.
+- EU ("doesn't have channels listed there properly"): no EU session since session 22b (Main.NormalCh, EU Semi
+  buttons 1-2); the last EU log (20261018-225013) predates them and shows the Semi tab only. Waiting for an EU
+  screenshot / description.
+
+**2016 client vs 2011: Mitro City (Taipei) and missions** (user: "see if we can port the remaining mitro city (Taipei)
+and missions from 2016 client"). Compared every file of Client US (packs + patches, md5 per entry) with DriftCity Dev
+Ed (loose files; 2016-02 exe), vehicles and audio left out (scratchpad manifest.py / mdev.py):
+- **Taipei is the same city in both**: terrain, paths (path_taipei.chpath / .signal), tracks 3 / 5 / 7, modeltable;
+  only 10 textures added / 13 changed and taipei.xlt +2 objects (New_START / New_PVP gate models, battle zone prop
+  occupancy 0 -> 10). MotherQuest.xlt identical (38 rows), Icon_Taipei_Client.tdf the same 80 posts (2016 adds a 6th
+  column, 0 everywhere). Nothing of Taipei is missing in the 2011 client; the emulator already serves its traffic,
+  signals and Mother quests (session 13; the chain is still not confirmed in game).
+- **2016-only missions** (QuestClient 273 -> 286 rows; all rows also differ in reward columns 75 / 76, doubled):
+  - neo_q_0001-0006 (IDn 163-168): "A Girl from the Future" / "Death of President Jacob" / "To the OMD Communications
+    Headquarters", a ROO line (after quest 143) and an OMD line (after 161), level 40, Oros posts (one new:
+    post_4rd_10009), portraits ch_neo_0001_0x (present in the 2011 uitex), 2000 exp / 4000 Mito.
+  - rq_00069-0075 (IDn 10052-10058): Christmas 2012 chain of Yuki in Moon Palace ("Senior Yuki's Request" ..
+    "Runaway Ghost Car", "Chasing Santa": chases of HUV rows 19173 / 10079), 20 new Moon Palace posts
+    post_1st_2012_crist_01-19 + post_1st_dummy (Icon_Moonpalace_Client), reward item 2012_yuki_giftbox.
+  - Instant_Client 147 -> 207 rows: ROO patrol variants (move_ROO "Minyoung's Scouting") per level band.
+  - Other 2016 content: battle tracks Oros 19, Koinonia 24 / 25, Cras 24 / 25 (folders + pvp_mapN_M.chpath);
+    Init tables for 2016-exe features (compound, teamresearchtable, valentainreward, worldmatchseasonlaptime, ...:
+    no 2011 client code reads them).
+- Porting the quests means rewriting the 2011 client's QuestClient.tdf / Icon_* tables (rows appended: the client
+  indexes quests by row) and the server_data copies; the chases / gift box also need HuvTable / item rows. Not
+  started: waiting for the user's choice.
+
+## Session 23c (2026-10-19): Compose restored, live connection checked, handoff updated
+
+User requested reinstalling Podman Compose, then reported starting the server and requested handoff notes.
+Podman 6.0.2 was already present. Installed podman-compose 1.6.0 in the user venv
+`/home/deck/.local/share/podman-compose`, linked from `/home/deck/.local/bin/podman-compose`.
+SteamOS system partition remains read-only; no sudo/system package changes. Both Compose command forms
+reported the installed version outside the sandbox. Recheck/recreate the environment after Python upgrades.
+
+After the user's server start, read-only checks returned: emulator running (PID 17118 at that check),
+database healthy; `gmctl who` -> `OK 0 online`; a deliberately unmatched `accounts` search -> `OK []`.
+This supersedes the earlier session-23 startup failure as an open blocker. Account creation, credential
+changes, role changes and balance mutations were not exercised against live data. No client packs,
+account rows or character rows were changed to test the editor.
+
+Updated `docs/HANDOVER.md` with the editor file map, dependencies/launch commands, translated display
+semantics, backups/restore, mode tuning scope, GM/account behavior, Compose location, test results and
+remaining verification. Corrected the handoff's GM role table reference to `SKID_CHARACTER_TB.PTYPE`.
+Latest tests remain 16/16 editor tests and the desktop English/original-view smoke test; earlier full
+suite was 39/41 with the two known position-test failures. No commit/push requested or performed.
+
+## Session 23b (2026-10-19): English text in the desktop editor
+
+User: "Translate Korean parts to English in the editor from the tables."
+Added offline display translations (`tools/editor/translations.py`) for every Korean value in the four
+item tables (ItemClient, UseItemClient, VisualItem, VShopItem), Korean column headings throughout the
+loaded tables, rental/set effects, consumables, AI/car parameters, assist effects and upgrade requirements.
+Additional recurring reward/event terminology is translated; unmapped historical prose/names remain
+in their original wording rather than inventing translations. Values/effects are translations of source
+text, not claims that the corresponding old event or item is implemented.
+
+Lists, editable fields and previews use English; English and Korean search both work. "Original table
+text" switches values back to their source wording. Translation is a display layer: opening/focusing a
+translated cell or saving an unrelated edit never writes the English display value over the Korean source.
+Only explicit changes become edits. Client/server tables and game behavior are unchanged; reopen the
+editor to load the update, without restarting the game server.
+
+Validation: all 16 editor tests pass, including complete four-item-table translation coverage, Korean
+heading coverage, byte-identical round trips with every translated item cell visited, English/Korean
+search, explicit edits and numeric/unknown-text preservation. Desktop smoke test checks English/original
+view switching and absence of implicit edits. Not yet confirmed by the user.
+
+## Session 23 (2026-10-19): desktop server editor
+
+User requested an editor for items, cars, every game mode's parameters/rewards, GM console and accounts.
+Added `tools/editor/` (Tk desktop; Pillow for original DDS/WebP pictures), `editor.sh` / `editor.bat`.
+Reads server copies of XLT/TDF/text/INI files; named fields for verified columns, original XLT headers,
+configuration comments and explicit raw-column labels elsewhere. Game artwork comes from the US game's
+`game.nui` + `uitex.agt`, with the user's catalog ZIP as an optional icon/description fallback. No client
+packs changed. Cached client-side values still require deliberate synchronization through existing tools.
+
+`server_data/mode_tuning.txt` + `native/mode_tuning.py` expose 107 previously hardcoded gameplay values:
+Undercity fees/stage payouts/timers, Rush prizes, Virtual HUV prize items, chase time tables, daily token.
+Startup validates the complete file against an explicit allowlist before applying it. Default tuning is
+identical to the previous gameplay. Protocol constants cannot be changed. Modes not implemented by the
+emulator and other rules still embedded in handler code remain outside the editor's supported fields.
+
+Local GM control adds account search/detail/create/password/role, online level/EXP/Mito, channel battles,
+party/VHUV/UC/CB test modes, Rush and forced gate rewards. Password changes/role edits reject accounts
+connected to the lobby or game; existing MD5 authentication retained. Credential commands redact passwords
+from logs; account list/detail responses aren't copied to general logs. GM roles use existing character
+PTYPE (new characters keep their normal default); adminlist.txt overrides are reported on revocation.
+The editor uses Docker Compose stdin for Windows GM access, keeping the control port private.
+
+Saves preserve exact backups in ignored `editor_backups`, reject externally modified files, preserve
+TDF row indices/identifiers, BOM/encoding/line endings and untouched cells. Delivery/patrol reward lists
+can duplicate rows for additional prizes. The legacy CP949 Lap Time file is preserved. No live account
+or character data edited while developing. **Not yet confirmed in game**. Validation: editor tests for
+all-table byte round trips, TDF/XLT edits and exact backups, stale writes, legacy encoding, INI secret/comment
+preservation, reward rows, tuning defaults/validation and account password/offline/log behavior. Desktop
+smoke test passed on the Deck display (item/car/mode selection and forms, original artwork, no writes).
+Full suite: 39/41 pass; the two pre-existing `test_position.py` failures documented in HANDOVER remain
+(one stale tutorial-state expectation, one DB stub missing `rows`). Real Windows desktop/Docker path untested.
+`launch.sh restart-emu` briefly reported listeners (pid 14551); subsequent GM connection was refused and
+host status showed emulator stopped, DB container exited since 16 hours earlier. Live database/account
+integration was therefore not verified; start `./launch.sh server` for the GM and Accounts panels.
+
 ## Session 22b (2026-10-18): main channels shown, EU semi buttons, part stakes, CB spectators, replays, Ghost Battle
 
 User: "Make a document with all the GM commands" (a Claude Doc, "openDC GM Commands"), "implement losing an equipped part

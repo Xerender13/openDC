@@ -210,6 +210,10 @@ async def run(cp, echo):
     msglog = MsgLog(log_dir, echo=echo)
     handlers.load()
     native_setup(cp)
+    from .native import context
+    if context.data:
+        from .native.mode_tuning import apply
+        apply(context.data.root)
     servers = []
     for name, spec in cp['services'].items():
         port, up_port, handshake = map(int, spec.split())

@@ -4,6 +4,151 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
+## Latest handoff: 2026-10-19 (session 25)
+
+Details: "Session 25" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). No commit asked for. New untracked files:
+tools/race_paths.py, tools/giftbox.py, server_data/race/ (18 new .index files + trafficCarSettingForTrack_5.txt).
+Done, none confirmed in game: race traffic on every track with client paths (101), bought cars at their first real
+grade (2011 class cars like Utopia V9; 2016 cars V1), transparent tooltips for hidden Semi-channels, gift box maker
+(editor dialog + `tools.giftbox`), new GM Commands doc (link in the notes; the old one is on another account).
+Session 25b: small ST cars labelled SMALL (their 80 % size made an 8 cm hit box: drove through objects;
+`port2016.py [us|eu] small`), every track in every section in the US exe (`eu_client.py "Client US" tracks`), the
+race damage text is GM-only client debug (left). Open: EU performance graph Total column (V9 odd text, EU only; see
+the notes), confirming all of this in game. Fixed, untested on Windows: launch.ps1 with no arguments ($Rest null ->
+"Cannot index into a null array" after the server started). EU Performance Graph now uses the US stat sum
+(`eu_client.py chart us`, part of setup).
+
+## Previous handoff: 2026-10-19 (sessions 24-24d)
+
+Details: "Session 24" .. "Session 24d" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). No commit or push was asked
+for; the working tree still holds the uncommitted session 23 editor work too (new untracked files: tools/editor/,
+tools/semi_tooltips.py, tools/port2016.py, tools/p16_cars.s).
+
+**Done (client files changed with the user's approval; originals in client_backup/):**
+- Semi-channel tooltips (`tools/semi_tooltips.py`): the vanilla pack had kill-counter digits under the tooltip names;
+  now the 2016 bubble with the server's own rules. US and EU.
+- **2016 content ported** (`tools/port2016.py [us|eu] tracks|cars|exe|reset`, docstring = everything):
+  9 battle zone tracks (ids 93-102) and 218 player cars (Unique Ids 94-442; 300-303 renumbered 102-105), in both
+  clients. Car pictures the 2016 Dev Ed files lack come from `~/Drift City World/.../uitex.agt` (WORLD_UITEX).
+  **User-confirmed:** the new cars work in the US client. Not yet confirmed: the EU client in game, the track
+  picture fix (dialog 1060000 order), driving every new track.
+- **Client code patch** (both exes, section `.p16`, code in `tools/p16_cars.s`): VisualItem records hold car Unique
+  Ids up to 511 (was 299). `tools/eu_client.py us` / `setup` re-apply it when the tables hold the 2016 cars. Any
+  crash in the shop / garage / car code: suspect this first (`port2016.py exe` checks the original bytes).
+- Fixes found on the way: names over 31 bytes overflow the VehicleDisplay reader's stack buffer (port clips them);
+  the first fitting aero row is a car's body (new rows go before the generic pc_Aero* rows); battle zone track
+  pictures must stay before dialog 1060000's other controls.
+- GM: `gmcar [name] car name [V1-V9]` (gmctl `car`), `gmcbattle start [minutes]` / `gmcbstart` (gmctl
+  `cbattle start`). Script-tested only.
+- Not a bug: Cras / Oros tracks are only offered in 6X / 8X+ Pro rooms (client 0x5bc2d0; Taipei always).
+
+**Debugging method that worked this session** (for crashes at start): run the client under Proton without the
+launcher (token = md5 of the 5-minute CLOCK_MONOTONIC window; EU: "eu_%d_plz_do_not_hack") and attach gdb with a
+breakpoint on the stack cookie failure jump 0x895c6c; `x/24wx $sp` gives the failing function's return address.
+Screenshots of the live client: `spectacle -b -n -f -o FILE`; xdotool can click into the XWayland window.
+
+**Open:**
+1. EU channel list report from session 24 (needs an EU screenshot); test the EU client with the new cars / tracks.
+2. Confirm the track picture fix in game; gmcar / gmcbattle start in game.
+3. Optional (user to decide): all cities in every Pro room (client patch of 0x5bc2d0); race traffic on the new
+   tracks (no .index files); the 2016-only quests (neo_q, Christmas rq) not ported; GM Commands doc lacks the new
+   commands.
+4. Running state: emulator restarted at the end of the session (all server tables current).
+
+## Previous handoff: 2026-10-19 (sessions 23–23b)
+
+The latest work is the **desktop Server Workshop editor**, requested by the user for items, cars,
+mode parameters/rewards, GM console access and account management. The follow-up request was to translate
+Korean table text into English in the editor. See the session 23b / 23 entries in
+[EMULATOR_NOTES.md](EMULATOR_NOTES.md) and the desktop editor section of [../README.md](../README.md).
+No commits or pushes were requested or made for this work. The working tree already had extensive
+pre-existing changes; preserve them. The new editor files are still untracked and must be included
+explicitly when the user eventually asks to publish.
+
+**Last verified server state:** after the user started the server on 2026-10-19, `launch.sh status`
+reported emulator PID 17118 and a healthy database container. `tools.gmctl who` returned `OK 0 online`;
+an account search for a deliberately nonexistent ID returned `OK []`, confirming the new account command
+and live SQL connection. These were read-only checks. Do not treat the earlier session-23 startup failure
+as the current blocker, and do not assume the recorded PID remains current: check the launcher status.
+Live account mutations, editor-driven reward changes and in-game behavior have not been verified.
+
+**Start the editor:** from `Emulator/`, run `./editor.sh` (or `.venv/bin/python -m tools.editor`).
+The emulator/database need to run for GM and account panels; table browsing/editing works independently.
+Python Tk and Pillow are required. Pillow 13.0.0 is installed in this machine's emulator `.venv`;
+reinstall elsewhere with `.venv/bin/python -m pip install -r tools/editor/requirements.txt`.
+On Windows use `editor.bat`; its Docker Compose GM transport is implemented but untested on Windows.
+Reopen the editor to load editor-only code/translation changes; those do not require a server restart.
+Changes to cached server tables or `mode_tuning.txt` require an emulator restart and disconnect players.
+
+**Implementation map:**
+
+| File | Responsibility |
+|---|---|
+| `tools/editor/__main__.py` | Tk interface: Items, Cars, Modes & rewards, GM Console, Accounts; asynchronous server calls |
+| `tools/editor/data.py` | XLT/TDF/text/INI documents, validation, exact backups, atomic saves, conflict detection, game artwork, local GM transport |
+| `tools/editor/translations.py` | Offline English display translations; original text option; English/Korean search support |
+| `editor.sh`, `editor.bat`, `tools/editor/requirements.txt` | Desktop launchers and Pillow dependency |
+| `dcemu/native/editor_admin.py` | Account search/detail/create/password/role commands, through the loopback GM port |
+| `dcemu/native/admin.py` | GM dispatch additions and credential log redaction |
+| `dcemu/native/mode_tuning.py`, `server_data/mode_tuning.txt` | 107 allowlisted gameplay values, validated and applied once at startup by `dcemu/__main__.py` |
+| `tests/test_editor.py` | 16 editor data, translation and account tests |
+
+**Capabilities and boundaries:**
+
+- Items cover `ItemClient.tdf`, `UseItemClient.tdf`, `VisualItem.xlt`, `VShopItem.xlt`; cars cover model and
+  V-grade tables. Original artwork comes from `Client US/Data_US/gameui/game.nui` and `uitex.agt`.
+  The optional root-level `Drift City Item Catalog.zip` supplies additional descriptions/icon atlases;
+  keep it when moving the workspace. The editor does not rewrite any client archive.
+- Modes & rewards exposes the available game tables, gameplay INI settings, schedules, drops and reward
+  files. The added tuning file exposes Undercity fees/stage payouts/timers, Rush winner prizes,
+  Virtual HUV item prizes, chase time tables and the daily token. Defaults preserve existing behavior.
+  Unimplemented modes and other handler rules are not automatically configurable. Unknown columns are
+  explicitly labeled as raw parameters.
+- All Korean values in the four item tables and Korean column headings in the loaded tables have English
+  display translations. Assist effects, upgrade requirements and recurring reward terminology are also
+  translated. Some historical prose/proper names elsewhere remain original when no translation exists.
+  `Original table text` shows source values. Display translations must **never** become implicit writes:
+  `Document.set_display` skips unchanged display text, while deliberate user field edits change data.
+- Saves keep exact originals in ignored `editor_backups/<timestamp>/`, reject stale edits and preserve
+  row indices, linked IDs, encodings (including CP949 Lap Time), BOMs and untouched cells. Delivery/patrol
+  item reward files allow duplicate rows for extra prizes. Restore by copying the appropriate backup
+  over the original while its editor is closed. `sync_data` can overwrite edited client-derived tables.
+  Client-visible prices/names/requirements may also need a deliberate client pack update with existing tools.
+- GM additions include online level/EXP/Mito, channel battle controls, party/VHUV/Undercity/CB test modes,
+  Rush and forced gate rewards. GM/account mutations execute through the emulator, rather than arbitrary
+  SQL from the editor. Credential commands redact passwords from logs; list/detail payloads are omitted
+  from general server logs. Keep the unauthenticated GM control port loopback-only.
+- Account password resets and role changes require full logout from both game and lobby. Passwords keep
+  the existing game-compatible MD5 format. GM roles update `SKID_CHARACTER_TB.PTYPE` on existing characters;
+  future characters retain their default. `adminlist.txt` independently grants GM access, and revocation
+  reports that override instead of claiming success.
+
+**Podman Compose restored on this Steam Deck:** Podman 6.0.2 was already installed; the Compose provider
+was missing. SteamOS 3.9.3 has its system partition read-only, and sudo required a password. Installed
+`podman-compose` 1.6.0 in a dedicated user venv at `/home/deck/.local/share/podman-compose`, with the command
+symlink `/home/deck/.local/bin/podman-compose`. Both `podman-compose --version` and `podman compose version`
+were verified outside the sandbox. The user installation lives outside the read-only system image;
+verify it after future OS/Python upgrades and recreate the venv if the interpreter changes. This is
+machine setup, not part of the repository or an installation on a new machine.
+
+**Validation and next steps:**
+
+```sh
+cd Emulator
+.venv/bin/python -m unittest tests.test_editor -q
+.venv/bin/python -m tools.editor --smoke-test
+```
+
+All 16 editor tests passed after translation changes. The desktop smoke test passed on the Deck display:
+item/car/mode forms, original artwork, English/original view switching and no implicit edits; no table
+writes. The full suite was run before the four translation tests were added: 39/41 passed, with the two
+previously documented `test_position.py` failures (stale tutorial state expectation; DB stub missing
+`rows`). Do not report a new full-suite total without rerunning it. Windows and in-game editor changes
+remain unconfirmed. Next, let the user try the editor, then test deliberate edits on scratch copies/test
+accounts before changing their main character or live economy. Do not create accounts or alter balances
+just to prove the connection; live read-only GM/database connectivity already passed.
+The gameplay open list in section 5 below still applies, especially channel battle/replay testing.
+
 ## 1. What to copy
 
 The GitHub repository (https://github.com/Xerender13/openDC) holds `Emulator/` and `Launcher/` only. Copy the rest
@@ -56,7 +201,7 @@ The client: `Client US/DriftCityLauncher` (Linux, runs DriftCityUS.exe with Prot
 your address, and `Emulator/server_data/serverlist.txt` too; open TCP 11005-11051.
 
 Accounts are made on the first login with a new ID. GM rights: the account in `server_data/adminlist.txt` or
-SKID_ACCOUNT_TB.PTYPE 'A'; GM commands with
+SKID_CHARACTER_TB.PTYPE 'A'; GM commands with
 `./launch.sh` running: `.venv/bin/python -m tools.gmctl who | kick NAME | block NAME days | ban ACCOUNT ...`.
 
 ## 3. How the work is done (rules the user set)
@@ -100,7 +245,9 @@ that change client files are in git, so those changes can be made again on anoth
 
 ## 5. State at the handover
 
-Updated 2026-10-18 ~23:00 (sessions 21-22b, committed and pushed with this note; session 20 ~18:40). Details: the "Session 22b", "Session 22", "Session 21" entries, then the "Session 19
+Gameplay status below last updated 2026-10-18 ~23:00 (sessions 21–22b). For the 2026-10-19 editor,
+translations, Compose installation and last verified server status, read the latest handoff above.
+The older gameplay work was committed before this editor session. Details: the "Session 22b", "Session 22", "Session 21" entries, then the "Session 19
 hand-off" at the top of `docs/EMULATOR_NOTES.md`, then "Session 19b" (Undercity), "Session 19" (size check), "Session 18".
 
 **Running state:** emulator and DB running (`./launch.sh restart-emu` after code changes), emulator.ini

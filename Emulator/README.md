@@ -147,3 +147,54 @@ list of frames, or None to drop it; `session.to_client()` / `to_server()` inject
 forwarded unchanged. Native handlers register as `native:<service>` (`@on('native:lobby', C2S,
 0x29)`), may be `async`, and answer with `session.to_client()`; `@on_open('native:<service>')`
 runs when a client connects (the lobby's keepalive).
+
+## Desktop server editor
+
+From `Emulator/`, install the editor's image dependency once and start it:
+
+```sh
+.venv/bin/python -m pip install -r tools/editor/requirements.txt
+./editor.sh
+```
+
+On Windows with Python 3.10+ installed: `py -3 -m pip install -r tools/editor/requirements.txt`,
+then run `editor.bat`. Linux needs Python's Tk package (usually `python3-tk` / `tk`).
+The editor runs on the desktop; Windows account/GM commands reach the emulator through Docker Compose
+without publishing its private control port. Windows has not been tested on a real Windows desktop.
+
+- **Items:** parts, consumables, visual items and drift shop rows. Names, descriptions, requirements,
+  prices, effects and stats; original game artwork from `../Client US`. The optional
+  `../Drift City Item Catalog.zip` supplies additional tooltips and icon atlases.
+- **Cars:** car model definitions, V1–V9 stats, prices, upgrade costs, fuel and requirements;
+  car thumbnails come from the game's own named UI pictures.
+- **Modes & rewards:** gameplay sections of `emulator.ini`, all available Init/TDF tables,
+  delivery/patrol item rewards, battle EXP/Mito and gate rewards, Lap Time, schedules and drop tables.
+  `server_data/mode_tuning.txt` additionally exposes 107 existing constants: Undercity entry fees,
+  stage EXP/Mito and timers, Rush winner prizes, Virtual HUV item rewards, chase timers and daily tokens.
+  Descriptions use verified column names and existing configuration comments; unknown columns are
+  explicitly marked as raw parameters. Unimplemented modes and mechanics still embedded in handler
+  code are not made configurable by this editor.
+- **GM Console:** command templates, output and session history; includes level/EXP/Mito, item grants,
+  G Coin, kick/blocks/bans, test modes, channel battles, Rush Time and Real Match.
+- **Accounts:** search, character/online status and balances, create accounts, reset passwords,
+  ban/unban, GM roles for existing characters, and G Coin. Passwords retain the game's MD5 format;
+  reset/role changes require the account to exit both game and lobby. `adminlist.txt` can independently
+  grant GM access; the editor refuses to claim revocation while that override is present.
+
+Korean item names, tooltips and table headings display in English, with offline translations and
+search in either English or Korean. **Original table text** shows the source wording. Display translations
+are not written to game data automatically; only an explicit field edit changes a value. Historical
+text without a translation keeps its original wording. Reopen the editor after updating its code.
+
+Select a file, search/select a row, edit fields and **Save changes** (Ctrl+S). Saves keep exact original
+files in git-ignored `editor_backups/<timestamp>/`, replace files atomically and reject stale edits.
+To restore a file, close its editor and copy its backup over the corresponding original, then restart.
+Rows and linked IDs stay fixed because client packets reference table row numbers. Delivery/patrol reward
+lists support **Duplicate reward row** to give multiple items. The editor changes server data copies;
+client-visible prices, descriptions, requirements or physics may also require a deliberate client data
+update with the existing pack tools. It never rewrites client archives. `sync_data` can overwrite edited
+client-derived server tables, so keep the editor backups.
+
+Cached data and mode tuning take effect after **Restart emulator**, which disconnects connected players;
+patrol/delivery item rewards reload automatically. GM/account panels require the updated running emulator.
+Changes are not yet confirmed in game. Editor data/account tests: `.venv/bin/python -m unittest tests.test_editor`.

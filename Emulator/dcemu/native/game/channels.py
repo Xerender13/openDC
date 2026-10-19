@@ -44,7 +44,7 @@ Test mode (user, 2026-10-18: "just 1 player is enough to attack a channel"; emul
   character the GM chat command gmcbtest on): a test player's crew needs no Challenge Coupon or crew rank, its room
   queues as soon as it is made (no Ready), and when a test crew is the only challenger and the channel's owner has no
   room (or nobody owns the channel) it attacks alone: each round is a race alone, a finish wins it, 2 wins take the channel.
-  GM: gmcbattle now [minutes to the battle] [battle minutes] | end | owner <channel 1-13> <crew name | none> | status.
+  GM: gmcbattle now [minutes to the battle] [battle minutes] | start [battle minutes] (the battle at once) | end | owner <channel 1-13> <crew name | none> | status.
 
 Messages (2011; offsets with the type; C>S payloads 2 less):
 0x35c CBattleInfo (u32 act, 0x3ed from the window) -> 0x35d CBattleInfoAck: act, u32 next battle time, page 0, u32 n,
@@ -1622,7 +1622,8 @@ def gm_test(session, args):
 
 
 async def gm_command(session, args):
-    """gmcbattle now [minutes to the battle] [battle minutes] | end | owner <channel> <crew | test | none> | status."""
+    """gmcbattle now [minutes to the battle] [battle minutes] | start [battle minutes] | end | owner <channel> <crew |
+    test | none> | status."""
     b = board()
     w = [a.lower() for a in args]
     if not w or w[0] == 'status':
@@ -1641,6 +1642,25 @@ async def gm_command(session, args):
         b.schedule(t, int(wait * 60) + 1, int(length * 60))
         return (f'channel battle: registration open now, the battle starts in {wait:g} min and lasts {length:g} min '
                 f'(open the Crew window > Channel Battle)')
+    if w[0] == 'start':                         # the battle at once (user, 2026-10-19: "start channel battle right away")
+        length = float(w[1]) if len(w) > 1 else 20.0
+        t = now()
+        busy = [lb for lb in b.lobbies if lb.state not in (NONE_, PREPARE)]
+        if busy:
+            return f'the battle is already on in {channel_name(busy[0].ch)} ({busy[0].state}): gmcbattle end first'
+        open_ = [lb for lb in b.lobbies if lb.state == PREPARE]
+        if open_:                               # registration running: skip the rest of it
+            for lb in open_:
+                lb.battle_time = t - 1
+                lb.end_time = max(lb.end_time, t + int(length * 60))
+                lb.dirty = True
+            b.next_battle = t - 1
+            return (f'channel battle starts now in {len(open_)} channels (until '
+                    f'{time.strftime("%H:%M UTC", time.gmtime(max(lb.end_time for lb in open_) - CLOCK_SHIFT))}); '
+                    f'crews whose rooms are ready race first')
+        b.schedule(t, 1, int(length * 60))     # registration and battle open together
+        return (f'channel battle on now for {length:g} min: make or join the crew room (Crew window > Channel Battle) '
+                f'and press Ready; the first room in a channel without a defence takes it')
     if w[0] == 'end':
         for lb in b.lobbies:
             lb.end_time = min(lb.end_time, now() - 1) if lb.state != NONE_ else lb.end_time
@@ -1671,5 +1691,5 @@ async def gm_command(session, args):
             return f'no crew {name!r}'
         await set_owner(lb, t)
         return f'{channel_name(lb.ch)}: owned by {t["name"]}'
-    return ('usage: gmcbattle now [minutes to the battle] [battle minutes] | end | owner <channel> <crew|test|none> | '
+    return ('usage: gmcbattle now [minutes to the battle] [battle minutes] | start [battle minutes] | end | owner <channel> <crew|test|none> | '
             'stakes [on|off] | replays | status')

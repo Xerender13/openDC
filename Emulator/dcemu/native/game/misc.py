@@ -13,7 +13,7 @@
     with PType 'A' or in the admin list: gmlevel [name] level, gmexp [name] exp, gmmoney [name] Mito,
     gmitem [name] item id [count] [+level] [A|B|C [tier]] (a part enhanced to +level, up to +20, and converted
     with that type's PartModify_Client.tdf row, 1-34, no tier = 34; a docking item: [+purple] [white] points:
-    gm_part_args). The 2008 server answered them
+    gm_part_args), gmcar [name] car name [V1-V9] (gm_car: a car and its key, by its shown / model name). The 2008 server answered them
     with 0x0001 "cmd(arg1,arg2,arg3)=[1 or 0]"; here 0x0001 carries a line of text saying what was done or why
     not (user, 2026-10-18). The character changed gets 0x169 CharUpdate (XiStrCharInfo) and its stats. Without a name the command is for the sender. (2008 also had gmcar, gmmove, gmeventitem.)
     Kick / block / ban (native/admin.py; the 2008 server had them on its GM console only): gmkick name
@@ -269,9 +269,9 @@ async def game_stream(session, frame):
         reply = gm_test(session, args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
-    if cmd == 'gmcbattle':                      # gmcbattle now | end | owner | status (channels.py)
-        from .channels import gm_command
-        reply = await gm_command(session, args)
+    if cmd in ('gmcbattle', 'gmcbstart'):       # gmcbattle now | start | end | owner | status (channels.py);
+        from .channels import gm_command        # gmcbstart [battle minutes] = gmcbattle start
+        reply = await gm_command(session, (['start'] if cmd == 'gmcbstart' else []) + args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
     if cmd == 'gmgate':                         # gmgate 0-7: every gate gives that reward; gmgate off
@@ -279,6 +279,10 @@ async def game_stream(session, frame):
         rooms.forced_reward = int(args[0]) if args and args[0].isdigit() and int(args[0]) < rooms.REWARDS else None
         reply = (f'every gate now gives reward {rooms.forced_reward}' if rooms.forced_reward is not None
                  else 'gate rewards follow gate_rewards.txt again')
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
+    if cmd == 'gmcar':                          # gmcar [name] car name [V1-V9]: a car (with its key) by its name
+        ok, reply = await gm_car(session, args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
     if cmd == 'gmcoin':                         # gmcoin [name or account] amount: G Coin (Hancoin) to an account
@@ -358,6 +362,57 @@ async def gm_part(p, info, level, a, b, belonging, white):
     return it, NEW
 
 
+GMCAR_USAGE = 'gmcar [name] car name [V1-V9] (the shown name, e.g. AXIS ST; the model name; pc_0199s; or the car number)'
+
+
+def find_cars(query):
+    """VehicleList player cars matching query -> [(Unique Id, row)]: an exact shown name (UI Name), model name
+    (Car Name), model file (pc_0199s) or Unique Id first, else the cars whose names contain it."""
+    t, q = context.data, query.strip().lower()
+    cars = [(u, v) for u, v in sorted(t.vehicles.items()) if v.get('Vehicle') == '0' and (u, 1) in t.upgrade]
+    names = lambda v: (v.get('UI Name', '').strip().lower(), v.get('Car Name', '').strip().lower(),
+                       v.get('File Name', '').strip().lower().rsplit('.', 1)[0])
+    exact = [(u, v) for u, v in cars if q in names(v) or q == str(u)]
+    if exact:
+        ui = [(u, v) for u, v in exact if names(v)[0] == q]
+        return ui or exact
+    return [(u, v) for u, v in cars if any(q in n for n in names(v))]
+
+
+async def gm_car(session, args):
+    """gmcar [name] car name [V1-V9]: the car at that grade (V1 when not given) to a character online (the GM
+    without a name), as a gift box gives one: the car with full Mittron, its key, 0x62 RewardCar. -> (done, reply)."""
+    from .cars import create_car
+    from .driftuse import Gains
+    from .items import NEW, new_item
+    target = session
+    if len(args) > 1 and online(args[0]):
+        target, args = online(args[0]), args[1:]
+    grade = 1
+    if len(args) > 1 and args[-1].lower().lstrip('v').isdigit() and len(args[-1].lstrip('vV')) == 1:
+        grade, args = int(args[-1].lower().lstrip('v')), args[:-1]
+    if not target or not args or not 1 <= grade <= 9:
+        return False, f'usage: {GMCAR_USAGE}'
+    found = find_cars(' '.join(args))
+    if not found:
+        return False, f'no car {" ".join(args)!r} (' + GMCAR_USAGE.split('(', 1)[1]
+    if len(found) > 1:
+        return False, (f'{len(found)} cars match {" ".join(args)!r}: '
+                       + ', '.join(f'{v.get("UI Name")} ({u})' for u, v in found[:12]) + (' ...' if len(found) > 12 else ''))
+    uid, v = found[0]
+    p, t = target.state['player'], context.data
+    car = await create_car(target, p, uid, grade)
+    if not car:
+        return False, f'{p.char.name}: no garage space (or no V{grade} row for {v.get("UI Name")})'
+    gains = Gains()
+    gains.cars.append(car)
+    key = v.get('File Name', '').rsplit('.', 1)[0]
+    if key in t.item_index:
+        gains.items.append((await new_item(p, t.item_info(t.item_index[key]), 1, car.car_id), NEW))
+    gains.send(target, p)
+    return True, f'{p.char.name} got {v.get("UI Name")} V{car.grade} ({v.get("Car Name")}, car number {uid})'
+
+
 GM_USAGE = {'gmitem': 'gmitem [name] item-id [count] [+level] [A|B|C [tier]] (docking: [+purple] [white])', 'gmlevel': 'gmlevel [name] level (1-200)',
             'gmexp': 'gmexp [name] exp', 'gmmoney': 'gmmoney [name] Mito (below 0 takes it)'}
 
@@ -394,7 +449,7 @@ async def gm(session, cmd, args):
     from .items import add_money, mod_list
     if cmd not in GM_USAGE:
         return False, (f'unknown GM command {cmd!r}: gmitem, gmlevel, gmexp, gmmoney, gmdrift, gmsets, gmgate, '
-                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcoin, gm' + ', gm'.join(ADMIN_COMMANDS))
+                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcbstart, gmcoin, gmcar, gm' + ', gm'.join(ADMIN_COMMANDS))
     target = session
     if args and not args[0].lstrip('-').isdigit() and args[0] not in context.data.item_index:
         target = online(args[0])

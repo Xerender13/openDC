@@ -203,7 +203,32 @@ async def command(cmd, args):
     """One GM command -> (done, text). kick NAME [days] | block NAME days | unblock NAME |
     chatblock NAME minutes (0 lifts it) | ban ACCOUNT-or-NAME | unban ACCOUNT-or-NAME | who |
     item NAME ITEM-ID [count] [+LEVEL] [A|B|C [TIER]] (as the chat command gmitem) | drift NAME DRIFT-ITEM-ID [days] (as gmdrift; 0 days
-    = for good); both for a character online | coin NAME-or-ACCOUNT amount (G Coin) | realmatch open | close | in MINUTES | auto | status"""
+    = for good); car NAME CAR-NAME [V1-V9] (as gmcar); for a character online | coin NAME-or-ACCOUNT amount (G Coin) | realmatch open | close | in MINUTES | auto | status"""
+    from . import editor_admin
+    if cmd in editor_admin.COMMANDS:
+        return await editor_admin.command(cmd, args)
+    if cmd in ('level', 'exp', 'money'):
+        from .game.misc import gm
+        return await gm(None, 'gm' + cmd, args)
+    if cmd == 'cbattle':
+        from .game.channels import gm_command
+        return True, await gm_command(None, args)
+    if cmd in ('partytest', 'vchasetest', 'uctest', 'cbtest'):
+        import importlib
+        target = find(args[0]) if args else None
+        if not target:
+            return False, f'usage: {cmd} ONLINE-CHARACTER on|off [phase]'
+        module = {'partytest':'partypatrol', 'vchasetest':'vchase', 'uctest':'undercity', 'cbtest':'channels'}[cmd]
+        return True, importlib.import_module('.game.' + module, __package__).gm_test(target, args[1:])
+    if cmd in ('rushtimenow', 'rushtime', 'getrushtime', 'rushend'):
+        from .game.rush import gm_command
+        return True, await gm_command(cmd, args)
+    if cmd == 'gate':
+        from .game import rooms
+        if len(args) != 1 or args[0] not in ('off', '0', '1', '2', '3', '4', '5', '6', '7'):
+            return False, 'usage: gate 0-7|off'
+        rooms.forced_reward = None if args[0] == 'off' else int(args[0])
+        return True, f'forced gate reward: {rooms.forced_reward}'
     if cmd == 'who':
         names = who()
         return True, f'{len(names)} online' + ''.join('\n  ' + n for n in names)
@@ -224,6 +249,12 @@ async def command(cmd, args):
     elif cmd == 'item':
         from .game.misc import gm
         return await gm(None, 'gmitem', args)
+    elif cmd == 'car':                      # car NAME car name [V1-V9] (as the chat command gmcar)
+        session = find(name)
+        if not session:
+            return False, f'car: {name} is not online'
+        from .game.misc import gm_car
+        return await gm_car(session, args[1:])
     elif cmd == 'drift':
         session = find(name)
         if not session or len(args) < 2 or args[1] not in context.data.visual_index:
@@ -258,7 +289,11 @@ async def control(reader, writer):
     try:
         words = (await reader.readline()).decode('utf-8', 'replace').split()
         ok, text = await command(words[0].lower(), words[1:]) if words else (False, 'empty command')
-        print(f'control: {" ".join(words)!r} -> {text}', flush=True)
+        from .editor_admin import SECRET_COMMANDS
+        shown = words[:2] + ['<redacted>'] if words and words[0].lower() in SECRET_COMMANDS else words
+        # Account list/detail responses contain personal data; omit them from the general log.
+        logged = '<account data>' if words and words[0].lower() in ('account', 'accounts') else text
+        print(f'control: {" ".join(shown)!r} -> {logged}', flush=True)
         writer.write((('OK ' if ok else 'FAILED ') + text + '\n').encode('utf-8'))
         await writer.drain()
     except Exception as e:                      # a bad command must not hurt the server

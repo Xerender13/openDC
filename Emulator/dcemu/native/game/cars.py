@@ -73,10 +73,15 @@ async def select_car(session, frame):
 #   buyable, so here any Sellable other than 0 can be bought. Price = the default grade's Price (VehicleUpgrade.xlt, grade
 #   1), at most the money held (20092); garage space = floors x 8 - cars (GetGarageSpace; floors =
 #   HANCOINGARAGE + the "i_d_garage" drift shop items + 1, the 2008 server's SQL); a coupon car (Coupon.xlt) uses up one coupon item
-#   from the inventory (20093 without); then CalcMoney "BUYCAR", PC_SKID_CREATECAR (grade 1, Mitron =
-#   capacity), the new car becomes the current one, and its key: the usable item named after the car's
-#   file (VehicleList File Name without ".nif", e.g. pc_0073s "Drifter key").
-CREATE_CAR_SQL = ("SET NOCOUNT ON; DECLARE @carid numeric; EXEC PC_SKID_CREATECAR %s, %s, %s, %s, %s, 1, 0, %s, 0,"
+#   from the inventory (20093 without); then CalcMoney "BUYCAR", PC_SKID_CREATECAR (Mitron = capacity), the new car
+#   becomes the current one, and its key: the usable item named after the car's file (VehicleList File Name without
+#   ".nif", e.g. pc_0073s "Drifter key").
+#   Grade: the first grade with a real VehicleUpgrade row (start_grade). The 2008 server made grade 1, but 77 sold 2011
+#   cars have empty rows (stats and capacity 0) below their class (VehicleList column 23, the dealership's V tab: record
+#   +0x138, tabs at window +0x140 + class * 4, 0x5db6xx): Utopia's only real row is V9 (price 100000; V1 1000). The
+#   2016 cars (port2016) have all nine rows and start at V1 (as in the 2016 client), though listed under their class tab.
+#   Price = that grade's Price.
+CREATE_CAR_SQL = ("SET NOCOUNT ON; DECLARE @carid numeric; EXEC PC_SKID_CREATECAR %s, %s, %s, %s, %s, %s, 0, %s, 0,"
                   " @carid OUTPUT; IF @carid > 0 UPDATE SKID_CHARACTER_TB SET CURCAR=@carid WHERE SERVERID=%s AND CID=%s;"
                   " SELECT ISNULL(@carid, -1)")
 CARS_PER_FLOOR = 8
@@ -90,6 +95,12 @@ def garage_space(p):
     return floors * CARS_PER_FLOOR - len(c.cars)
 
 
+def start_grade(car_type):
+    """The first grade of the car with a real VehicleUpgrade row (capacity > 0), else 1."""
+    t = context.data
+    return next((g for g in range(1, MAX_GRADE + 1) if (t.upgrade.get((car_type, g)) or {}).get('capacity')), 1)
+
+
 DEFAULT_COLOR = 0x01010102     # the dealership's first colour (what the client sends with BuyCar)
 
 
@@ -98,6 +109,7 @@ async def create_car(session, p, car_type, grade, color=DEFAULT_COLOR):
     no garage space)."""
     from .records import Car
     t, c, db = context.data, p.char, context.db
+    grade = max(grade, start_grade(car_type))
     up = t.upgrade.get((car_type, grade)) or t.upgrade.get((car_type, 1))
     if car_type not in t.vehicles or not up:
         session.log.note(f'give car {car_type} V{grade}: no such car')
@@ -127,7 +139,8 @@ async def buy_car(session, frame):
     car_type, color = struct.unpack_from('<II', frame.payload, 0x2a)
     t, c, db = context.data, p.char, context.db
     v = t.vehicles.get(car_type)
-    up = t.upgrade.get((car_type, 1))
+    grade = start_grade(car_type)
+    up = t.upgrade.get((car_type, grade))
     if not v or not up:
         return error(session, '20042')                  # BuyCarFail
     if not int(v.get('Sellable') or 0):
@@ -156,17 +169,17 @@ async def buy_car(session, frame):
     if not await add_money(c, -price):
         return error(session, '20042')
     capacity = float(up['capacity'])
-    car_id = int((await db.row(CREATE_CAR_SQL, (db.server_id, c.cid, c.name, car_type, color, capacity,
+    car_id = int((await db.row(CREATE_CAR_SQL, (db.server_id, c.cid, c.name, car_type, color, grade, capacity,
                                                 db.server_id, c.cid)))[0])
     if car_id <= 0:
         return error(session, '20042')
-    car = Car(car_id, car_type, color, 1, 0, capacity, 0.0, 0, capacity, float(up['efficiency']))
+    car = Car(car_id, car_type, color, grade, 0, capacity, 0.0, 0, capacity, float(up['efficiency']))
     c.cars.append(car)
     c.cur_car = car_id
     key = t.item_info(t.item_index.get(v.get('File Name', '').rsplit('.', 1)[0], -1))
     if key:
         changed.append((await new_item(p, key, 1, car_id), 1))
-    session.log.note(f'buy car {car_type} ({v.get("UI Name")}) for {price}: car {car_id}')
+    session.log.note(f'buy car {car_type} ({v.get("UI Name")}) V{grade} for {price}: car {car_id}')
     for f in stat_frames(p):
         send(session, f)
     if changed:

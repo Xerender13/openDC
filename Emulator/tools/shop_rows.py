@@ -105,6 +105,19 @@ def main():
                 print(f'  {f[UID]:>6} {f[NAME][:40]:40} ' + ', '.join(f'{c}={v}' for c, v in want[int(f[UID])].items()))
         if set(want) - found:
             print('  not in the table:', ', '.join(map(str, sorted(set(want) - found))))
+        # rows other tools added to the pack (tools/port2016.py: the 2016 cars' aero sets) stay
+        orig_uids = {f.split('\t')[UID] for f in lines[3:] if len(f.split('\t')) > STAGE}
+        extra = [l for l in table(files)[3:] if len(l.split('\t')) > STAGE and l.split('\t')[UID].isdigit()
+                 and l.split('\t')[UID] not in orig_uids]
+        if extra:
+            last = max(i for i, l in enumerate(lines) if l.split('\t')[0].strip().isdigit())
+            lines[last + 1:last + 1] = extra
+            head = lines[1].split('\t')
+            head[1] = str(sum(1 for l in lines[3:] if l.split('\t')[0].strip().isdigit()))
+            head[3] = str(max(int(l.split('\t')[UID]) for l in lines[3:]
+                              if len(l.split('\t')) > STAGE and l.split('\t')[UID].isdigit()) + 1)
+            lines[1] = '\t'.join(head)
+            print(f'  {len(extra)} added rows kept')
         new = b'\xff\xfe' + '\r\n'.join(lines).encode('utf-16-le')
         write_pack(path, backup, [(n, new if n == ENTRY else d) for n, d in files])
         print('  written')
