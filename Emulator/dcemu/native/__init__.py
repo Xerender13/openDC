@@ -121,6 +121,17 @@ class Context:
                    test=False, tax_hour=6, tax_major=10.0, tax_minor=(3.0, 4.0, 5.0), tax_semi=(1.0, 1.0, 1.5),
                    main=(0, 0, 0), semi={1: (40, 0, 0), 2: (60, 0, 0), 3: (70, 0, 0)},
                    eu_main=(0, 6, 0), eu_semi={1: (0, 1, 3), 2: (0, 1, 6)}, major_stakes=False, replays=200)
+    # emulator.ini [championship] (game/championship.py): the GT Championship. Minutes as the client's content flags
+    # (PreMatchTime, MatchWaitTime, MainMatchTime, FinalMatchTime); touring_a / touring_b: the Touring classes' speed
+    # caps in km/h as the client's GlobalContent PvpGT_TouringA / B (shown in mph to US clients); schedule: (weekday
+    # 0-6 or None for every day, hour, minute), local time; maps: the stages' tracks (PVPTrackInfo Id), prelim first;
+    # rewards: (class, rank) -> (Mito, item id, count)
+    championship = dict(enabled=True, schedule=[], pre=30, wait=3, main=8, final=10, min_players=8, min_players_ini=8,
+                        touring_a=361, touring_b=341, maps=[0, 1, 2, 3, 4], map_flag=0x04,
+                        rewards={(7, 1): (100000, '', 1), (7, 2): (50000, '', 1), (7, 3): (30000, '', 1),
+                                 (8, 1): (200000, '', 1), (8, 2): (100000, '', 1), (8, 3): (50000, '', 1),
+                                 (9, 1): (300000, '', 1), (9, 2): (150000, '', 1), (9, 3): (80000, '', 1),
+                                 (10, 1): (500000, '', 1), (10, 2): (250000, '', 1), (10, 3): (100000, '', 1)})
     gotcha_enabled = True    # emulator.ini [gotcha] enabled: the Gotcha machine (main menu button)
     gotcha_season = 13       # [gotcha] season: the newest season offered (Etc.GotchaSeason; client GotchaViewSeason 13)
     gotcha_mito_price = 0    # [gotcha] mito_price / coin_price: 0 = the client's prices (gotcha.py)

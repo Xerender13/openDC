@@ -212,7 +212,10 @@ async def load_char(session, frame):
     # the content flags first: the 0x7c handler builds the player's own driver model at once, with the flags the
     # client holds then (Etc.EventChristmas from leftover values put Santa parts on the driver when the 0x1e came in a
     # later frame: user, 2026-10-16; seen with a breakpoint on the model's check 0x4750ec)
-    send(session, Frame(0x1e, struct.pack('<ii', 0, 0) + content_flags(**(TUTORIAL_FLAGS if in_tutorial(p) else {}))),
+    from .championship import speed_flags
+    flags = dict(TUTORIAL_FLAGS) if in_tutorial(p) else {}
+    flags.update(speed_flags(session))          # the Touring classes' speed texts: mph for US clients
+    send(session, Frame(0x1e, struct.pack('<ii', 0, 0) + content_flags(**flags)),
          Frame(0x32a, bytes(136)), Frame(0x7c, load_ack))
     from .items import bonus_update
     send(session, bonus_update(p))

@@ -8,7 +8,71 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
-## Session 27 (2026-10-19): MPH converts, convert effects checked, ported tires, server tables re-synced
+## Session 27 (2026-10-19): MPH converts, convert effects checked, ported tires, server tables re-synced, GT Championship
+
+- **GT Championship (the client's "GT Tournament"), new `game/championship.py`** (user: "Implement the GT Tournament game
+  mode now using the information that is present in the client"). Not in the 2008 server (no code, no PDB names, no
+  database tables): built from the 2011 client only. Read with DriftCityEU-decomp/raw (Ghidra; the EU exe has the
+  same code at the same addresses; the decomp's own message numbers in its comments differ from the wire: 0xd48.. as
+  registered in both exes). The module docstring has every layout; in short:
+  - GlobalContent "Tournament" = "토너먼트(GT Championship)" (1 for US) opens it; the classes are battle zone sections
+    7 Rookie, 8 Touring B, 9 Touring A, 10 GT Master (0x1b9 handler 0x52a040 -> the tournament lobby UI+0x290,
+    game.nui 900000 + the 16-seat room 1010000; Rookie refused from level 71 by the client). Rounds 0 none, 2
+    Preliminaries (time attack, best record), 3 / 4 Quarter-finals 1 / 2 (groups A.., one race), 5 Semi-finals,
+    6 Finals (two races, points 20 18 16 .. / 30 27 24 .., +3 / +5 for finishing: championship_help_3).
+  - Server -> client: 0xd48 TournamentNotice (0xe), 0xd49 TournamentInfo (0x23), 0xd4a RoomTimeOut (6), 0xd4c MyInfo
+    (0x213), 0xd4e RaceInfo (0x16), 0xd51 List / 0xd57 SearchRes (rows of 0x5e: a ranking per player), 0xd53 / 0xd55
+    reward ack / list; client -> server 0xd4b, 0xd4d, 0xd4f (GM map), 0xd50, 0xd52 (GM reward), 0xd54, 0xd56. The
+    handlers return their sizes (ax). 0x1b9's last 12 bytes = 0, round, round end time (were zeros).
+  - The client times everything from content flags (0x595ee0): BattleZone.PreMatchTime / MatchWaitTime /
+    MainMatchTime / FinalMatchTime (all 0 before: now from emulator.ini [championship] pre 30 / wait 3 / main 8 /
+    final 10) and counts down to the round end it gets (server clock); a later round's races start at end -
+    Main/FinalMatchTime, so the server starts them then. The stage buttons send 0x1bb RoomDirectJoin (0x596c10):
+    the server puts the player into a Preliminaries room of the class or their group's room. Start / Ready are
+    refused by the client in the last 3 minutes of the preliminaries (0x596e60, text 11572); the server too.
+  - rooms.py hooks (room attributes, nothing changes for other rooms): join_check, start_check, fixed_map (the stage's
+    track, not the start request's), real_alone (a race alone is a real race, not a practice run), no_start + on_result
+    as the channel battles.
+  - *Our choices* (the client says the ladder depends on the participants): 64 pass the preliminaries; a stage is raced
+    only with more players than the next takes (quarter-finals 1 -> 32, 2 -> 16, semi -> 8), else all pass; groups of
+    up to 16 (snake seeding); a class below min_players (8) is cancelled; prizes by message ([championship]
+    reward.<class>.<rank>); notices at 10 / 5 / 3 / 1 min, 30 / 10 s; second race 20 s after the first.
+  - Not done: Rookie's "Pre-selected Vehicle" (own cars); the GM reward sets (the client's own table; answered but not
+    used); 0xd4c's last blocks (finals / round records) are a guess; state is in memory (a restart ends a running
+    championship).
+  - GM: `gmtour start [minutes] | next | end | status | test on|off` (test: 1 player is enough). Script-tested with stub
+    sessions (scratchpad t_tour.py: entry, records, seeding, auto-passed stages, the finals' two races and points,
+    prizes, end; frame sizes 0xd49 / 0xd4c / 0xd51 / 0xd57 / 0xd55; the flags' bits). **Not yet tried in game.**
+- **The 2016 client (DriftCity Dev Ed) as a target** (user: "check into the 2016 client and if we can make a side
+  project to adapt the emulator to that client version"). Research only, nothing changed. DriftCity.exe built
+  2016-02-16, not packed (normal imports), but **a modified community build**: the login address selection
+  (0x54f720..) is nop-patched to the first slot `127.0.0.1` (16-byte slots from 0x957760, as 2011's 0x8daa14), an
+  added section "poly"; no GameGuard folder. Same ports (0x2afd = 11005 pushed at 0x4b8372 ..), same network code
+  (2011 send 0x80ca40 = 2016 0x871d40, alloc 0x807450 = 0x86c800, byte-identical), the 56-byte key exchange (cipher 0:
+  plain). Its handler registrations carry names (push name, handler, type): 514 types.
+  Protocol against 2011 (same method on both exes; Server2008/tools/dev/compare_2016.py, handlers_2016.json,
+  sizes_2011_2016.json): S>C 428 types in both, 367 same size, 61 changed; C>S 407 senders in both, 373 same, 34
+  changed; login unchanged (0x14, 0x15, 0x29, 0x78, 0x7b, 0x7d same sizes). The changes are shared structs growing:
+  the item record +4 (0x19e, 0x1ab, 0x1f9, 0x241, 0x247, 0x376 ..), XiStrExpInfo +12 (quest / instant / combo
+  rewards, 0x7d1 0x14 -> 0x20), the car record +1 (0x56, 0x5a, 0x62, 0x69), the stats +12 (0x2f8), the enchant
+  bonus +4, crew info +0x118 (0x349 ..), the char info window 0x34e -> 0x499, room user info / car attr +8 (0x1cc,
+  0x1d4, 0x1bb ..), area moves +10 / +12 (0x21d, 0x21f, 0x225, 0x22b), content flags +8 (0x1e 0x62 -> 0x6a),
+  char load 0xa -> 0x1a. New in 2016: ~86 S>C / ~50 C>S types (DCGP 0x776-0x778, World Match lap time 0xf51-0xf5e,
+  Mission Battle 0x3b6-0x3bd, team events / research 0xce5-0xcec, Valentine, rent car stats, Neo PvP damage, ...).
+  Not tried: running it (Wine), and how the server would tell a 2016 client from a 2011 one (login is identical).
+  Later the same session (user: make a config switch and start the port): the record layouts were measured
+  (tools/re2016: fmap / fieldmap2 match each 2011 function to its 2016 twin and diff the field offsets):
+  XiStrCharInfo 0x141 (exp fields u64, +0x16 before the avatar, +0x22 from Mito on), car 0x32, item 0x60 (TableIdx
+  @0x54, InvenIdx @0x58), stats 0x70, enchant bonus 0x2c (AddSpeed still @0x10), content flags +8 bytes with 20 flags
+  moved (dcemu/data/flags_2016_raw.tsv). Full list and the plan: HANDOVER.md "2016 client port". No emulator code
+  for 2016 yet.
+- **Touring speed limits in mph for US** (user: "341 km/h class I think is not converted correctly for US"): the flags
+  TouringASpeed / TouringBSpeed feed only texts: the lobby tooltip (Championship_Tooltip2, 0x597f0c, US "Speed Limit:
+  %dkm/h") and the rules window (11527, 0x591b69, US "%d mph or under"); the cap itself is GlobalContent PvpGT_TouringA /
+  B, km/h. Now US clients get the flags in mph (361 -> 224, 341 -> 212; championship.speed_flags, in the load's 0x1e and
+  the Real Match 0x1e), EU clients km/h (their texts say km/h), and the US client's Championship_Tooltip2 says
+  "Speed Limit: %d mph" (tools/global_text.py; Patch.006, original in client_backup/Patch.006.orig). **Not yet seen
+  in game.**
 
 - **MPH converts did nothing** (user: an Enigma with a Speed Up (MPH) convert gave nothing; the other Enigma's 32-point
   bonusspeed convert gave ~2 mph). The client's assist code ignores speedup (kind 14): 0x70f970's switch (table
@@ -20,7 +84,10 @@ Paths in older entries say `Server/...`: that folder is now `Server2008/`. Movin
   (0x47f62b, 0x45ded5). The emulator sent the own bonus as zeros. Now `assists.own_bonus` fills AddSpeed with the
   car's speedup assists (converts, option and drift item assists alike; "Speed Up 6" = 6.0, the table's unit) in
   every 0x2f8 (`login.stat_frames`). Script-tested (stub: two Speed Up 6 slots -> 12.0 @0x10 of the 40 bytes).
-  **Not yet confirmed in game.**
+  **Not yet confirmed in game.** Unit: car +0x16c = 1/3.6 (set at 0x48946a), so AddSpeed is km/h in both clients:
+  Speed Up 6 = +6 km/h (EU HUD +6 km/h; US HUD about +3.7 mph, the US text says "3.6 mph"). EU client (user asked):
+  DriftCityEU.exe has the same code at the same addresses (0x50f160, 0x70f970 + table 0x7100ac, 0x489057,
+  0x47f62b, 0x48946a; byte-compared), and the server sends the same 0x2f8 to both: no EU rule needed.
 - **The other convert effects checked** (user): PartModify_Client.tdf gives bonusspeed / speedup (A), bonusaccel
   (B), overturbo + bonuscrash (C), and qstart (column 1, 5 rows). Driving uses the server's 0x2f8 totals (char
   +0xb58 = Total speed, 0x488e14), which include bonusspeed / bonuscrash / bonusaccel (convert.assist_bonus):
@@ -41,14 +108,15 @@ Paths in older entries say `Server/...`: that folder is now `Server2008/`. Movin
   from the 2016 dialog 2880000. New `port2016.py tires`: the icon controls (GTire_PlyNNNN and _1) of the tires
   the 2011 TireList lacks, with their uitex pieces: 34 controls (the 2016 client has none for PANZER, PIETAS,
   ACROBAT: Listing 0, never listed). Axis / ECO / Mento had 2011 icons; they now show the 2016 ones. Applied to
-  Client US only (`eu tires` not run). The crash cause is *a guess*: the missing icon control (Allied, Tire ID 56,
+  Client US, then to Client EU (`eu tires`, user asked: it had the ported tires and no icons either; the same 34
+  controls, its backups are the 2011 originals). The crash cause is *a guess*: the missing icon control (Allied, Tire ID 56,
   a vanilla 2011 tire, also has no VisualItem / VShopItem row but has its icon; to test: buying Allied works ->
   the item rows are not needed). No crash record in DriftCityUS_Log and no 0x4b3 in the log: it crashed before
   sending the purchase. Also found: the VisualItem manager appends rows per category in file order (0x769190) and
   0x769460 takes number N as the category's row N-1, so the "index" column is not used for that lookup.
   client_backup/game.nui.before_tires = the game.nui before this (already ported; no vanilla game.nui.orig on
   this machine). **Not yet confirmed in game; restart the client.** Changed files for the user:
-  ../openDC_client_changes_2026-10-19_tire_icons.zip (game.nui, uitex.agt).
+  ../openDC_client_changes_2026-10-19.zip (game.nui, uitex.agt of both clients; US Patch.006 for the mph text).
 
 ## Session 26 (2026-10-19): selling cars, Shark bought as V1, Undercity 120 %, channel battle fixes
 

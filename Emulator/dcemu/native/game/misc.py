@@ -274,6 +274,11 @@ async def game_stream(session, frame):
         reply = await gm_command(session, (['start'] if cmd == 'gmcbstart' else []) + args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
+    if cmd == 'gmtour':                         # gmtour start [minutes] | next | end | status | test on|off (championship.py)
+        from .championship import gm_command
+        reply = await gm_command(session, args)
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
     if cmd == 'gmgate':                         # gmgate 0-7: every gate gives that reward; gmgate off
         from . import rooms
         rooms.forced_reward = int(args[0]) if args and args[0].isdigit() and int(args[0]) < rooms.REWARDS else None
@@ -449,7 +454,7 @@ async def gm(session, cmd, args):
     from .items import add_money, mod_list
     if cmd not in GM_USAGE:
         return False, (f'unknown GM command {cmd!r}: gmitem, gmlevel, gmexp, gmmoney, gmdrift, gmsets, gmgate, '
-                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcbstart, gmcoin, gmcar, gm' + ', gm'.join(ADMIN_COMMANDS))
+                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcbstart, gmtour, gmcoin, gmcar, gm' + ', gm'.join(ADMIN_COMMANDS))
     target = session
     if args and not args[0].lstrip('-').isdigit() and args[0] not in context.data.item_index:
         target = online(args[0])

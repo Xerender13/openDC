@@ -556,7 +556,8 @@ def enter_real_match(session, m):
         # in a Real Match room, with a second 0x1e, and off again when it leaves.
         from .login import game_setting
         session.state['real_match_effect'] = True
-        send(session, game_setting(Etc_RealMatchEffect=context.realmatch_effect))
+        from .championship import speed_flags
+        send(session, game_setting(Etc_RealMatchEffect=context.realmatch_effect, **speed_flags(session)))
     if car:
         session.state['real_match_car'] = True
         m.car_attr = car_attr_of(car)
@@ -569,7 +570,8 @@ def exit_real_match(session):
     try:                                        # the connection may be gone already
         if session.state.pop('real_match_effect', None):
             from .login import game_setting
-            send(session, game_setting())
+            from .championship import speed_flags
+            send(session, game_setting(**speed_flags(session)))
         if session.state.pop('real_match_car', None) and p and p.car:
             drive(session, p.car)
     except Exception:
@@ -608,6 +610,8 @@ async def register_observer(session, frame):
     obs = session.state['room_observer'] = dict(channel=channel, filter=room_filter, page=page, size=size)
     send(session, section_frame(session, channel, room_filter, page))
     send(session, list_frame(obs))
+    from .championship import on_section       # a GT Championship class lobby (sections 7-10): its state (0xd49)
+    on_section(session, channel)
 
 
 def section_frame(session, channel, room_filter=3, page=0):
@@ -615,7 +619,8 @@ def section_frame(session, channel, room_filter=3, page=0):
     channel at +0x3d520 and redraws that section's lobby; the room rules shown come from it)."""
     session.state['pvp_channel'] = channel
     rm_open, rm_time = real_match_times()
-    return Frame(0x1b9, struct.pack('<iIIIII', 1, channel, room_filter, page, int(rm_open), rm_time) + bytes(12))
+    from .championship import section_tail     # @0x1a 0, @0x1e the GT Championship round, @0x22 its end time
+    return Frame(0x1b9, struct.pack('<iIIIII', 1, channel, room_filter, page, int(rm_open), rm_time) + section_tail())
 
 
 @on(SVC, C2S, 0x1ba)
@@ -852,6 +857,9 @@ def join(session, room, user_info, car_attr, player_info, password=None):
         return send(session, room.master_frame(), room.state_frame())
     if not room.lap and not car_allowed(session, room.channel, room.type):   # lap arenas: by grade already
         return
+    check = getattr(room, 'join_check', None)  # GT Championship rooms: their group's contenders only
+    if check and not check(session):
+        return
     if room.state != WAIT:
         return error(session, '20158')
     if room.password and password is not None and password != room.password:
@@ -923,6 +931,10 @@ async def room_direct_join(session, frame):
     if struct.unpack_from('<I', p, 0xf8)[0] == LAP_FILTER:     # the Lap Time button
         from .laptime import enter
         return enter(session, p)
+    from .championship import CLASSES
+    if session.state.get('pvp_channel') in CLASSES:            # a GT Championship lobby's stage button
+        from .championship import enter
+        return enter(session, p, session.state['pvp_channel'])
     room = next((r for r in rooms.values() if r.channel == channel and r.state == WAIT and not r.password
                  and OPEN in r.seats and not getattr(r, 'lap', None)), None)
     if room is None:
@@ -1067,12 +1079,15 @@ async def start_request(session, frame):
         return
     if room.state != WAIT:
         return error(session, '20186')
+    check = getattr(room, 'start_check', None)  # GT Championship preliminaries: not in their last 3 minutes
+    if check and not check(session):
+        return
     if any(not o.ready for o in room.members if o is not m):
         return error(session, '20182')
     if is_real_match(room.type) and not real_match_times()[0]:
         return admin.message(session, REAL_MATCH_CLOSED)
     map_id, map_flag, start_time = struct.unpack_from('<iii', frame.payload)
-    if map_id >= 0 and not room.lap:
+    if map_id >= 0 and not room.lap and getattr(room, 'fixed_map', None) is None:   # championship: the stage's track
         # the track is the start request's (2008 Cmd_PvpStartReq passes it to BS_Room::StartLoad): the 2011
         # client keeps the room's map at 0 and sends the track it chose (a pick, Recommended or Random) here;
         # the room's map was raced instead, always track 0 (user, 2026-10-16)
@@ -1094,7 +1109,7 @@ async def start_request(session, frame):
         session.log.note(f'room {room.id}: Mission Battle on map {room.map_id} in area {room.area} (practice run)')
         return room.cast(Frame(0x1e7, struct.pack('<iiiifii', PRACTICE, room.map_id, room.map_flag, room.area, 0.0,
                                                 start_time, -1)))
-    if len(room.members) == 1 and context.practice_alone:
+    if len(room.members) == 1 and context.practice_alone and not getattr(room, 'real_alone', False):
         # BS_Room::StartLoad's practice path (Contents.ini BattleZone.PracticeMode): one member -> 0x1e7 type
         # 100, the room keeps waiting: no go signal, no gate rewards, no end, no result (user, 2026-10-13)
         session.log.note(f'room {room.id}: one member, practice run on map {room.map_id} in area {room.area}')

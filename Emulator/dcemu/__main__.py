@@ -138,6 +138,35 @@ def native_setup(cp):
             if semis:
                 c[key + 'semi'] = semis
         c['channels'] = max(10, min(24, c['channels']))
+    if cp.has_section('championship'):
+        ch, c = cp['championship'], context.championship
+        c['enabled'] = ch.get('enabled', '1').strip() not in ('0', 'no', 'off')
+        for k in ('pre', 'wait', 'main', 'final', 'min_players', 'touring_a', 'touring_b'):
+            if ch.get(k, '').strip():
+                c[k] = int(ch[k])
+        c['min_players_ini'] = c['min_players']
+        if ch.get('maps', '').strip():
+            c['maps'] = [int(x) for x in ch['maps'].replace(',', ' ').split()] or c['maps']
+        if ch.get('map_flag', '').strip():
+            c['map_flag'] = int(ch['map_flag'], 0)
+        days = {'sun': 0, 'mon': 1, 'tue': 2, 'wed': 3, 'thu': 4, 'fri': 5, 'sat': 6, '*': None}
+        c['schedule'] = []
+        for entry in ch.get('schedule', '').split(','):     # "sat 20:00, * 21:30"
+            f = entry.split()
+            if len(f) == 2 and f[0].lower()[:3] in days and ':' in f[1]:
+                hh, mm = f[1].split(':', 1)
+                c['schedule'].append((days[f[0].lower()[:3]], int(hh), int(mm)))
+        for k, v in ch.items():                              # reward.<class>.<rank> = Mito[, item id[, count]]
+            parts = k.split('.')
+            if parts[0] == 'reward' and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+                f = [x.strip() for x in v.split(',')]
+                c['rewards'][(int(parts[1]), int(parts[2]))] = (
+                    int(f[0] or 0), f[1] if len(f) > 1 else '', int(f[2]) if len(f) > 2 and f[2] else 1)
+    c = context.championship                    # the client's tournament clock and limits (championship.py)
+    for flag, v in (('BattleZone.PreMatchTime', c['pre']), ('BattleZone.MatchWaitTime', c['wait']),
+                    ('BattleZone.MainMatchTime', c['main']), ('BattleZone.FinalMatchTime', c['final']),
+                    ('BattleZone.TouringASpeed', c['touring_a']), ('BattleZone.TouringBSpeed', c['touring_b'])):
+        context.extra_flags.setdefault(flag, v)
     if cp.has_section('gotcha'):
         g = cp['gotcha']
         context.gotcha_enabled = g.get('enabled', '1').strip() == '1'

@@ -4,7 +4,69 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Latest handoff: 2026-10-19 (session 26, end of day)
+## Latest handoff: 2026-10-19 (session 27, end of day)
+
+Details: "Session 27" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). **Everything below is committed and pushed**
+except the client files (never in git: see the archives below).
+
+**Running state:** emulator restarted after the last code change (pid 33531; `./launch.sh status`), DB healthy.
+**This machine had stale `server_data/Init/`** (the 2011 vanilla tables of 10-15 while the client had the port2016 ones):
+re-synced from Client US, and `server_data/Init/` + `server_data/tables/UseItemClient.tdf` are now in git (user).
+
+**Client changes this session** (tools in git, so they can be made again; files in the user's archives
+`../openDC_client_changes_2026-10-19.zip` and the full clean clients `../openDC_Client_US_2026-10-19.zip` /
+`../openDC_Client_EU_2026-10-19.zip`, outside the repo; logs, dumps and the decomp `version.dll` left out):
+- Both clients: the 34 icons of the 20 ported 2016 tires (`port2016.py tires` / `eu tires`; game.nui 2650000 + uitex).
+- US: Championship_Tooltip2 "Speed Limit: %d mph" (`global_text.py`, Patch.006).
+- `client_backup/game.nui.before_tires` = the US game.nui before the tire icons (no vanilla game.nui.orig on this machine).
+
+**Done, not yet confirmed in game:**
+- MPH converts (Speed Up / speedup assists): the client takes them only as AddSpeed (float @0x10 of the 0x2f8 enchant
+  bonus); now sent (assists.own_bonus). Works the same on the EU client (km/h: Speed Up 6 = +6 km/h).
+- Over Turbo counts as boost points in the server's totals (as the client's own stat sum).
+- Buying a ported 2016 wheel crashed the client: icons added (cause a guess: test Allied, a vanilla tire without item
+  rows, to confirm).
+- **GT Championship** (the client's tournament, new `game/championship.py`, emulator.ini `[championship]`): classes =
+  battle zone sections 7-10, preliminaries (time attack) -> quarter-finals 1 / 2 -> semi-finals -> finals, all the
+  client's windows answered (0xd48-0xd57), stage times from content flags. Test: `gmtour test on`, `gmtour start 1`,
+  `gmtour next` / `status` / `end`. Script-tested only.
+- Touring class speed texts in mph for US clients (km/h for EU).
+
+**Open (next session):**
+1. **The 2016 client port (user asked: "make a switch for the 2016 client in the emulator config and start
+   implementing")**: research done, no emulator code yet. Plan and findings in §"2016 client port" below; start there.
+2. Try the GT Championship in game (user), the tire purchase, the MPH convert.
+3. Older items from session 26 below (ghost-battle items on Xerander, 0x214, crew ranking, TEAMPOINT test setup).
+
+### 2016 client port (DriftCity Dev Ed): what is known, what to do
+
+The 2016 exe (2016-02-16, `DriftCity Dev Ed/DriftCity.exe`) is a community build already patched to connect to
+127.0.0.1 on our ports; same network code, handshake and login messages as 2011. Tools: `tools/re2016/` (README).
+Measured layouts (2011 -> 2016):
+- XiStrCharInfo 0x11b -> 0x141: name field 0x2a -> 0x40 (or 0x16 new bytes after the name: send the name as wstr 0x40,
+  identical either way); avatar 0x36 -> 0x4c, level 0x38 -> 0x4e; exp / exp next / exp base become u64 (12 -> 24
+  bytes); everything from Mito on +0x22 (Mito 0x46 -> 0x68 ... cur car 0xc1 -> 0xe3, flags 0xed -> 0x10f, guild
+  0xf1 -> 0x113); 0x7c LoadCharAck: car count @0x14b, cars 0x32 each, total (n-1)*0x32 + 0x181.
+- XiStrCarInfo 0x31 -> 0x32 (one byte more at the end; fields up to 0x2c unchanged).
+- XiStrMyItem 0x5c -> 0x60: same up to @0x48 (expiry), then 2011's @0x4c and a new u32 (@0x4c / @0x50, order not
+  known), TableIdx @0x54, InvenIdx @0x58 (2011 @0x50 / @0x54), 2011's last u32 @0x5c. 0x191 entries 0x60, 0x192
+  entries 0x64 (record + u32 state).
+- XiStrStatInfo 0x68 -> 0x70 (two longs more at the end; totals still @0x40); XiStrEnChantBonus 0x28 -> 0x2c
+  (AddSpeed still @0x10, a new u32 after it); 0x2f8 = stats @2 + bonus @0x72 (0x9e).
+- Content flags: 0x1e is 8 bytes longer (0x62 -> 0x6a); 176 of 196 flags keep their bits, 20 moved (mostly
+  BattleZone.*: PreMatchTime 10 -> 11, GhostBattle 2 -> 3 ...), 8 new (DCGP, AttackPlayer, ...):
+  `dcemu/data/flags_2016_raw.tsv` (raw, to be turned into the flags_2011.tsv format).
+- Message size changes: S>C 61 of 428 shared types, C>S 34 of 407 (EMULATOR_NOTES session 27 lists the main ones:
+  rooms +8, area moves +10 / +12, crew info +0x118, char info window, exp info +12, ...).
+Steps:
+1. `emulator.ini [client] version = 2011 | 2016` (context.client_version) and a `dcemu/native/version.py` (like
+   nation.py); records.py encoders per version (char, car, item, stats, bonus, flags table, VisualItem +2 in 0x425).
+2. `server_data_2016/` from the Dev Ed client (sync_data; check client_tables.Client reads its loose files + packs).
+3. Run the 2016 client against the test emulator (ports 111xx) when the user is not playing: login -> lobby ->
+   character -> city; fix by layout (C>S offsets: rooms, area moves).
+4. Then the other changed messages, then 2016-only features.
+
+## Previous handoff: 2026-10-19 (session 26, end of day)
 
 Details: "Session 26" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). **Everything below is committed and pushed.**
 

@@ -1,0 +1,2058 @@
+{
+"0x1": [
+"0x545c80",
+"Cmd_Error"
+],
+"0x2": [
+"0x521cb0",
+"Cmd_Ping"
+],
+"0x3": [
+"0x51c950",
+"Cmd_GlobalTime"
+],
+"0x4": [
+"0x546060",
+"Cmd_Latency"
+],
+"0x8": [
+"0x545dd0",
+"Cmd_SystemMessage"
+],
+"0x16": [
+"0x51f510",
+"Cmd_UserAuthAck"
+],
+"0x17": [
+"0x520d80",
+"Cmd_ServerList"
+],
+"0x19": [
+"0x51faa0",
+"Cmd_ServerMessageAck"
+],
+"0x1a": [
+"0x51fbe0",
+"Cmd_UserAuthEtc"
+],
+"0x1c": [
+"0x51f980",
+"Cmd_UserAuthSecondAck"
+],
+"0xe21": [
+"0x51fae0",
+"Cmd_UserAuthOTP"
+],
+"0x2a": [
+"0x53d0d0",
+"Cmd_CheckInLobbyAck"
+],
+"0x3d": [
+"0x53e260",
+"Cmd_UserInfoAck"
+],
+"0x51": [
+"0x53d110",
+"Cmd_CheckCharNameAck"
+],
+"0x53": [
+"0x53d130",
+"Cmd_CreateCharAck"
+],
+"0x54": [
+"0x53e1a0",
+"Cmd_DeleteChar"
+],
+"0x32": [
+"0x53d820",
+"Cmd_SetCharacterState"
+],
+"0x44": [
+"0x53de00",
+"Cmd_GetImageData"
+],
+"0x41": [
+"0x53de70",
+"Cmd_GetImageAck"
+],
+"0x48": [
+"0x53d220",
+"Cmd_StickerUploadAck"
+],
+"0x4a": [
+"0x53d270",
+"Cmd_StickerListAck"
+],
+"0x46": [
+"0x53d2c0",
+"Cmd_LobbyETCInfo"
+],
+"0x5e": [
+"0x53d450",
+"Cmd_StickerNameCheckAck"
+],
+"0x60": [
+"0x53d2d0",
+"Cmd_DeleteStickerCatalogAck"
+],
+"0x61": [
+"0x53d8c0",
+"Cmd_NotifyBadSticker"
+],
+"0x2f": [
+"0x53d320",
+"Cmd_LobbyTimeAck"
+],
+"0x63": [
+"0x523e00",
+"Cmd_ChangeCarGrade"
+],
+"0x62": [
+"0x531c30",
+"Cmd_RewardCar"
+],
+"0x56": [
+"0x520fc0",
+"Cmd_BuyCarAck"
+],
+"0x58": [
+"0x5211a0",
+"Cmd_SellCarAck"
+],
+"0x5a": [
+"0x523eb0",
+"Cmd_SelectCarAck"
+],
+"0x5c": [
+"0x523f30",
+"Cmd_UpgradeCarAck"
+],
+"0xe11": [
+"0x5240b0",
+"Cmd_MitoUpgradeCarAck"
+],
+"0x69": [
+"0x5241b0",
+"Cmd_RentCarAck"
+],
+"0x6d": [
+"0x538f70",
+"Cmd_ReturnRentCarAck"
+],
+"0x65": [
+"0x53d210",
+"Cmd_ChannelListAck"
+],
+"0x2c": [
+"0x52d9b0",
+"Cmd_ClientAuth"
+],
+"0x79": [
+"0x523db0",
+"Cmd_CheckInGameAck"
+],
+"0x1e": [
+"0x53a610",
+"Cmd_GameSetting"
+],
+"0x20": [
+"0x53a6a0",
+"Cmd_ServerSetting"
+],
+"0x7c": [
+"0x53c7a0",
+"Cmd_LoadCharAck"
+],
+"0xa3": [
+"0x52d940",
+"Cmd_PvpQuickSlot"
+],
+"0x32a": [
+"0x524720",
+"Cmd_ETCInfo"
+],
+"0xa1": [
+"0x5213b0",
+"Cmd_CarPosAck"
+],
+"0x82": [
+"0x5214e0",
+"Cmd_GameStream"
+],
+"0x7e": [
+"0x524740",
+"Cmd_JoinChannelAck"
+],
+"0x80": [
+"0x5213e0",
+"Cmd_LeaveChannelAck"
+],
+"0x318": [
+"0x5248c0",
+"Cmd_Action"
+],
+"0x317": [
+"0x5248e0",
+"Cmd_UpdateSAge"
+],
+"0x84": [
+"0x536650",
+"Cmd_MailContent"
+],
+"0x8a": [
+"0x536980",
+"Cmd_MoneyMessage"
+],
+"0x12d": [
+"0x524910",
+"Cmd_JoinAreaAck"
+],
+"0x130": [
+"0x524980",
+"Cmd_NotifyAreaLoc"
+],
+"0x8c": [
+"0x521580",
+"Cmd_OpenChat"
+],
+"0x8d": [
+"0x521640",
+"Cmd_CloseChat"
+],
+"0x8f": [
+"0x5249f0",
+"Cmd_JoinChatAck"
+],
+"0x91": [
+"0x524b10",
+"Cmd_LeaveChatAck"
+],
+"0x93": [
+"0x539050",
+"Cmd_ChatMsgAck"
+],
+"0x96": [
+"0x524f30",
+"Cmd_PrivateChatMsgAck"
+],
+"0xa29": [
+"0x524c60",
+"Cmd_PrivateChatBanishAck"
+],
+"0xa2b": [
+"0x521700",
+"Cmd_PrivateChatDelegateAck"
+],
+"0xa2d": [
+"0x524db0",
+"Cmd_PrivateChatInfoAck"
+],
+"0x94": [
+"0x521870",
+"Cmd_Whisper"
+],
+"0xfb3": [
+"0x521830",
+"Cmd_WhisperDeny"
+],
+"0xba": [
+"0x536b00",
+"Cmd_ChasePropose"
+],
+"0xb5": [
+"0x525010",
+"Cmd_ChaseBeginConfirm"
+],
+"0xb8": [
+"0x52dd70",
+"Cmd_ChaseResult"
+],
+"0xb9": [
+"0x52db10",
+"Cmd_ChaseProgress"
+],
+"0xbb": [
+"0x525310",
+"Cmd_ChaseHit"
+],
+"0xbc": [
+"0x53c1a0",
+"Cmd_ChaseSwitch"
+],
+"0xc4": [
+"0x525510",
+"Cmd_HuvTimeBonus"
+],
+"0xc3": [
+"0x5255a0",
+"Cmd_HuvTimeout"
+],
+"0xbf": [
+"0x525780",
+"Cmd_HuvRes"
+],
+"0xc7": [
+"0x53baf0",
+"Cmd_NeoHuvRes"
+],
+"0xf3f": [
+"0x5259f0",
+"Cmd_ScriptNeoHuvDelRes"
+],
+"0xc0": [
+"0x537420",
+"Cmd_HuvHit"
+],
+"0xcd": [
+"0x525a10",
+"Cmd_NeoHuvHit"
+],
+"0xce": [
+"0x525d60",
+"Cmd_NeoHuvEnd"
+],
+"0xc1": [
+"0x525e80",
+"Cmd_HuvResult"
+],
+"0xc9": [
+"0x5260d0",
+"Cmd_BattleRes"
+],
+"0xc5": [
+"0x525f00",
+"Cmd_HuvHealth"
+],
+"0xcf": [
+"0x526000",
+"Cmd_NeoHubTargeting"
+],
+"0xd0": [
+"0x52e2f0",
+"Cmd_NeoAggro"
+],
+"0x20a": [
+"0x5260e0",
+"Cmd_CurrentGameMode"
+],
+"0xe5": [
+"0x52e3e0",
+"Cmd_PartyPreCheckAck"
+],
+"0xf0": [
+"0x52e500",
+"Cmd_PartyInvite"
+],
+"0xf6": [
+"0x52e670",
+"Cmd_PartyApply"
+],
+"0xf1": [
+"0x526150",
+"Cmd_PartyReject"
+],
+"0xf2": [
+"0x53af20",
+"Cmd_PartyJoin"
+],
+"0xf7": [
+"0x53af20",
+"Cmd_PartyAccept"
+],
+"0xf3": [
+"0x53b000",
+"Cmd_PartyJoinResult"
+],
+"0xf4": [
+"0x5376f0",
+"Cmd_PartyLeave"
+],
+"0xf5": [
+"0x537aa0",
+"Cmd_PartyBanish"
+],
+"0xf8": [
+"0x537d90",
+"Cmd_PartyUpdate"
+],
+"0xfb": [
+"0x547be0",
+"Cmd_UnderCityStageAck"
+],
+"0xfc": [
+"0x547d20",
+"Cmd_UnderCitySuggest"
+],
+"0xfd": [
+"0x547c40",
+"Cmd_UnderCityAgree"
+],
+"0xfe": [
+"0x547e70",
+"Cmd_UnderCityReject"
+],
+"0xff": [
+"0x547c80",
+"Cmd_UnderCityLoad"
+],
+"0x100": [
+"0x547cf0",
+"Cmd_UnderCityResult"
+],
+"0xe88": [
+"0x53e440",
+"Cmd_NeoCitySuggest"
+],
+"0xe89": [
+"0x53e400",
+"Cmd_NeoCityLoad"
+],
+"0xe8b": [
+"0x53e6c0",
+"Cmd_NeoCityReject"
+],
+"0xe8c": [
+"0x53e3c0",
+"Cmd_NeoCityAgree"
+],
+"0xf4b": [
+"0x537e30",
+"Cmd_PartyPing"
+],
+"0x17e": [
+"0x5264b0",
+"Cmd_MotherQuestStartAck"
+],
+"0x180": [
+"0x526600",
+"Cmd_MotherQuestCompleteAck"
+],
+"0x182": [
+"0x5218c0",
+"Cmd_MotherQuestGiveUpAck"
+],
+"0x17c": [
+"0x52e8b0",
+"Cmd_MyMotherQuestList"
+],
+"0x107": [
+"0x5266a0",
+"Cmd_QuestStartAck"
+],
+"0x109": [
+"0x533b20",
+"Cmd_QuestCompleteAck"
+],
+"0x10b": [
+"0x526820",
+"Cmd_QuestRewardAck"
+],
+"0x10d": [
+"0x526a60",
+"Cmd_QuestFailAck"
+],
+"0x10f": [
+"0x526bc0",
+"Cmd_QuestGiveUpAck"
+],
+"0x111": [
+"0x52e910",
+"Cmd_MyQuestListAck"
+],
+"0xed9": [
+"0x526ce0",
+"Cmd_NeoChapterStartAck"
+],
+"0xef6": [
+"0x5218e0",
+"Cmd_NeoChapterBonusMissionAck"
+],
+"0xedb": [
+"0x52e960",
+"Cmd_NeoChapterCompleteAck"
+],
+"0xee9": [
+"0x526d80",
+"Cmd_NeoChapterRewardAck"
+],
+"0xedd": [
+"0x526d30",
+"Cmd_NeoQuestStartAck"
+],
+"0xeea": [
+"0x533fb0",
+"Cmd_NeoQuestGoalPlaceAck"
+],
+"0xeec": [
+"0x53cee0",
+"Cmd_NeoMissionCompleteParamAck"
+],
+"0xeee": [
+"0x521940",
+"Cmd_NeoMissionCompleteAck"
+],
+"0xedf": [
+"0x533cb0",
+"Cmd_NeoQuestCompleteAck"
+],
+"0xee3": [
+"0x526db0",
+"Cmd_NeoQuestFailAck"
+],
+"0xee5": [
+"0x526e10",
+"Cmd_NeoQuestGiveUpAck"
+],
+"0xef1": [
+"0x533e70",
+"Cmd_NeoChapterGiveUpAck"
+],
+"0xee6": [
+"0x52ea00",
+"Cmd_MyNeoQuestListAck"
+],
+"0xf42": [
+"0x53edd0",
+"Cmd_NeoTurretRes"
+],
+"0xf44": [
+"0x53ee40",
+"Cmd_NeoTurretSwitch"
+],
+"0xf4e": [
+"0x53e630",
+"Cmd_NeoPlayerHPReceiveAck"
+],
+"0xf50": [
+"0x53ecb0",
+"Cmd_NeoHusExplosionAck"
+],
+"0xef3": [
+"0x526ec0",
+"Cmd_NeoDyingMsgReq"
+],
+"0x105": [
+"0x526490",
+"Cmd_TutorialClearAck"
+],
+"0x3df": [
+"0x526ee0",
+"Cmd_InstantRequestAck"
+],
+"0x3e1": [
+"0x534100",
+"Cmd_InstantStartAck"
+],
+"0x3e3": [
+"0x527160",
+"Cmd_InstantCompleteAck"
+],
+"0x3e6": [
+"0x521980",
+"Cmd_InstantFail"
+],
+"0x3e8": [
+"0x527290",
+"Cmd_InstantGiveUpAck"
+],
+"0x3e5": [
+"0x5273b0",
+"Cmd_InstantRewardAck"
+],
+"0x3ea": [
+"0x527510",
+"Cmd_InstantGoalPlaceAck"
+],
+"0xc24": [
+"0x5275f0",
+"Cmd_PartyPatrolRedPost"
+],
+"0xc26": [
+"0x5276c0",
+"Cmd_PartyPatrolRedPostGetAck"
+],
+"0xc27": [
+"0x537ea0",
+"Cmd_PartyPatrolInfo"
+],
+"0xc1e": [
+"0x527830",
+"Cmd_PartyPatrolComplete"
+],
+"0xc29": [
+"0x5279b0",
+"Cmd_PartyHuv"
+],
+"0x142": [
+"0x52ea30",
+"Cmd_ArbeitListAck"
+],
+"0x144": [
+"0x527c00",
+"Cmd_ArbeitStartAck"
+],
+"0x146": [
+"0x527d90",
+"Cmd_ArbeitRewardAck"
+],
+"0x147": [
+"0x527f60",
+"Cmd_ArbeitFail"
+],
+"0x14a": [
+"0x527fe0",
+"Cmd_ArbeitGiveUpAck"
+],
+"0x14c": [
+"0x528070",
+"Cmd_ArbeitGoalPlaceAck"
+],
+"0x150": [
+"0x528180",
+"Cmd_ArbeitReadyAck"
+],
+"0x151": [
+"0x5281f0",
+"Cmd_ArbeitGo"
+],
+"0x154": [
+"0x52ea80",
+"Cmd_ArbeitRankListAck"
+],
+"0x168": [
+"0x528220",
+"Cmd_LevelUp"
+],
+"0x169": [
+"0x5282a0",
+"Cmd_CharUpdate"
+],
+"0x191": [
+"0x52eac0",
+"Cmd_ItemListAck"
+],
+"0x192": [
+"0x52eb00",
+"Cmd_ItemModList"
+],
+"0x1a5": [
+"0x52ef70",
+"Cmd_ItemDataList"
+],
+"0x4b2": [
+"0x52f020",
+"Cmd_VSItemModList"
+],
+"0x194": [
+"0x5283a0",
+"Cmd_DropItemAck"
+],
+"0x196": [
+"0x521af0",
+"Cmd_BuyItemAck"
+],
+"0x198": [
+"0x5283e0",
+"Cmd_SellItemAck"
+],
+"0x19a": [
+"0x528460",
+"Cmd_EquipItemAck"
+],
+"0x19c": [
+"0x5284f0",
+"Cmd_UnEquipItemAck"
+],
+"0x19e": [
+"0x528580",
+"Cmd_UpgradeItemAck"
+],
+"0x1b4": [
+"0x528640",
+"Cmd_RepairItemAck"
+],
+"0x1af": [
+"0x5286b0",
+"Cmd_UpgradeItemDoubleAck"
+],
+"0x20c": [
+"0x528780",
+"Cmd_UpgradeItemSafeAck"
+],
+"0x1a0": [
+"0x521b90",
+"Cmd_ItemUnionAck"
+],
+"0x1a2": [
+"0x534380",
+"Cmd_ItemUseAck"
+],
+"0x1a4": [
+"0x521ba0",
+"Cmd_ItemUseExAck"
+],
+"0x1a7": [
+"0x521b90",
+"Cmd_PackItemAck"
+],
+"0xe1b": [
+"0x521b90",
+"Cmd_GrindItemAck"
+],
+"0xe1d": [
+"0x521b90",
+"Cmd_AddPeriodItemAck"
+],
+"0x18f": [
+"0x521be0",
+"Cmd_EnchantItemAck"
+],
+"0x18d": [
+"0x521c90",
+"Cmd_GetEnchantItemAck"
+],
+"0x1a9": [
+"0x521cb0",
+"Cmd_UnPackItemAck"
+],
+"0x1ab": [
+"0x528800",
+"Cmd_ModifyItemAck"
+],
+"0x1ad": [
+"0x528b60",
+"Cmd_CombiItemAck"
+],
+"0x1b1": [
+"0x528bb0",
+"Cmd_ReplenishItemAck"
+],
+"0x1b7": [
+"0x528bb0",
+"Cmd_SetItemStateAck"
+],
+"0x1c0": [
+"0x534620",
+"Cmd_PartyItemUseAck"
+],
+"0x1b9": [
+"0x53fb00",
+"Cmd_RegisterRoomObserverAck"
+],
+"0x1c7": [
+"0x541290",
+"Cmd_RealMatchInfo"
+],
+"0x1c8": [
+"0x5418d0",
+"Cmd_RealMatchNotice"
+],
+"0xd48": [
+"0x5412c0",
+"Cmd_TournamentNotice"
+],
+"0xd49": [
+"0x53fff0",
+"Cmd_TournamentInfo"
+],
+"0xd4c": [
+"0x53ffb0",
+"Cmd_TournamentMyInfo"
+],
+"0xd4e": [
+"0x540160",
+"Cmd_TournamentRaceInfo"
+],
+"0xd51": [
+"0x5417f0",
+"Cmd_TournamentList"
+],
+"0xd53": [
+"0x5401b0",
+"Cmd_TournamentSetRewardAck"
+],
+"0xd55": [
+"0x5401e0",
+"Cmd_TournamentRewardList"
+],
+"0xd57": [
+"0x541860",
+"Cmd_TournamentSearchRes"
+],
+"0xd4a": [
+"0x540530",
+"Cmd_RoomTimeOut"
+],
+"0x1ca": [
+"0x541c00",
+"Cmd_GetRoomInfoAck"
+],
+"0x1cd": [
+"0x540220",
+"Cmd_RoomCreateAck"
+],
+"0x26d": [
+"0x5402a0",
+"Cmd_RoomModify"
+],
+"0x1be": [
+"0x543040",
+"Cmd_RoomState"
+],
+"0x1cb": [
+"0x5403b0",
+"Cmd_UpdateRoomInfo"
+],
+"0x271": [
+"0x542270",
+"Cmd_RoomAiCarAssign"
+],
+"0x1d0": [
+"0x541c60",
+"Cmd_RoomListAck"
+],
+"0x1d1": [
+"0x541f80",
+"Cmd_RoomInvite"
+],
+"0x1d2": [
+"0x542080",
+"Cmd_RoomPrivateInvite"
+],
+"0x1d4": [
+"0x542180",
+"Cmd_RoomJoin"
+],
+"0x1d3": [
+"0x5402e0",
+"Cmd_RoomNotifyChange"
+],
+"0x1d5": [
+"0x540430",
+"Cmd_RoomLeave"
+],
+"0x1d6": [
+"0x540480",
+"Cmd_RoomBanish"
+],
+"0x1e2": [
+"0x540750",
+"Cmd_UserGhostMode"
+],
+"0x1da": [
+"0x5422f0",
+"Cmd_RoomClose"
+],
+"0x26e": [
+"0x540710",
+"Cmd_RoomMaster"
+],
+"0x1bf": [
+"0x5441c0",
+"Cmd_OBSState"
+],
+"0x394": [
+"0x5434b0",
+"Cmd_ObserverSupport"
+],
+"0x1c3": [
+"0x5427d0",
+"Cmd_InviteeListAck"
+],
+"0x73": [
+"0x542880",
+"Cmd_LadderListRes"
+],
+"0x75": [
+"0x542a20",
+"Cmd_LadderSearchRes"
+],
+"0x6f": [
+"0x543590",
+"Cmd_CheckInCGameAck"
+],
+"0x3bb": [
+"0x540dc0",
+"Cmd_MissionRoomState"
+],
+"0x3b7": [
+"0x540e50",
+"Cmd_MissionBattleStartAck"
+],
+"0x3bc": [
+"0x540e30",
+"Cmd_MissionBattleSeed"
+],
+"0x3bd": [
+"0x540ef0",
+"Cmd_MissionBattleObjectEvent"
+],
+"0x1e5": [
+"0x5407b0",
+"Cmd_PvpReadyState"
+],
+"0x1e7": [
+"0x540830",
+"Cmd_PvpLoad"
+],
+"0x1e8": [
+"0x540880",
+"Cmd_PvpLoadingStatus"
+],
+"0x1ea": [
+"0x5433a0",
+"Cmd_PvpGo"
+],
+"0x1ee": [
+"0x5408b0",
+"Cmd_PvpGateReward"
+],
+"0x1eb": [
+"0x540a70",
+"Cmd_PvpEnd"
+],
+"0x1ef": [
+"0x540ae0",
+"Cmd_PvpFinish"
+],
+"0x1ec": [
+"0x542f00",
+"Cmd_PvpResult"
+],
+"0x1f1": [
+"0x540b30",
+"Cmd_PvpSubResult"
+],
+"0x1f2": [
+"0x540bf0",
+"Cmd_PvpLadderResult"
+],
+"0x1f0": [
+"0x540a40",
+"Cmd_PvpItemEffect"
+],
+"0x1f3": [
+"0x5424f0",
+"Cmd_PvpBattingResult"
+],
+"0x1e4": [
+"0x542720",
+"Cmd_PvpBattleBonusResult"
+],
+"0x835": [
+"0x540c20",
+"Cmd_ObsGachaInit"
+],
+"0x836": [
+"0x540c40",
+"Cmd_ObsGachaSelect"
+],
+"0x839": [
+"0x542a40",
+"Cmd_ObsGachaSelectState"
+],
+"0x838": [
+"0x540c60",
+"Cmd_ObsGachaUp"
+],
+"0x83a": [
+"0x542a70",
+"Cmd_ObsGachaResult"
+],
+"0x1c5": [
+"0x540c80",
+"Cmd_StatEnchantRes"
+],
+"0x396": [
+"0x543c40",
+"Cmd_ReplayListAck"
+],
+"0x398": [
+"0x540c90",
+"Cmd_ReplayRes"
+],
+"0x213": [
+"0x542bb0",
+"Cmd_GhostStartAck"
+],
+"0x215": [
+"0x540d90",
+"Cmd_GhostGateReward"
+],
+"0x217": [
+"0x540db0",
+"Cmd_GhostResult"
+],
+"0x528": [
+"0x53cf80",
+"Cmd_LapTimeLoad"
+],
+"0x52a": [
+"0x53cff0",
+"Cmd_LapTimeStart"
+],
+"0x52f": [
+"0x53d010",
+"Cmd_LapTimeNotifyStart"
+],
+"0x52c": [
+"0x53d030",
+"Cmd_LapTimeRecord"
+],
+"0x52d": [
+"0x53d050",
+"Cmd_LapTimeFinishing"
+],
+"0x52e": [
+"0x53d080",
+"Cmd_LapTimeResult"
+],
+"0x1f5": [
+"0x531d70",
+"Cmd_TradeOpenAck"
+],
+"0x1ff": [
+"0x531ef0",
+"Cmd_TradeCloseAck"
+],
+"0x1f6": [
+"0x532040",
+"Cmd_TradePropose"
+],
+"0x1f9": [
+"0x528bd0",
+"Cmd_TradeItemOnAck"
+],
+"0x1fb": [
+"0x528c30",
+"Cmd_TradeItemOffAck"
+],
+"0x1fd": [
+"0x528c80",
+"Cmd_TradeLockAck"
+],
+"0x201": [
+"0x5321d0",
+"Cmd_TradeCompleteAck"
+],
+"0x203": [
+"0x528cd0",
+"Cmd_TradeMoneyAck"
+],
+"0x329": [
+"0x52d9d0",
+"Cmd_PlayerInfoRes"
+],
+"0x322": [
+"0x52da40",
+"Cmd_PlayerInfoOld"
+],
+"0x321": [
+"0x53a7b0",
+"Cmd_PlayerInfoReq"
+],
+"0x324": [
+"0x53ab20",
+"Cmd_StickerInfoRes"
+],
+"0x326": [
+"0x521260",
+"Cmd_LicenseInfoRes"
+],
+"0x32c": [
+"0x53ace0",
+"Cmd_GetLicenseInfoAck"
+],
+"0x32e": [
+"0x53add0",
+"Cmd_GetLicenseCondAck"
+],
+"0x330": [
+"0x532ec0",
+"Cmd_SelectLicenseAck"
+],
+"0x331": [
+"0x5212d0",
+"Cmd_NewLicenseNoti"
+],
+"0x29b": [
+"0x524360",
+"Cmd_LicenseStatusAck"
+],
+"0x29c": [
+"0x524610",
+"Cmd_LCondStatusAck"
+],
+"0x337": [
+"0x51d190",
+"Cmd_ObserverCount"
+],
+"0x228": [
+"0x51ea50",
+"Cmd_ReplayData"
+],
+"0x245": [
+"0x52f0e0",
+"Cmd_MyAuctionListAck"
+],
+"0x24d": [
+"0x52f110",
+"Cmd_AuctionListAck"
+],
+"0x254": [
+"0x52f110",
+"Cmd_AuctionSearchAck"
+],
+"0x247": [
+"0x528d40",
+"Cmd_AuctionOnAck"
+],
+"0x249": [
+"0x528dc0",
+"Cmd_AuctionCancelAck"
+],
+"0x251": [
+"0x528df0",
+"Cmd_AuctionBuyAck"
+],
+"0x252": [
+"0x528e60",
+"Cmd_AuctionBuyed"
+],
+"0x24b": [
+"0x528ea0",
+"Cmd_AuctionCompleteAck"
+],
+"0x641": [
+"0x52f170",
+"Cmd_MyAuctionVSListAck"
+],
+"0x649": [
+"0x52f1a0",
+"Cmd_AuctionVSListAck"
+],
+"0x650": [
+"0x52f1a0",
+"Cmd_AuctionVSSearchAck"
+],
+"0x643": [
+"0x528f00",
+"Cmd_AuctionVSOnAck"
+],
+"0x645": [
+"0x528f80",
+"Cmd_AuctionVSCancelAck"
+],
+"0x64d": [
+"0x528fb0",
+"Cmd_AuctionVSBuyAck"
+],
+"0x64e": [
+"0x529020",
+"Cmd_AuctionVSBuyed"
+],
+"0x647": [
+"0x529060",
+"Cmd_AuctionVSCompleteAck"
+],
+"0x280": [
+"0x5290c0",
+"Cmd_Weather"
+],
+"0x295": [
+"0x529160",
+"Cmd_GameCharInfoAck"
+],
+"0x297": [
+"0x529340",
+"Cmd_GameCharInfoExAck"
+],
+"0x299": [
+"0x52ca70",
+"Cmd_CGameCharInfoExAck"
+],
+"0x29f": [
+"0x52f200",
+"Cmd_GameCharInfoOffLineAck"
+],
+"0x2d4": [
+"0x534830",
+"Cmd_FuelChargeRes"
+],
+"0x2e5": [
+"0x529420",
+"Cmd_TrafficItemEventAck"
+],
+"0x2f8": [
+"0x521cc0",
+"Cmd_StatUpdate"
+],
+"0x2f9": [
+"0x521d50",
+"Cmd_PartyEnChantUpdate"
+],
+"0x2fa": [
+"0x521d70",
+"Cmd_ExtendUpdate"
+],
+"0x30d": [
+"0x53b740",
+"Cmd_AreaListAck"
+],
+"0x315": [
+"0x53b780",
+"Cmd_GateListAck"
+],
+"0x316": [
+"0x52f570",
+"Cmd_ChannelOwnershipListAck"
+],
+"0x30f": [
+"0x529600",
+"Cmd_MyPositionAck"
+],
+"0x313": [
+"0x529950",
+"Cmd_QuestPositionAck"
+],
+"0x311": [
+"0x529a00",
+"Cmd_GetDateTimeAck"
+],
+"0xe7": [
+"0x52f8a0",
+"Cmd_FriendListAck"
+],
+"0xde": [
+"0x52f9e0",
+"Cmd_BlockListAck"
+],
+"0xea": [
+"0x529b10",
+"Cmd_FriendAddAck"
+],
+"0xe3": [
+"0x529b50",
+"Cmd_BlockAddByNameAck"
+],
+"0xed": [
+"0x529c00",
+"Cmd_FriendDelAck"
+],
+"0xe0": [
+"0x529da0",
+"Cmd_BlockDelAck"
+],
+"0xee": [
+"0x529de0",
+"Cmd_FriendRequest"
+],
+"0xef": [
+"0x52fbb0",
+"Cmd_FriendRequestAck"
+],
+"0x113": [
+"0x52fa70",
+"Cmd_FriendConnectNotify"
+],
+"0xe1": [
+"0x529e10",
+"Cmd_UpdateFriend"
+],
+"0x349": [
+"0x5462e0",
+"Cmd_MyTeamInfoAck"
+],
+"0x35b": [
+"0x5464e0",
+"Cmd_CharTeamInfoAck"
+],
+"0x34b": [
+"0x546b80",
+"Cmd_CreateTeamAck"
+],
+"0x34d": [
+"0x546530",
+"Cmd_CloseTeamAck"
+],
+"0x356": [
+"0x546530",
+"Cmd_CancelCloseTeamAck"
+],
+"0x34f": [
+"0x546d70",
+"Cmd_JoinTeamAck"
+],
+"0x351": [
+"0x546ef0",
+"Cmd_LeaveTeamAck"
+],
+"0x354": [
+"0x546560",
+"Cmd_CheckTeamNameAck"
+],
+"0x365": [
+"0x5465b0",
+"Cmd_CheckTeamUrlAck"
+],
+"0x358": [
+"0x547060",
+"Cmd_TeamMembersAck"
+],
+"0x33f": [
+"0x546660",
+"Cmd_SetTeamMarkAck"
+],
+"0x341": [
+"0x547180",
+"Cmd_GetTeamMarkAck"
+],
+"0x343": [
+"0x5466c0",
+"Cmd_SetTeamUrlAck"
+],
+"0x386": [
+"0x546980",
+"Cmd_CBattleState"
+],
+"0x390": [
+"0x547a50",
+"Cmd_CBattleBroadcast"
+],
+"0x35f": [
+"0x546950",
+"Cmd_GetCBattleTimeAck"
+],
+"0x35d": [
+"0x5479c0",
+"Cmd_CBattleInfoAck"
+],
+"0x388": [
+"0x547a80",
+"Cmd_CBattleInstanceAck"
+],
+"0x38f": [
+"0x5469e0",
+"Cmd_CBattleGetSettingAck"
+],
+"0x38d": [
+"0x547ac0",
+"Cmd_CBattleItemsAck"
+],
+"0x391": [
+"0x547ae0",
+"Cmd_CBattleRewardItems"
+],
+"0x392": [
+"0x547b10",
+"Cmd_CBattleMissedItems"
+],
+"0x393": [
+"0x546a00",
+"Cmd_CBattleRewardMoney"
+],
+"0x384": [
+"0x5469c0",
+"Cmd_CBattleRoomReady"
+],
+"0x376": [
+"0x546ae0",
+"Cmd_CBattleRoomCreateAck"
+],
+"0xce7": [
+"0x547b40",
+"Cmd_GetTeamEventsAck"
+],
+"0xce9": [
+"0x547bb0",
+"Cmd_GetTeamResearchAck"
+],
+"0x367": [
+"0x5471f0",
+"Cmd_JoinTeamApply"
+],
+"0x36e": [
+"0x546720",
+"Cmd_JoinTeamApplyAck"
+],
+"0x36c": [
+"0x546750",
+"Cmd_RejectTeamApply"
+],
+"0x36d": [
+"0x547310",
+"Cmd_TeamNotify"
+],
+"0x369": [
+"0x546820",
+"Cmd_LeaveTeamRequest"
+],
+"0x36b": [
+"0x547870",
+"Cmd_BanishTeamMember"
+],
+"0x375": [
+"0x546910",
+"Cmd_AssignTeamRankAck"
+],
+"0x359": [
+"0x546920",
+"Cmd_DelegateTeamMasterAck"
+],
+"0x3fd": [
+"0x521e40",
+"Cmd_UpdateCouponParam"
+],
+"0x3f4": [
+"0x521e60",
+"Cmd_GetCouponForVarAck"
+],
+"0x3f6": [
+"0x52fcb0",
+"Cmd_GetCouponStampListAck"
+],
+"0x45c": [
+"0x544f30",
+"Cmd_RushNotice"
+],
+"0x457": [
+"0x545150",
+"Cmd_EnterRushZoneAck"
+],
+"0x459": [
+"0x5451e0",
+"Cmd_ExitRushZoneAck"
+],
+"0x467": [
+"0x5449b0",
+"Cmd_UpdateRushZone"
+],
+"0x45b": [
+"0x545220",
+"Cmd_RushStatus"
+],
+"0x45d": [
+"0x544a80",
+"Cmd_AssignHuvControl"
+],
+"0x45e": [
+"0x544ba0",
+"Cmd_NotifyRushHuv"
+],
+"0x45f": [
+"0x521cb0",
+"Cmd_DeleteRushHuv"
+],
+"0x460": [
+"0x544d30",
+"Cmd_RushResult"
+],
+"0x462": [
+"0x544d60",
+"Cmd_CastRushEvent"
+],
+"0x463": [
+"0x544ed0",
+"Cmd_RushObjectUpdate"
+],
+"0x461": [
+"0x545580",
+"Cmd_SwitchRushHuv"
+],
+"0x464": [
+"0x544f10",
+"Cmd_RushMemberCnt"
+],
+"0x241": [
+"0x545860",
+"Cmd_ReplaceCarAck"
+],
+"0x3f8": [
+"0x529e50",
+"Cmd_MarkCouponAck"
+],
+"0x3fa": [
+"0x529ed0",
+"Cmd_OpenCouponAck"
+],
+"0x3fc": [
+"0x529f00",
+"Cmd_GetCouponAck"
+],
+"0x410": [
+"0x529f40",
+"Cmd_ComboExp"
+],
+"0x425": [
+"0x529fd0",
+"Cmd_VisualUpdate"
+],
+"0x328": [
+"0x52a210",
+"Cmd_SetMyDeliveryItemAck"
+],
+"0x51b": [
+"0x521e80",
+"Cmd_IsValidCharNameAck"
+],
+"0x4b1": [
+"0x52efb0",
+"Cmd_VisualItemListAck"
+],
+"0x4bc": [
+"0x52a270",
+"Cmd_DropVisualItemAck"
+],
+"0x4b4": [
+"0x52a2d0",
+"Cmd_BuyVisualItemAck"
+],
+"0x517": [
+"0x52a570",
+"Cmd_SendVisualItemAck"
+],
+"0x519": [
+"0x52a630",
+"Cmd_GetVisualItemAck"
+],
+"0x4b6": [
+"0x52a6d0",
+"Cmd_EquipVisualItemAck"
+],
+"0x4b8": [
+"0x52a700",
+"Cmd_UnEquipVisualItemAck"
+],
+"0x4ba": [
+"0x52a760",
+"Cmd_VisualItemUseAck"
+],
+"0x51c": [
+"0x52a7a0",
+"Cmd_ReceiveVisualItem"
+],
+"0x4be": [
+"0x52a7e0",
+"Cmd_SetAeroStatsAck"
+],
+"0x4c0": [
+"0x52a820",
+"Cmd_RecycleVSItemAck"
+],
+"0x4c5": [
+"0x52a870",
+"Cmd_RepairNeoPartsAck"
+],
+"0x579": [
+"0x52a8b0",
+"Cmd_GetMyHancoinAck"
+],
+"0x515": [
+"0x52fd30",
+"Cmd_BuyHistoryListAck"
+],
+"0x549": [
+"0x532260",
+"Cmd_AttachStickerAck"
+],
+"0x54b": [
+"0x532440",
+"Cmd_DetachStickerAck"
+],
+"0x54c": [
+"0x52a430",
+"Cmd_NotifySelledSticker"
+],
+"0x547": [
+"0x532550",
+"Cmd_MyStickerListAck"
+],
+"0x4f": [
+"0x53d350",
+"Cmd_StickerReportAttachAck"
+],
+"0x88": [
+"0x52a910",
+"Cmd_CheckEventAck"
+],
+"0x89": [
+"0x52fd80",
+"Cmd_NotifyEvent"
+],
+"0x8b": [
+"0x52aa60",
+"Cmd_InstantEvent"
+],
+"0x5dd": [
+"0x52aa90",
+"Cmd_BonusUpdate"
+],
+"0x97": [
+"0x52acf0",
+"Cmd_RecommendEvent"
+],
+"0x99": [
+"0x52ad10",
+"Cmd_RecommendFriendAck"
+],
+"0x9a": [
+"0x530d50",
+"Cmd_RecommendFriendReward"
+],
+"0x9c": [
+"0x530fa0",
+"Cmd_ExitClient"
+],
+"0xaa": [
+"0x52adc0",
+"Cmd_DormantEvent"
+],
+"0x51e": [
+"0x52ae60",
+"Cmd_TestPlayerQuestion"
+],
+"0x551": [
+"0x52aea0",
+"Cmd_EndingUserRecordAck"
+],
+"0x9e": [
+"0x52af00",
+"Cmd_ResCouponItem"
+],
+"0x6a5": [
+"0x530e30",
+"Cmd_MyAuctionCarListAck"
+],
+"0x6ad": [
+"0x530e60",
+"Cmd_AuctionCarListAck"
+],
+"0x6b2": [
+"0x530e60",
+"Cmd_AuctionCarSearchAck"
+],
+"0x6a7": [
+"0x52afa0",
+"Cmd_AuctionCarOnAck"
+],
+"0x6a9": [
+"0x52b390",
+"Cmd_AuctionCarCancelAck"
+],
+"0x6af": [
+"0x52b3c0",
+"Cmd_AuctionCarBuyAck"
+],
+"0x6b0": [
+"0x52b490",
+"Cmd_AuctionCarBuyed"
+],
+"0x6ab": [
+"0x52b4b0",
+"Cmd_AuctionCarCompleteAck"
+],
+"0x708": [
+"0x52b570",
+"Cmd_AuctionCarOpenClose"
+],
+"0x76d": [
+"0x52b5a0",
+"Cmd_SelectGuildAck"
+],
+"0x776": [
+"0x52b5c0",
+"Cmd_SelectDCGPTeam"
+],
+"0x777": [
+"0x530eb0",
+"Cmd_DCGPSeasonState"
+],
+"0x778": [
+"0x52b670",
+"Cmd_GetDCGPReward"
+],
+"0xbb9": [
+"0x52b6b0",
+"Cmd_UCPatrolStartAck"
+],
+"0xbbb": [
+"0x52b6d0",
+"Cmd_UCPatrolGiveUpAck"
+],
+"0xbbd": [
+"0x52b6f0",
+"Cmd_UCPatrolGoalPlaceAck"
+],
+"0xbbe": [
+"0x52b730",
+"Cmd_UCPatrolResult"
+],
+"0xbc3": [
+"0x52bc90",
+"Cmd_UCBossPatrolStartAck"
+],
+"0xbc5": [
+"0x52bcd0",
+"Cmd_UCBossPatrolGiveupAck"
+],
+"0xbc7": [
+"0x52bcf0",
+"Cmd_UCBossPatrolGoalPlaceAck"
+],
+"0xbc8": [
+"0x52bd70",
+"Cmd_UCBossPatrolResult"
+],
+"0xbc9": [
+"0x52bc70",
+"Cmd_UCBossPatrolReset"
+],
+"0xbcc": [
+"0x52be90",
+"Cmd_UnderCityReward"
+],
+"0x7d1": [
+"0x52b840",
+"Cmd_ExpInfo"
+],
+"0x7d4": [
+"0x52b980",
+"Cmd_ReputationInfo"
+],
+"0x7d2": [
+"0x52bb00",
+"Cmd_MitoInfo"
+],
+"0x7d3": [
+"0x52bc20",
+"Cmd_MileageInfo"
+],
+"0x9": [
+"0x52bfb0",
+"Cmd_ScriptMessage"
+],
+"0x9c4": [
+"0x52c030",
+"Cmd_ChatBlock"
+],
+"0x47e": [
+"0x53b7d0",
+"Cmd_Mita500Position"
+],
+"0x480": [
+"0x52c060",
+"Cmd_Mita500GetAck"
+],
+"0x481": [
+"0x52c300",
+"Cmd_Mita500BuffInfo"
+],
+"0x483": [
+"0x52c440",
+"Cmd_BacchusBuffInfo"
+],
+"0x488": [
+"0x52c500",
+"Cmd_DayEventInfo"
+],
+"0x489": [
+"0x52c590",
+"Cmd_DayMissionCompleteAck"
+],
+"0x48c": [
+"0x52c700",
+"Cmd_DayMissionGetRewardAck"
+],
+"0x48d": [
+"0x534880",
+"Cmd_DayMileageGetRewardAck"
+],
+"0x48f": [
+"0x531300",
+"Cmd_DayHongbaoGetRewardAck"
+],
+"0x493": [
+"0x52c790",
+"Cmd_DayEventGetItemAck"
+],
+"0x495": [
+"0x52c840",
+"Cmd_DayEventCompleteAck"
+],
+"0x3b9": [
+"0x52d390",
+"Cmd_MissionBattleCompleteAck"
+],
+"0x3ba": [
+"0x52d460",
+"Cmd_MissionBattleFail"
+],
+"0x6b": [
+"0x5310a0",
+"Cmd_RenameCharAck"
+],
+"0x119": [
+"0x526180",
+"Cmd_ChasingBattleInfoAck"
+],
+"0x11b": [
+"0x5261f0",
+"Cmd_ChasingBattleWaitRequestAck"
+],
+"0x11c": [
+"0x52e7e0",
+"Cmd_ChasingBattleWaitSuggest"
+],
+"0x11f": [
+"0x526350",
+"Cmd_ChasingBattleWaitCancelAck"
+],
+"0x12b": [
+"0x526420",
+"Cmd_ChasingBattleWaitInfo"
+],
+"0x122": [
+"0x53b150",
+"Cmd_ChasingBattleStart"
+],
+"0x124": [
+"0x5332a0",
+"Cmd_ChasingBattleHitAck"
+],
+"0x126": [
+"0x521cb0",
+"Cmd_ChasingBattleLeaveAck"
+],
+"0x127": [
+"0x5337a0",
+"Cmd_ChasingBattleHuvChange"
+],
+"0x128": [
+"0x539ab0",
+"Cmd_ChasingBattleEnd"
+],
+"0x129": [
+"0x5335c0",
+"Cmd_ChasingBattleScore"
+],
+"0x5ab": [
+"0x52c8a0",
+"Cmd_OpenLottoAck"
+],
+"0x5ad": [
+"0x52c920",
+"Cmd_ScratchLottoAck"
+],
+"0x5b5": [
+"0x531230",
+"Cmd_UseLuckyBagAck"
+],
+"0x5b7": [
+"0x531260",
+"Cmd_UseGWEventAck"
+],
+"0x5bf": [
+"0x531290",
+"Cmd_UseHongbaoAck"
+],
+"0x5c9": [
+"0x537f70",
+"Cmd_ReadMailAck"
+],
+"0x5cb": [
+"0x538060",
+"Cmd_DeleteMailAck"
+],
+"0x5cd": [
+"0x538140",
+"Cmd_KeepMailAck"
+],
+"0x5cf": [
+"0x52c970",
+"Cmd_SendMailAck"
+],
+"0x5d1": [
+"0x538240",
+"Cmd_GetMailItemAck"
+],
+"0xc81": [
+"0x52cab0",
+"Cmd_CityLeaveCheckAck"
+],
+"0x5e6": [
+"0x53b860",
+"Cmd_PostList"
+],
+"0x5e8": [
+"0x52cc50",
+"Cmd_InsertPostAck"
+],
+"0x5ea": [
+"0x52cc80",
+"Cmd_DeletePostAck"
+],
+"0x5d3": [
+"0x52ccb0",
+"Cmd_CompleteApprenticeAck"
+],
+"0x5d5": [
+"0x52cd50",
+"Cmd_GetCarAck"
+],
+"0xcef": [
+"0x52cd60",
+"Cmd_ContributeItemAck"
+],
+"0xcf2": [
+"0x52cdd0",
+"Cmd_XmasTreeEventBuff"
+],
+"0x4c3": [
+"0x521ec0",
+"Cmd_SellAeroPartsAck"
+],
+"0xe75": [
+"0x531530",
+"Cmd_AlchemyInfoRes"
+],
+"0xe79": [
+"0x52ce60",
+"Cmd_AlchemyCreateRes"
+],
+"0xe7c": [
+"0x52ced0",
+"Cmd_AlchemyAddSkillBookRes"
+],
+"0xe7b": [
+"0x52cf90",
+"Cmd_AlchemyDeleteSkillBookRes"
+],
+"0xe7e": [
+"0x52d040",
+"Cmd_AlchemySetLevelRes"
+],
+"0xe13": [
+"0x5313d0",
+"Cmd_GHResAcceptAck"
+],
+"0xe15": [
+"0x52ce30",
+"Cmd_GHReceiptReqAck"
+],
+"0xe7f": [
+"0x52d090",
+"Cmd_FieldQSlotExtended"
+],
+"0xe81": [
+"0x52d0f0",
+"Cmd_NeoWSlotExtended"
+],
+"0xe25": [
+"0x52d130",
+"Cmd_ViewTeamInfoAck"
+],
+"0xfa1": [
+"0x53f0f0",
+"Cmd_PersnalRankInfo"
+],
+"0xfa3": [
+"0x53f2e0",
+"Cmd_RankDetailInfoPerPageRes"
+],
+"0xfa5": [
+"0x53f360",
+"Cmd_RankDetailInfoSearchRes"
+],
+"0xfa6": [
+"0x53f0b0",
+"Cmd_PersnalRankInfoChanged"
+],
+"0xfb2": [
+"0x53f190",
+"Cmd_RankError"
+],
+"0xfab": [
+"0x53f400",
+"Cmd_TRankInfoPerPageRes"
+],
+"0xfad": [
+"0x53f480",
+"Cmd_TRankInfoSearchRes"
+],
+"0xfaf": [
+"0x53f520",
+"Cmd_HornorDetailInfoPerPageRes"
+],
+"0xfb1": [
+"0x53f5a0",
+"Cmd_HornorDetailInfoSearchRes"
+],
+"0xfb5": [
+"0x524270",
+"Cmd_RentCarItemAck"
+],
+"0xfb6": [
+"0x53c170",
+"Cmd_RentCarStatPointListAck"
+],
+"0xf51": [
+"0x53b960",
+"Cmd_WMLaptimeNationRecords"
+],
+"0xf52": [
+"0x5315e0",
+"Cmd_WMLaptimeWorldRecords"
+],
+"0xf58": [
+"0x52d4c0",
+"Cmd_WMLaptimeCharRecordAck"
+],
+"0xf54": [
+"0x52d530",
+"Cmd_WMNickNameUpdateAck"
+],
+"0x3c0": [
+"0x542c20",
+"Cmd_WMLaptimeStatusInfo"
+],
+"0xf57": [
+"0x5315f0",
+"Cmd_WMLaptimeRaceInfo"
+],
+"0xf59": [
+"0x5316d0",
+"Cmd_WMLaptimeSeasonState"
+],
+"0xf5c": [
+"0x52d590",
+"Cmd_WMLaptimeDailyTryCnt"
+],
+"0xf5e": [
+"0x52d5b0",
+"Cmd_WMLaptimeTryCanceled"
+],
+"0xfba": [
+"0x540f20",
+"Cmd_ValentainChocolateReward"
+],
+"0xfbb": [
+"0x542cf0",
+"Cmd_ValentainChocolateCheat"
+],
+"0xfbe": [
+"0x540f90",
+"Cmd_PvpCollisionDamage"
+],
+"0xfc0": [
+"0x53eb50",
+"Cmd_NeoPvpDamage"
+],
+"0xfc2": [
+"0x52d5f0",
+"Cmd_AssistTransferUseAck"
+],
+"0xfc3": [
+"0x545330",
+"Cmd_GMEventRush"
+]
+}
