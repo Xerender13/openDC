@@ -1293,6 +1293,7 @@ async def leave_obs(session, frame):
     unwatch(session)
     from .channels import stop_spectating      # a channel battle spectator, also between rounds
     stop_spectating(session)
+    session.state.pop('ghost', None)           # a replay (and its Ghost Battle) is left with 0x1e0 too
 
 
 @on(SVC, C2S, 0x1db)

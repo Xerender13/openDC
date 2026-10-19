@@ -137,6 +137,10 @@ async def traffic_item_event(session, frame):
     if not p or len(frame.payload) < 12:
         return
     kind, _, arg = struct.unpack_from('<IIf', frame.payload)
+    if session.state.get('ghost') is not None:
+        # a Ghost Battle in a replay: its traffic hits and combos give nothing (user, 2026-10-19: items from traffic
+        # in a ghost replay; a GM account has no 2 s gap, so 37 of them)
+        return
     c, now = p.char, time.monotonic()
     if now - session.state.get('combo_last', 0.0) < MIN_GAP and c.ptype != 'A':
         return

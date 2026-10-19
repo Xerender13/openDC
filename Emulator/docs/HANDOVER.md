@@ -4,14 +4,40 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Latest handoff: 2026-10-19 (session 26)
+## Latest handoff: 2026-10-19 (session 26, end of day)
 
-Details: "Session 26" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). Selling cars (0x57), bought cars at their
-class grade (Shark V7), and channel battles made playable with two crews: no-defence takes the channel, crew room seats
-by role (the owner / challenger window), 0x386 channel / area order, Team Comparison (0xe24 / 0xe25, SKID_CBATTLELOG_TB),
-replay list + replay headers, ownership lost when the defence leaves, no extra wait after a round's result. The user
-confirmed the channel battle fixes in game. Open: the defence's VS splash order fix (not tried), crew ranking
-(TEAMRANKING never computed: "Rank 0"). Selling cars and the bought cars' grade: user-confirmed.
+Details: "Session 26" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). **Everything below is committed and pushed.**
+
+**Running state:** emulator restarted at the end (pid 287721 then; check `./launch.sh status`), DB healthy. Both client
+exes are as at the start of the session (a sticker size experiment was reverted, see below).
+
+**Done and user-confirmed:** selling cars (0x57 -> 0x58), bought cars at their dealership class grade (Shark V7);
+channel battles with two crews: no defence -> the attacker takes the channel without a race, crew room seats by role
+(even = owner window, odd = challenger window: the client picks the window by seat), 0x386 channel / area order,
+attack name for queued challengers and the defence, Team Comparison (0xe24 -> 0xe25, match log SKID_CBATTLELOG_TB),
+replay list (0x395's u32 is a list version) and replay headers (0x1bf in the recording), ownership lost when the
+defence room empties, no extra 15 s after a round's result, "Win the channel!" once.
+
+**Done, not yet confirmed in game:**
+- The defence's round-start VS splash: 0x386 now goes out before the round's 0x390 / 0x1e7.
+- Replays stream 4 pieces per 0x227 (~128 KB/s; 16 KB a request lagged an 8 MB round after a minute).
+- Ghost Battle in replays: content flags BattleZone.GhostBattle + GhostBattleOnOff (the replay's ghost button); during a
+  ghost battle traffic hits / combos give nothing (state['ghost'] from 0x213 to 0x216 / 0x1e0).
+- Windows / Docker: DCEMU_PUBLIC_HOST (default 127.0.0.1 in docker-compose.yml) is sent as the lobby / game address
+  instead of the container's own address (a Windows user's client never reached the lobby). Ask them to run
+  launch.bat again.
+
+**Reverted at the user's request:** 512 px stickers (client editor size, upload check, preview, sticker atlas). The
+uploads worked, but stickers stayed low-resolution on the car (cause not found: probably a fixed-size car texture);
+all client bytes, tools and server limits are back as before, the test sticker deleted from the database.
+
+**Open (next session):**
+1. Xerander holds 37 items from the ghost-battle drop bug (log 20261019-152042, 15:21:36 on): the user did not say
+   whether to remove them (edit only while offline).
+2. C>S 0x214 (36 bytes, sender 0x7eb7ac; 0x215 handler 0x52b260 -> 0x7a6960) during replays: not known, unanswered.
+3. Crew ranking (SKID_TEAM_TB.TEAMRANKING) is never computed: Team Comparison shows "Rank 0".
+4. Test setup left in the database: TEAMPOINT 500000 for RecompsRule and NewbieCrew (rank S); set to 0 to undo.
+5. Older items: see the previous handoffs below (gift boxes, small ST cars, Windows launch, 2016 quests).
 
 ## Previous handoff: 2026-10-19 (sessions 25-25b, end of day)
 

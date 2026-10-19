@@ -108,6 +108,11 @@ NEW_FLAGS = {'Etc.InventoryReform': 2, 'Main.NeoCityMainUI': 1, 'Etc.VShopSeason
              # (PType < 'N', char +0x7c); the 2008 Contents.ini has 0 (user, 2026-10-17: Newbie could not start alone,
              # Xerander on the admin account could). The server runs it as a practice run (rooms.practice_alone).
              'BattleZone.PracticeMode': 1,
+             # Ghost Battle in a channel battle replay (Ch. Replay Ghost Pass / Ghost Tickets; channels.py 0x212): the
+             # replay shows its Ghost Battle button (+0x2c4, 0x7aa135) only with GhostBattle, more of its controls with
+             # GhostBattleOnOff too (0x7af036); PvpGhostBattle (outside replays, a selected player's ghost) stays off:
+             # not implemented. (user, 2026-10-19: how to start a ghost battle)
+             'BattleZone.GhostBattle': 1, 'BattleZone.GhostBattleOnOff': 1,
              # party patrol pillars (byte [net+0x280] bit 5, client 0x62f95d): with it a party of 2+ sees the party_move /
              # party_move_ROO rows at the patrol pillars instead of the solo ones (native/game/partypatrol.py); missing
              # from the 2008 Contents.ini (user request 2026-10-17: Party Patrol)

@@ -16,6 +16,24 @@ in order since; committed before a restart, so not yet tried). Selling cars and 
 **user-confirmed 2026-10-19**.
 Test setup left in the database: TEAMPOINT 500000 for both crews (rank S). Newbie's account removed from adminlist.
 
+- **Replay lagged, showed wrong data, then stopped after about a minute** (user, replay cb2610191203_04_0_0, 8 MB):
+  the client asks 0x227 about twice a second (have @0x2c) and plays in real time; the server answered 16000 bytes a
+  request (~32 KB/s), so playback overtook the download. The client appends a 0x228 piece only when its offset equals
+  what it has (0x7921a0, 0x792278), so now REPLAY_BURST = 4 consecutive pieces go out per request (~128 KB/s).
+  Script-tested (pieces, end of file). **Not yet confirmed in game.** Also seen: C>S 0x214 (36 bytes, sender 0x7eb7ac;
+  0x215 handler 0x52b260 -> 0x7a6960) mid-replay, unanswered: not known yet.
+- **Items from traffic in a Ghost Battle replay** (user: "big bug"; log 20261019-152042: 0x212 -> 0x213 at 15:21:36,
+  then 37 x 0x2e4 TrafficItemEvent -> 0x2e5 + 0x192 drops; the GM account has no 2 s gap). The ghost race reports
+  traffic hits / combos as in the city. Now the game session carries state['ghost'] (the replay key) from 0x213 until
+  0x216 GhostResult or 0x1e0 LeaveOBS (the client sends it when it leaves a replay, then 0x12c), and
+  combo.traffic_item_event gives nothing then (no drop, no combo exp). Script-tested. **Not yet confirmed.** The 37
+  items Xerander got stay unless removed. Still unknown: C>S 0x214 (once per replay, after the ghost start too).
+- **How to start a Ghost Battle in a replay** (user): the replay's Ghost Battle button (+0x2c4) is shown only with
+  content flag BattleZone.GhostBattle (block 0x30 bit 2; 0x7aa135; outside replays PvpGhostBattle bit 3), more ghost
+  controls with GhostBattleOnOff (bit 4, 0x7af036). Contents.ini (2008) has none: no button. Added GhostBattle and
+  GhostBattleOnOff to NEW_FLAGS (PvpGhostBattle off: not implemented). The server side (0x212 -> 0x213, the pass /
+  tickets) is from session 22b. Pressing it -> 0x7a9ee0 sends 0x212 (via the scene's vtable +0x24 0x7ab580, replay
+  mode +0x9f0 = 1). **Not yet tried in game.**
 - **A Windows user could not reach the lobby** (their log 20261019-113650, the emulator in the Docker container): login
   'admin' result 0, then no lobby connection. The LoginAck's server list gave 172.19.0.3 (the container's own address)
   for game / lobby / area / barea: serverlist.txt says 127.0.0.1, and auth sends loopback entries as the socket's own

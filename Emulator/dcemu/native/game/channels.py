@@ -1509,7 +1509,7 @@ async def battle_items(session, frame):
 
 REPLAY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
                           'replays')
-REPLAY_CHUNK = 16000
+REPLAY_CHUNK, REPLAY_BURST = 16000, 4      # bytes per 0x228, pieces per 0x227 (about 128 KB/s)
 REPLAY_PASS, GHOST_PASS = 44, 45            # VisualItem categories: Ch. Battle Replay Pass, Ch. Replay Ghost Pass
 RECORDED = {0x221, 0x225, 0x2d0, 0x21e, 0x220, 0x223, 0x21f}
 _replays = None
@@ -1657,8 +1657,15 @@ def replay_chunk(session, p):
         data = open(os.path.join(REPLAY_DIR, os.path.basename(key) + '.r0'), 'rb').read()
     except OSError:
         data = b''
-    part = data[have:have + REPLAY_CHUNK]
-    session.to_client(Frame(0x228, struct.pack('<III', len(data), have, len(part)) + part))
+    # the client asks about twice a second and plays the replay in real time: one 16 KB piece a request (32 KB/s) fell
+    # behind an 8 MB round after a minute (user, 2026-10-19: lag, wrong data, then the replay stopped). It appends a
+    # piece only at its own length (0x7921a0 / 0x792278) and drops the rest, so REPLAY_BURST pieces in order are safe.
+    for k in range(REPLAY_BURST):
+        at = have + k * REPLAY_CHUNK
+        part = data[at:at + REPLAY_CHUNK]
+        if not part and k:
+            break
+        session.to_client(Frame(0x228, struct.pack('<III', len(data), at, len(part)) + part))
 
 
 # ---- Ghost Battle in a replay (Ch. Replay Ghost Pass, Ch. Battle Ghost Tickets) -------------------------------------
@@ -1685,9 +1692,11 @@ async def _ghost(session, t, p):
     from .alchemy import take_count
     from .items import holds, mod_list
     from .. import admin
-    if t == 0x216:
-        return session.to_client(Frame(0x217, bytes(0x28)))
     gs = game_session_of(session)
+    if t == 0x216:
+        if gs:
+            gs.state.pop('ghost', None)
+        return session.to_client(Frame(0x217, bytes(0x28)))
     pl = gs.state.get('player') if gs else None
     if not pl or len(p) < 0x1b0:
         return
@@ -1707,6 +1716,7 @@ async def _ghost(session, t, p):
             gs.log.note(f'ghost battle in replay {key or "?"}: no Ghost Pass or ticket')
             return admin.message(gs, 'Ghost Battle needs the Ch. Replay Ghost Pass or a Battle Ghost Ticket of this channel.')
         gs.log.note(f'ghost battle in replay {key}: {used} used')
+    gs.state['ghost'] = key         # no traffic item drops / combo exp until it ends (combo.traffic_item_event)
     session.to_client(Frame(0x213, p[:0x1b0]))           # the blocks at the same places as the client sent them
 
 
