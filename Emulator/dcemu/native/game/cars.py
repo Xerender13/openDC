@@ -80,7 +80,9 @@ async def select_car(session, frame):
 #   cars have empty rows (stats and capacity 0) below their class (VehicleList column 23, the dealership's V tab: record
 #   +0x138, tabs at window +0x140 + class * 4, 0x5db6xx): Utopia's only real row is V9 (price 100000; V1 1000). The
 #   2016 cars (port2016) have all nine rows and start at V1 (as in the 2016 client), though listed under their class tab.
-#   Price = that grade's Price.
+#   Some 2011 cars have capacity but no stats below their class (Shark V1-V6, user 2026-10-19: Shark bought as V1, the
+#   EU dealership listed V7), or stats from a lower grade (WILD F V4, class V7): a car with empty low rows starts at its
+#   class (VehicleList Lvl; its listed stats are that grade's). Price = that grade's Price.
 CREATE_CAR_SQL = ("SET NOCOUNT ON; DECLARE @carid numeric; EXEC PC_SKID_CREATECAR %s, %s, %s, %s, %s, %s, 0, %s, 0,"
                   " @carid OUTPUT; IF @carid > 0 UPDATE SKID_CHARACTER_TB SET CURCAR=@carid WHERE SERVERID=%s AND CID=%s;"
                   " SELECT ISNULL(@carid, -1)")
@@ -96,9 +98,18 @@ def garage_space(p):
 
 
 def start_grade(car_type):
-    """The first grade of the car with a real VehicleUpgrade row (capacity > 0), else 1."""
+    """The grade a bought car starts at: the first VehicleUpgrade row with capacity and stats, else 1. A car whose
+    lower rows are empty (a 2011 class car) starts at its dealership class (VehicleList Lvl, the grade whose stats
+    the dealership shows) when that is higher: Shark V1-V6 have capacity but no stats, WILD F V4-V6 have stats."""
     t = context.data
-    return next((g for g in range(1, MAX_GRADE + 1) if (t.upgrade.get((car_type, g)) or {}).get('capacity')), 1)
+    first = next((g for g in range(1, MAX_GRADE + 1)
+                  if (u := t.upgrade.get((car_type, g))) and u.get('capacity')
+                  and any(u.get(k) for k in ('accel', 'speed', 'crash', 'boost'))), 1)
+    if first > 1:
+        lvl = str((t.vehicles.get(car_type) or {}).get('Lvl') or '')
+        if lvl.isdigit() and first < int(lvl) <= MAX_GRADE and t.upgrade.get((car_type, int(lvl))):
+            return int(lvl)
+    return first
 
 
 DEFAULT_COLOR = 0x01010102     # the dealership's first colour (what the client sends with BuyCar)
@@ -186,6 +197,58 @@ async def buy_car(session, frame):
         send(session, mod_list(*changed))
     send(session, visual_update(session, car))
     send(session, Frame(0x56, car.encode() + struct.pack('<I', price)))
+
+
+# --- selling a car ------------------------------------------------------------------------------------
+# 0x57 SellCar (character name, u32 CarID @0x2a; sender 0x7e4d10, called from the garage 0x5d1db1 after the client's
+# own checks: not on auction, no parts on the car (0x71ab00), more than one car) -> 0x58 SellCarAck (u32 CarID, u32 money
+# @0x6; handler 0x50e6e0 removes the car and ADDS the money to its own count). As the 2008 server (Cmd_SellCar
+# 0x605800): not the current car / unknown car 20043, on auction 20043 ("SellCar::IsAuctionOn"), no VehicleUpgrade row
+# 20042; price = the grade's Sell, or CloseSell for a car no longer sold (2008: closestage reached; 2011: Sellable 0);
+# CalcMoney "SELLCAR"; delete from SKID_CAR_TB; the car's key item goes. The drift items on the car (paint, neon) go
+# with it, as at auction.
+@on(SVC, C2S, 0x57)
+async def sell_car(session, frame):
+    from .items import REMOVED, DELETE_SQL, add_money, info_of, mod_list
+    from .vshop import REMOVED as VS_REMOVED, destroy, vs_mod_list
+    p = session.state.get('player')
+    if not p or len(frame.payload) < 0x2e:
+        return
+    car_id, = struct.unpack_from('<I', frame.payload, 0x2a)
+    t, c, db = context.data, p.char, context.db
+    car = next((x for x in c.cars if x.car_id == car_id), None)
+    if not car or car_id == c.cur_car or car.on_auction or len(c.cars) < 2:
+        session.log.note(f'sell car {car_id}: refused (current, on auction, last or unknown)')
+        return error(session, '20043')
+    if any(i.car_id == car_id for i in p.items):
+        session.log.note(f'sell car {car_id}: refused (parts on the car)')
+        return error(session, '20043')
+    up = t.upgrade.get((car.car_type, car.grade))
+    if not up:
+        return error(session, '20042')
+    sold = int((t.vehicles.get(car.car_type) or {}).get('Sellable') or 0)
+    price = int(up['sell'] if sold else up.get('close_sell', up['sell']))
+    if not await add_money(c, price):
+        return error(session, '20045')
+    await db.execute("DELETE FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s;"
+                     " UPDATE SKID_CHARACTER_TB SET NUMCAR=NUMCAR-1 WHERE SERVERID=%s AND CID=%s AND NUMCAR>0",
+                     (db.server_id, c.cid, car_id, db.server_id, c.cid))
+    c.cars = [o for o in c.cars if o.car_id != car_id]
+    keys = [i for i in p.items if i.random == car_id and getattr(info_of(i), 'kind', '') == 'car']
+    for k in keys:
+        await db.execute(DELETE_SQL, (db.server_id, c.cid, k.inven_idx))
+        p.items.remove(k)
+    gone = [v for v in p.vsitems if v.car_id == car_id]
+    if gone:
+        await destroy(p, *gone)
+        p.apply_paints()
+    session.log.note(f'sell car {car_id} (type {car.car_type}, V{car.grade}) for {price}: keys {[k.item_id for k in keys]},'
+                     f' drift items {[v.item_id for v in gone]}')
+    if keys:
+        send(session, mod_list(*((k, REMOVED) for k in keys)))
+    if gone:
+        send(session, vs_mod_list(*((v, VS_REMOVED) for v in gone)))
+    send(session, Frame(0x58, struct.pack('<II', car_id, price)))
 
 
 # --- upgrading a car ----------------------------------------------------------------------------------

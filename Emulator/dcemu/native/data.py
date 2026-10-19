@@ -342,6 +342,7 @@ class Tables:
             self.upgrade[key] = {k.lower(): _num(r[col[k]], float if k == 'Efficiency' else int)
                                  for k in ('Accel', 'Speed', 'Crash', 'Boost', 'Efficiency', 'Capacity')}
             self.upgrade[key].update(price=_num(r[col['Price']]), sell=_num(r[col['Sell']]),
+                                     close_sell=_num(r[col['CloseSell']]),
                                      req_level=_num(r[col['Req Level']]), upgrade_mito=_num(r[col['UpgradeMito']]),
                                      options=r[col['OptionID']].strip(), condition=r[col['UpgradeCon']].strip())
 

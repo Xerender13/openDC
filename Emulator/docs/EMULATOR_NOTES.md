@@ -8,6 +8,31 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 26 (2026-10-19): selling cars, Shark bought as V1, Undercity 120 %
+
+- **Selling a car at the dealership did nothing** (user): 0x57 SellCar had no handler ("no handler for 0x0057"). Client:
+  sender 0x7e4d10 (name, u32 CarID @0x2a), called from 0x5d1db1 after its own checks (not on auction, no parts on
+  the car 0x71ab00, more than one car); answer 0x58 SellCarAck (u32 CarID, u32 money @6), handler 0x50e6e0 removes the
+  car and adds the money to its own count. 2008 Cmd_SellCar 0x605800: current car / unknown 20043, auction
+  ("SellCar::IsAuctionOn") 20043, price = the grade's Sell or CloseSell (CloseSell when the car's close stage is
+  reached; here: Sellable 0), CalcMoney "SELLCAR", delete from SKID_CAR_TB, the car's key item removed. New
+  `cars.sell_car`: also NUMCAR - 1 and the drift items on the car removed (as the auction does). `data.py` reads
+  CloseSell. Shark V7 sells for 110000. Script-tested with stub session / DB (sale, key removed, 0x58 bytes; selling the
+  current car refused). **Not yet confirmed in game.** *(guess: the Sell / CloseSell choice; the client's own price
+  text in the sell dialog was not looked up.)*
+- **EU: a Shark listed as V7 in the dealership was bought as V1** (user): Shark's VehicleUpgrade V1-V6 rows have
+  capacity but no stats, so `start_grade` (first row with capacity) gave V1 (log: "buy car 160 (Shark) V1 for 10000").
+  Now the first row with capacity and stats; when that is above V1 (a 2011 class car with empty low rows) the car starts
+  at its VehicleList class (Lvl, the dealership tab; the listed stats equal that grade's): Shark V7 (550000), Lupin V2,
+  Liner V6, Compact / V-STAR V8, ICINCO / JIMMY V9 (JIMMY V8 has stats too), WILD F V7 (V4-V6 have stats). Cars with
+  stats from V1 (2016 cars, Kicker ...) still start at V1. Same rule for US and EU (one server table). Script-tested.
+  **Not yet confirmed in game.**
+- **Undercity 120 %** (user: should be used up at the end of an Undercity run, giving the bonus): already in
+  `undercity.py` (session 2026-10-14): a held i_n_00064 adds its value (20 %) to every Undercity exp / Mito gain
+  (`Run.gain`: HUV, HUB, middle and result rewards; 0xbcc flag 1 = text 11114) and one is used up at the result
+  (`use_uc120`, in `Run.end` for each member who got the bonus). Not changed. Known gap: a member who leaves before the
+  result keeps the item after getting bonus exp.
+
 ## Session 25b (2026-10-19): small ST cars' hit box, all tracks in every section, GM damage text, EU chart
 
 - **Cars drove through lamps / trees, in races and the city; invisible hits elsewhere** (user; "the issue is the car hit

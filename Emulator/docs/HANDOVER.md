@@ -4,19 +4,48 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Latest handoff: 2026-10-19 (session 25)
+## Latest handoff: 2026-10-19 (sessions 25-25b, end of day)
 
-Details: "Session 25" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). No commit asked for. New untracked files:
-tools/race_paths.py, tools/giftbox.py, server_data/race/ (18 new .index files + trafficCarSettingForTrack_5.txt).
-Done, none confirmed in game: race traffic on every track with client paths (101), bought cars at their first real
-grade (2011 class cars like Utopia V9; 2016 cars V1), transparent tooltips for hidden Semi-channels, gift box maker
-(editor dialog + `tools.giftbox`), new GM Commands doc (link in the notes; the old one is on another account).
-Session 25b: small ST cars labelled SMALL (their 80 % size made an 8 cm hit box: drove through objects;
-`port2016.py [us|eu] small`), every track in every section in the US exe (`eu_client.py "Client US" tracks`), the
-race damage text is GM-only client debug (left). Open: EU performance graph Total column (V9 odd text, EU only; see
-the notes), confirming all of this in game. Fixed, untested on Windows: launch.ps1 with no arguments ($Rest null ->
-"Cannot index into a null array" after the server started). EU Performance Graph now uses the US stat sum
-(`eu_client.py chart us`, part of setup).
+Details: "Session 25" and "Session 25b" at the top of [EMULATOR_NOTES.md](EMULATOR_NOTES.md). **Everything up to the
+editor / gift box / port work was committed and pushed (f450cc4 on main).** This handoff note itself is not committed.
+
+**Running state:** emulator restarted mid-session (pid 140719 then; check `./launch.sh status`), DB healthy. Client
+files changed this session need a client restart (the user's clients may still run the old copies).
+`git config core.fileMode false` is set in this working copy (files are mode 755 after a copy; ~240 fake changes).
+
+**Done, none confirmed in game yet:**
+- Race traffic on every track with client paths: `tools/race_paths.py` (chunked .chpath reader) wrote 18 missing
+  server_data/race/*.index + trafficCarSettingForTrack_5.txt (Taipei). 101 tracks; taipei_track2 has no paths.
+- Bought cars start at their first real VehicleUpgrade grade (cars.start_grade): 2011 class cars (Utopia V9, Rotary
+  V5 ...) were sold as empty V1 rows; 2016 cars V1 (as the 2016 client). The dealership's V tab = VehicleList column 23.
+- Small ST cars' hit box (user-confirmed cause): 2016 "GOTCHA_SMALL" rows labelled "SMALL" (47 cars; size is a % of
+  the base car, the 2011 client only scales for "SMALL"): `port2016.py [us|eu] small`, both clients + server_data.
+- Every track in every battle zone section, US exe (`eu_client.py "Client US" tracks on|off`; `eu_client.py us`
+  applies it). EU already lists all tracks (nation 7-10 rule in 0x5bc2d0).
+- EU Performance Graph Total = US stat sum (`eu_client.py chart us|eu`, GlobalContent CarChartAdv 0; part of setup).
+- Hidden Semi-channel tooltips transparent (semi_tooltips.py, both clients).
+- Gift boxes (tools/giftbox.py + editor Items/Cars > New gift box): car / item / drift / Mito / EXP lines, each with
+  its own chance (sub-groups with an n/a row). Writes server_data and both clients at the same row. Tested on copies
+  only; no real box made yet.
+- gmcar reports the grade given; editor translation 셋 = Set; tests/test_editor.py GiftBoxes (16 + 1 tests pass).
+- Windows launch.ps1: `$Rest` null without arguments ("Cannot index into a null array", the client never started);
+  fixed + trap exit 1. **Untested (no PowerShell here): ask the Windows user to retry.**
+- GM reference: new Claude Doc "openDC GM Commands" on this account
+  (https://claude.ai/code/artifact/d53089bd-4fd4-479e-80cd-a8eb956c26c3); exported as "openDC GM Commands.pdf"
+  (repo root, in git). The old doc is on the user's other account.
+- Clean client zips for sharing (no decomp version.dll, logs, dumps, pc_spec, save): `../openDC Client US
+  2026-10-19.zip`, `../openDC Client EU 2026-10-19.zip` (outside the repo).
+
+**Not a bug / left as is:** "[A] Collision damage ..." race text is the client's debug print for GM accounts (PType < 'N';
+user: no patch). The 2016 V9 tab + V1 car matches the 2016 client.
+
+**Open (next session):**
+1. Confirm in game: small ST cars hit objects, all tracks in Newbie / 4X rooms, race traffic on the new tracks, bought
+   2011 class cars (Utopia V9 at its price), EU graph totals, gift boxes (make one, `gmitem giftbox_<id>`).
+2. Windows user: retry launch.bat with the new launch.ps1 (and the server setup there, never tried yet).
+3. Older open items: channel battles untested (session 22 list in §5), 2016-only quests not ported, EU client with the
+   new cars / tracks in game.
+4. "Drift City Item Catalog.zip" (editor icons) is untracked on purpose; the user decides whether it goes to git.
 
 ## Previous handoff: 2026-10-19 (sessions 24-24d)
 
