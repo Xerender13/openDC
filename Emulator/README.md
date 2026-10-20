@@ -48,12 +48,14 @@ Needs Python 3.10+ and podman (or docker) with podman-compose / docker compose (
 database; its volume is `driftcity2011_mssql-data`, the one the 2008 stack made). Restarting the emulator
 disconnects the clients.
 
-The client's tables are not in git. The first `./launch.sh` / `server` / `emu` (and the first start of the
-container) asks for the client folder and copies them to `server_data/tables` and `server_data/teammark`
+The client's tables are not in git. The first `./launch.sh` / `server` / `emu` (and `launch.bat`) asks which client
+the server is for, 1) 2011 (US / EU) or 2) 2016 (US), writes it to `emulator.ini` `[client] version`, then asks for
+that client's folder and copies them to `server_data/tables` and `server_data/teammark`
 (`python -m tools.client_setup`: the 2011 US client with `[client] version = 2011`, the 2016 client into
 `server_data_2016/` with `version = 2016`). It only adds missing files: the
 tables in git (`server_data/Init`, the 2008 server's tables, `UseItemClient.tdf`) are never replaced.
-`--client DIR` skips the question, `--refresh` copies again after a client patch, `--check` only reports.
+`--client DIR` skips the folder question and `--version 2011|2016` the version question; `--choose` asks the version
+again (`setup` does), `--refresh` copies again after a client patch, `--check` only reports.
 
 ### Windows (Docker Desktop)
 

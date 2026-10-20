@@ -4,7 +4,7 @@
 #   launch.bat [all] [eu]     database + emulator + the client (US, or the EU client with eu)
 #   launch.bat server         database + emulator, no client
 #   launch.bat client [eu]    the client only (US, or the EU client with eu; version 2016: ..\DriftCity Dev Ed)
-#   launch.bat setup          build the emulator image; copy the client's tables again (after a client patch)
+#   launch.bat setup          build the emulator image; which client (2011 / 2016) and its tables (again after a client patch)
 #   launch.bat init-db        create the game database from db\*.sql (an existing one is DELETED: asks first)
 #   launch.bat restore-db F   replace the game database with the SQL Server backup F (e.g. db\SKDBTW_clean.bak; asks)
 #   launch.bat backup-db [F]  save the game database to a SQL Server backup (default db\SKDBTW_<date>.bak)
@@ -24,7 +24,7 @@ if (-not $Rest) { $Rest = @() }
 # any other script error: exit 1, so launch.bat keeps the window open (it pauses on errorlevel 1)
 trap { Write-Host "launch: $_" -ForegroundColor Red; exit 1 }
 Set-Location $PSScriptRoot
-$ClientDir = Join-Path $PSScriptRoot '..\Client US'      # the US client (its tables: tools\client_setup.py)
+$ClientUsDir = Join-Path $PSScriptRoot '..\Client US'    # the US client (its tables: tools\client_setup.py)
 $ClientEuDir = Join-Path $PSScriptRoot '..\Client EU'    # the EU client (tools\eu_client.py)
 $Client2016Dir = Join-Path $PSScriptRoot '..\DriftCity Dev Ed'   # the 2016 client (emulator.ini [client] version = 2016)
 $Sql = @('exec', 'dcemu2011_db', '/opt/mssql-tools18/bin/sqlcmd', '-C', '-S', 'localhost', '-U', 'sa', '-P', 'z0ne!server', '-b')
@@ -33,22 +33,25 @@ function Die($msg) { Write-Host "launch: $msg" -ForegroundColor Red; exit 1 }
 
 # A setting of emulator.ini as the emulator resolves it: with [client] version = 2016 the [2016] section's
 # "section.key = value" lines replace the ones of the other sections (dcemu/__main__.py apply_2016).
-$Ini = @{}
-$section = ''
-foreach ($line in Get-Content (Join-Path $PSScriptRoot 'emulator.ini')) {
-    $line = ($line -replace '\s[;#].*$', '').Trim()
-    if ($line -match '^\[(.+)\]') { $section = $Matches[1].Trim().ToLower(); continue }
-    if ($line -match '^([^;#=][^=]*?)\s*=\s*(.*)$') { $Ini["$section.$($Matches[1].ToLower())"] = $Matches[2].Trim() }
-}
-$Version = if ($Ini['client.version']) { $Ini['client.version'] } else { '2011' }
 function Setting($name, $default) {
     if ($Version -eq '2016' -and $Ini.ContainsKey("2016.$name")) { return $Ini["2016.$name"] }
     if ($Ini.ContainsKey($name)) { return $Ini[$name] }
     return $default
 }
-$AuthPort = [int]((Setting 'services.auth' '11005 0 56') -split '\s+')[0]
-$DbName = Setting 'database.name' 'SKDBTW'
-if ($Version -eq '2016') { $ClientDir = $Client2016Dir }
+function Read-Config {   # again after the first-launch question changed [client] version
+    $script:Ini = @{}
+    $section = ''
+    foreach ($line in Get-Content (Join-Path $PSScriptRoot 'emulator.ini')) {
+        $line = ($line -replace '\s[;#].*$', '').Trim()
+        if ($line -match '^\[(.+)\]') { $section = $Matches[1].Trim().ToLower(); continue }
+        if ($line -match '^([^;#=][^=]*?)\s*=\s*(.*)$') { $script:Ini["$section.$($Matches[1].ToLower())"] = $Matches[2].Trim() }
+    }
+    $script:Version = if ($Ini['client.version']) { $Ini['client.version'] } else { '2011' }
+    $script:AuthPort = [int]((Setting 'services.auth' '11005 0 56') -split '\s+')[0]
+    $script:DbName = Setting 'database.name' 'SKDBTW'
+    $script:ClientDir = if ($Version -eq '2016') { $Client2016Dir } else { $ClientUsDir }
+}
+Read-Config
 
 function Docker-Check {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { Die 'Docker Desktop is needed: https://www.docker.com/products/docker-desktop/' }
@@ -72,7 +75,32 @@ function Wait-Db {
 
 # The tables that come from the client are not in git: the first time, ask for the client folder and copy them
 # (tools\client_setup.py in the emulator's container, the folder mounted at /client: DCEMU_CLIENT_DIR).
+# The first launch (tables missing) and setup also ask which client the server is for, 2011 or 2016, and write it to
+# emulator.ini [client] version (tools\client_setup.py --version).
+function Choose-Version {
+    Write-Host "Which Drift City client is this server for?`n  1) 2011 (the US and EU clients)`n  2) 2016 (the 2016 US client, experimental)"
+    $default = if ($Version -eq '2011') { '1' } else { '2' }
+    while ($true) {
+        $a = (Read-Host "Client [$default]").Trim()
+        if (-not $a) { $a = $default }
+        $v = @{ '1' = '2011'; '2' = '2016'; '2011' = '2011'; '2016' = '2016' }[$a]
+        if ($v) { break }
+        Write-Host '1 or 2'
+    }
+    if ($v -ne $Version) {
+        docker compose run --rm --no-deps emulator python -m tools.client_setup --version $v --check | Out-Null
+        Read-Config
+        if ($Version -ne $v) { Die 'writing [client] version to emulator.ini failed' }
+        Write-Host "emulator.ini: [client] version = $v"
+    }
+}
+
 function Client-Tables([switch]$Refresh) {
+    if (-not $Refresh) {
+        docker compose run --rm --no-deps emulator python -m tools.client_setup --check
+        if ($LASTEXITCODE -eq 0) { return }
+    }
+    Choose-Version
     if (-not $Refresh) {
         docker compose run --rm --no-deps emulator python -m tools.client_setup --check
         if ($LASTEXITCODE -eq 0) { return }
@@ -121,7 +149,7 @@ switch ($Command) {
     'setup' {
         Compose build emulator
         Client-Tables -Refresh
-        Write-Host 'setup done. A new machine also needs a database: launch.bat init-db (or restore-db db\SKDBTW_clean.bak)'
+        Write-Host "setup done (version $Version). A new machine also needs a database: launch.bat init-db (or restore-db db\SKDBTW_clean.bak)"
     }
     'init-db' {
         if (-not (Ask "This deletes the $DbName database (all accounts and characters) and creates it again.")) { Die 'cancelled' }

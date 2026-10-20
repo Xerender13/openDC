@@ -41,6 +41,9 @@ the rest itself.
    ./launch.sh setup && ./launch.sh init-db && ./launch.sh
    ```
 
+   The first start asks which client the server is for (2011 US / EU, or 2016 US) and where that client's folder
+   is, and copies its tables; `setup` asks again.
+
 4. Log in with `admin` / `admin`, or any new ID and password (accounts are created on first login).
 
 Settings: `Emulator/emulator.ini` (server) and `Client US/DriftCityLauncher.ini` (server address, window mode, HUD).

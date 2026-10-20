@@ -71,6 +71,15 @@ class VersionTest(unittest.TestCase):
             self.assertEqual(cp['flags']['main.passerby'], '1')
             self.assertEqual(cp['services']['lobby'], '11011 12011 56')    # not named: the default stays
 
+    def test_first_launch_version_choice_rewrites_only_that_line(self):
+        from tools.client_setup import set_version
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'emulator.ini'
+            path.write_text('[client]\n; which build\nversion = 2016\n[2016]\nversion.x = 1\n')
+            set_version(path, '2011')
+            self.assertEqual(path.read_text(), '[client]\n; which build\nversion = 2011\n[2016]\nversion.x = 1\n')
+            self.assertEqual(load_config(str(path))['client']['version'], '2011')
+
     def test_character_offsets_and_uint64_experience(self):
         c = character()
         old, new = c.encode(2011), c.encode(2016)

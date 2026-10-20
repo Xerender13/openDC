@@ -1,6 +1,10 @@
 """First start: the server tables that come from the game client (not in git), copied from the user's client.
 
-python -m tools.client_setup [-c emulator.ini] [--client DIR] [--check] [--refresh]
+python -m tools.client_setup [-c emulator.ini] [--version 2011|2016] [--choose] [--client DIR] [--check] [--refresh]
+
+First launch (the tables are missing) in a terminal, or --choose (launch.sh setup): asks which client the server is
+for, 2011 (US / EU) or 2016 (US), and writes the answer to the config's [client] version. --version sets it without
+asking.
 
 The repository holds only the tables the client does not have (the 2008 server's own, and server_data/Init plus
 UseItemClient.tdf, which tools/port2016.py wrote). The rest of tables/ (ItemClient.tdf, QuestClient.tdf, ...,
@@ -41,6 +45,38 @@ def paths(config):
         data = Path(HERE) / cp['client']['data_2016']
         return version, data, data / 'tables'
     return '2011', Path(HERE) / cp['native']['data'], Path(HERE) / cp['native']['server_data']
+
+
+VERSIONS = {'1': '2011', '2': '2016', '2011': '2011', '2016': '2016'}
+
+
+def set_version(config, version):
+    """Writes [client] version = version into the config file, keeping every other line (and its comments)."""
+    lines = Path(config).read_text(encoding='utf-8-sig').splitlines(keepends=True)
+    section = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith('['):
+            section = stripped[1:stripped.index(']')].strip().lower() if ']' in stripped else None
+        elif section == 'client' and stripped.split('=')[0].strip().lower() == 'version' and '=' in stripped:
+            lines[i] = f'version = {version}\n'
+            break
+    else:
+        raise SystemExit(f'client_setup: {config} has no [client] version line')
+    Path(config).write_text(''.join(lines), encoding='utf-8')
+
+
+def ask_version(current):
+    """The client build, asked in a terminal; the current one on Enter."""
+    print('Which Drift City client is this server for?\n'
+          '  1) 2011 (the US and EU clients)\n'
+          '  2) 2016 (the 2016 US client, experimental)')
+    default = '1' if current == '2011' else '2'
+    while True:
+        answer = input(f'Client [{default}]: ').strip() or default
+        if answer in VERSIONS:
+            return VERSIONS[answer]
+        print('1 or 2')
 
 
 def missing(data, tables):
@@ -156,9 +192,19 @@ def main():
     parser.add_argument('--client', help='the client folder (default: ask, or the usual folder)')
     parser.add_argument('--check', action='store_true', help='only report whether the tables are complete')
     parser.add_argument('--refresh', action='store_true', help='copy the tables again (after a client patch)')
+    parser.add_argument('--version', choices=('2011', '2016'), help='set [client] version to this, without asking')
+    parser.add_argument('--choose', action='store_true', help='ask which client version (in a terminal)')
     args = parser.parse_args()
     version, data, tables = paths(args.config)
     lost = missing(data, tables)
+    chosen = args.version
+    if not chosen and not args.check and (lost or args.choose) and sys.stdin.isatty():
+        chosen = ask_version(version)
+    if chosen and chosen != version:
+        set_version(args.config, chosen)
+        print(f'{os.path.basename(args.config)}: [client] version = {chosen}')
+        version, data, tables = paths(args.config)
+        lost = missing(data, tables)
     if args.check:
         print(f'client tables ({version}, {data.name}): ' + (f'missing {", ".join(lost)}' if lost else 'complete'))
         sys.exit(1 if lost else 0)

@@ -14,8 +14,9 @@
 #   ./launch.sh restart-emu  stop and start the background emulator (clients are disconnected)
 #   ./launch.sh status       what is running
 #   ./launch.sh logs [part]  follow a log: emu (default), db
-#   ./launch.sh setup        first time: the Python environment (.venv with python-tds); after a client patch: copy the
-#                            client tables again (server and emu copy missing ones on their own: tools/client_setup.py)
+#   ./launch.sh setup        first time: the Python environment (.venv with python-tds), which client (2011 or 2016:
+#                            emulator.ini [client] version) and its tables; after a client patch: copy them again
+#                            (the first server / emu start asks the same on its own: tools/client_setup.py)
 #   ./launch.sh init-db      create the game database from db/*.sql (an existing one is DELETED: asks first)
 #   ./launch.sh backup-db [F]    save the game database to a SQL Server backup (default db/<name>_<date>.bak)
 #   ./launch.sh restore-db F     replace the game database with the backup F (e.g. db/SKDBTW_clean.bak; asks first)
@@ -54,12 +55,15 @@ python() {
   else echo python3; fi
 }
 
-# the settings as the emulator resolves them (emulator.ini, with the [2016] section's when version = 2016)
-cfg=$("$(python)" -m dcemu --get client.version services.auth services.area database.name database.password) ||
-  die "emulator.ini: the settings could not be read"
-{ read -r VERSION; read -r AUTH_PORT; read -r AREA_PORT; read -r DB_NAME; read -r DB_PASSWORD; } <<< "$cfg"
-AUTH_PORT=${AUTH_PORT%% *}
-AREA_PORT=${AREA_PORT%% *}
+read_config() {  # the settings as the emulator resolves them (emulator.ini, with the [2016] section's when version = 2016)
+  local cfg
+  cfg=$("$(python)" -m dcemu --get client.version services.auth services.area database.name database.password) ||
+    die "emulator.ini: the settings could not be read"
+  { read -r VERSION; read -r AUTH_PORT; read -r AREA_PORT; read -r DB_NAME; read -r DB_PASSWORD; } <<< "$cfg"
+  AUTH_PORT=${AUTH_PORT%% *}
+  AREA_PORT=${AREA_PORT%% *}
+}
+read_config
 
 sqlcmd() {      # SQL Server's sqlcmd inside the database container, as sa
   "$(engine)" exec dcemu2011_db /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$DB_PASSWORD" -b "$@"
@@ -112,8 +116,10 @@ after_emu_up() {    # in the background: once the area port listens, the agent c
   ( for _ in $(seq 60); do listening $AREA_PORT && break; sleep 1; done; restart_agent ) &
 }
 
-client_tables() {  # the tables that come from the client (not in git): asks for the client folder the first time
+client_tables() {  # the tables that come from the client (not in git): the first time asks which client version
+  # (2011 / 2016, written to emulator.ini) and the client folder; the version may have changed: read the settings again
   "$(python)" -m tools.client_setup "$@" || die "the client tables are missing (tools/client_setup.py)"
+  read_config
 }
 
 start_emu_bg() {
@@ -164,8 +170,8 @@ case "${1:-all}" in
   all)       start_db; start_emu_bg; start_client "${2:-us}" ;;
   server)    start_db; start_emu_bg ;;
   db)        start_db ;;
-  emu)       shift; listening $AUTH_PORT && die "port $AUTH_PORT is in use (./launch.sh status)"
-             client_tables; after_emu_up; exec "$(python)" -m dcemu "$@" ;;
+  emu)       shift; client_tables; listening $AUTH_PORT && die "port $AUTH_PORT is in use (./launch.sh status)"
+             after_emu_up; exec "$(python)" -m dcemu "$@" ;;
   emu-bg)    start_emu_bg ;;
   client)    start_client "${2:-us}" ;;
   restart-emu) stop_emu; start_emu_bg ;;
@@ -186,8 +192,8 @@ case "${1:-all}" in
   setup)
     [ -x .venv/bin/python ] || python3 -m venv .venv
     .venv/bin/pip install -q python-tds
-    client_tables --refresh
-    echo "setup done" ;;
+    client_tables --choose --refresh
+    echo "setup done (version $VERSION)" ;;
   init-db)
     read -r -p "This deletes the $DB_NAME database (all accounts and characters) and creates it again. Type YES: " a
     [ "$a" = YES ] || die "cancelled"
@@ -220,6 +226,6 @@ case "${1:-all}" in
     sqlcmd -Q "IF DB_ID(N'$DB_NAME') IS NOT NULL ALTER DATABASE [$DB_NAME] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; RESTORE DATABASE [$DB_NAME] FROM DISK='/var/opt/mssql/data/restore.bak' WITH REPLACE$move; ALTER DATABASE [$DB_NAME] SET MULTI_USER" >/dev/null
     "$(engine)" exec dcemu2011_db rm -f /var/opt/mssql/data/restore.bak
     echo "database restored (start the emulator: ./launch.sh server)" ;;
-  -h|--help|help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (./launch.sh help)" ;;
 esac

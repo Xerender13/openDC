@@ -42,6 +42,15 @@ has entries without a loose file (it would have dropped them). `port2016` and `s
 loose 2016 files: they no longer find them (their results are in git / client_backup already); to run them again,
 extract the files from the 2016 packs first.
 
+**First-launch version choice (user, same day):** `tools/client_setup.py` asks "1) 2011 / 2) 2016" when the tables of
+the configured version are missing (first start, in a terminal) or with `--choose` (`launch.sh setup` /
+`launch.bat setup`), and writes `[client] version` into the ini with only that line changed (`set_version`);
+`--version 2011|2016` sets it without asking. Then it asks for that client's folder as before. `launch.sh` reads the
+settings again after it (`read_config`), so ports / database / client follow the answer; `emu` now runs the setup
+before the port check. `launch.ps1` asks in PowerShell (`Choose-Version`), writes through the container
+(`client_setup --version`) and re-reads the ini (`Read-Config`). Script-tested: `--version`, `--choose` through a
+pty, test_version.test_first_launch_version_choice_rewrites_only_that_line; 154 tests pass. launch.ps1 not run.
+
 **Client zips** in `Drift City Project/Releases/` (next to the repository folder): `openDC Client US 2011.zip`, `openDC Client EU 2011.zip`, `openDC Client US
 2016.zip` (folders Client US / Client EU / DriftCity Dev Ed), without logs, dumps, `version.dll*` (the decomp
 proxy and its backups), `DriftCity2016Test.exe`, pc_spec.txt, play_record.r0, goption.ini.orig.
