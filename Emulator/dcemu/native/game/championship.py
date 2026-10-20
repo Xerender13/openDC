@@ -48,7 +48,8 @@ Messages (offsets from the message type; sizes are what the client's handlers re
         rank @+0x3f, (semi) points @+0x43, state @+0x47), the finals @0x196 and three round records of 0x19 from
         @0x1c8 *(their exact meaning is a guess: semi round 1 / 2, final)*.
   0xd4d TournamentRaceInfo (no body; the state button, opens the info window) -> 0xd4e (0x16; 0x52a680): @6 class,
-        @0xa round, @0xe map | map flag << 16, @0x12 0.
+        @0xa time (window +0x3e4, 0x591d34: the info window's top line counts down to it, 0x5919d0; was sent as the
+        round = 0, which left that line empty), @0xe map | map flag << 16, @0x12 0.
   0xd50 TournamentList (u32 class, stage, page) -> 0xd51 (0x14 + n x 0x5e; 0x52b9e0): u16 n @2, class @4, stage @8,
         pages @0xc, page @0x10; a row per player: u32 rank, wchar[21] name @4, wchar[13] crew @0x2e, u32 map @0x48,
         state @0x4c, stage @0x50, char group @0x54, u32 points @0x56, f32 record @0x5a.
@@ -57,10 +58,17 @@ Messages (offsets from the message type; sizes are what the client's handlers re
   0xd54 TournamentRewardList (u32 class) -> 0xd55 (0x20a): u32 class @2, u32 selected @6, wchar[16] x 16 lines.
   0xd52 TournamentSetReward (GM: class, reward id) -> 0xd53 (0xb): class @2, id @6, u8 ok @0xa (GM_Rewardset_*).
   0xd4f (GM map setting: u32 @2, u16 map @6, u32 map flag @0xa): the stages' track for every class (our choice).
+Tracks (*our choice*, user 2026-10-20: "rotate them randomly each week"): with [championship] rotate = 1 each
+  championship draws its five stages' tracks at random, all different, from [championship] pool (empty: the
+  PVPTrackInfo tracks with Support 1, a Recommend bit and no MissionBattle bit; track_pool); drawn once and kept until
+  it is over, so the info window shows the coming championship's track. rotate = 0: the fixed [championship] maps.
+  A GM's 0xd4f still wins for the running championship.
 State lives in memory: an emulator restart ends a running championship. GM: gmtour (gm_command).
 """
 import asyncio
 import math
+import os
+import random
 import struct
 import time
 
@@ -171,12 +179,60 @@ def minutes(name):
     return max(1, int(cfg()[name]))
 
 
+STAGES = (PRE, QF1, QF2, SEMI, FINAL)
+_pool = None
+_drawn = None
+
+
+def track_pool():
+    """[championship] pool, or (empty) the battle zone tracks of PVPTrackInfo.xlt with Support 1, a Recommend bit set
+    (a section recommends it) and no MissionBattle bit."""
+    global _pool
+    if cfg().get('pool'):
+        return cfg()['pool']
+    if _pool is None:
+        from ..data import read_xlt
+        _pool = []
+        try:
+            rows = read_xlt(os.path.join(context.data.root, 'Init', 'PVPTrackInfo.xlt'))
+            col = {name: rows[2].index(name) for name in ('Support', 'Id', 'Recommend', 'MissionBattle')}
+            for r in rows[3:]:
+                if len(r) <= max(col.values()) or not r[col['Id']].strip().isdigit():
+                    continue
+                bits = lambda name: r[col[name]].strip().strip('"')
+                if r[col['Support']].strip() == '1' and '1' in bits('Recommend') and '1' not in bits('MissionBattle'):
+                    _pool.append(int(r[col['Id']]))
+        except (OSError, ValueError):
+            pass
+    return _pool
+
+
+def drawn_maps():
+    """[championship] rotate: the stages' tracks of this (or the next) championship, drawn at random from the pool,
+    all different while the pool has enough; kept until the championship is over (finish), so the info window shows
+    the coming one's preliminaries track. None: the fixed [championship] maps."""
+    global _drawn
+    if not cfg().get('rotate'):
+        return None
+    if _drawn is None:
+        pool = track_pool()
+        if not pool:
+            return None
+        picks = random.sample(pool, len(STAGES)) if len(pool) >= len(STAGES) else random.choices(pool, k=len(STAGES))
+        _drawn = dict(zip(STAGES, picks))
+        log('tracks: ' + ', '.join(f'{STAGE_NAMES[k]} {v}' for k, v in _drawn.items()))
+    return _drawn
+
+
 def stage_map(stage):
     t = tour()
-    if stage in t.maps:
+    if stage in t.maps:                 # a GM's choice (0xd4f) for this championship
         return t.maps[stage]
+    drawn = drawn_maps()
+    if drawn:
+        return drawn[stage], cfg()['map_flag']
     maps = cfg()['maps']
-    return maps[min(len(maps) - 1, (PRE, QF1, QF2, SEMI, FINAL).index(stage))], cfg()['map_flag']
+    return maps[min(len(maps) - 1, STAGES.index(stage))], cfg()['map_flag']
 
 
 def log(text):
@@ -336,12 +392,22 @@ def list_frame(cls, stage, page, name=None):
                  + body)
 
 
+def info_time():
+    """0xd4e @0xa: what the info window's top line counts down to (0x5919d0: "%d day(s) / hour(s) left", "mm min ss
+    sec left"; nothing when it is not in the future, "Match in Progress" while a round runs): the preliminaries' start,
+    the running round's end, else the next scheduled championship (0: none)."""
+    t = tour()
+    if t.active:
+        return clock(t.round_end if t.round != IDLE else t.start)
+    return clock(next_start()) if cfg()['schedule'] else 0
+
+
 def race_info_frame(session):
     t = tour()
     stage = t.round if t.round in STAGE_NAMES else PRE
     map_id, flag = stage_map(stage)
-    return Frame(0xd4e, struct.pack('<IIIII', 1, viewing(session) or ROOKIE, t.round, (map_id & 0xffff) | (flag << 16),
-                                    0))
+    return Frame(0xd4e, struct.pack('<IIIII', 1, viewing(session) or ROOKIE, info_time(),
+                                    (map_id & 0xffff) | (flag << 16), 0))
 
 
 def reward_lines(cls):
@@ -892,6 +958,8 @@ async def finish():
     t.round = IDLE
     t.active = False
     t.round_end = time.time()
+    global _drawn
+    _drawn = None                       # the next championship draws its own tracks
     log('the GT Championship is over')
     notice_all(BEGUN, IDLE, time.time())
     refresh()
@@ -1008,12 +1076,14 @@ async def gm_command(session, args):
         if not t.active:
             nxt = next_start() if cfg()['schedule'] else 0
             return 'GT Championship: not running' + (
-                f'; next {time.strftime("%a %H:%M", time.localtime(nxt))}' if nxt else '')
+                f'; next {time.strftime("%a %H:%M", time.localtime(nxt))}' if nxt else '') + (
+                '; its tracks ' + ' '.join(str(stage_map(k)[0]) for k in STAGES))
         out = [f'round {t.round} ({STAGE_NAMES.get(t.round, "before the start")})',
                f'ends {time.strftime("%H:%M:%S", time.localtime(t.round_end if t.round else t.start))}']
         for c in t.classes.values():
             state = 'cancelled' if c.cancelled else 'finished' if c.finished else f'{len(c.entrants)} entrants'
             out.append(f'{CLASS_NAMES[c.id]}: {state}')
+        out.append('tracks ' + ' '.join(str(stage_map(k)[0]) for k in STAGES))
         return '; '.join(out)
     if w[0] == 'start':
         wait = float(w[1]) if len(w) > 1 else 1.0

@@ -28,7 +28,7 @@ group (UseItemClient column 3). A group's rows: Reward_Type NormalItem (inventor
 SkidItem (a drift item for Reward_Period days, 0 = for good; Instant ones act at once), Mito / Exp
 (Reward_Count), RewardGroup (that group, rolled), n/a (nothing: the scratch cards' "bust"); Probability
 100 = always given, the other rows are one weighted pick (the Mito table adds up to 100, the Natura card's
-prizes + a 95 bust). Not given: SkidItem_SetPeriod, Recycle.
+prizes + a 95 bust). Recycle: only the Item Recycling Kit's group (recycle). Not given: SkidItem_SetPeriod.
 Money reaches the client as 0x8a MoneyMessage (kind 1, i64 delta, i64 total), exp with the stats.
 """
 import random
@@ -90,7 +90,8 @@ def roll(group, depth=0):
         if kind == 'RewardGroup' and depth < 5:
             for _ in range(max(count, 1)):
                 out += roll(item, depth + 1)
-        elif kind in ('NormalItem', 'SkidItem', 'Mito', 'Exp', 'n/a'):     # n/a: nothing (a card's bust)
+        elif kind in ('NormalItem', 'SkidItem', 'Mito', 'Exp', 'n/a', 'Recycle'):  # n/a: nothing (a card's bust);
+            # Recycle: the recycled drift item again for Reward_Period days (recycle below; give() skips it)
             out.append((kind, item, period, count, etc))
     return out
 
@@ -397,6 +398,55 @@ async def visual_item_use(session, frame):
     send(session, Frame(0x2fa, struct.pack('<II', c.hancoin_inven, c.hancoin_garage)))
     send(session, vs_mod_list((v, USED)))
     gains.send(session, p)
+
+
+# ---- Item Recycling Kit (inventory item i_n_00114, kind item_recycle, group rw_item_recycle) -------------------
+# The drift inventory offers it on an expired drift item (confirmation box 0x2c8e47, 0x5f70a0) and sends
+# 0x4bf RecycleVSItem (u32 the drift item's InvenIdx, item +0x14) -> 0x4c0 RecycleVSItemAck (u32 its VisualItem id,
+# u32 1 = done; 0x517160: text 11295 "1 Recycling Kit has been used. Expired Drift Item %s has been thrown away."
+# with the item's name, 0x769c20; the client keeps the item: the server removes it, 0x4b2 state 2).
+# The kit is used, the item thrown away, and one roll of rw_item_recycle given: the same drift item for 1 / 3 / 5 days
+# (Reward_Type Recycle, 35 / 12 / 6), the 100k Mito drift item, 5 Mitron Enhancers or a part (*the rest of the flow is
+# ours*: the prize goes out like a gift box's, then text 11294 "By recycling %s, you've received %s.").
+@on(SVC, C2S, 0x4bf)
+async def recycle(session, frame):
+    from .items import REMOVED
+    from .vshop import vs_mod_list
+    p = session.state.get('player')
+    if not p or len(frame.payload) < 4:
+        return
+    inven, = struct.unpack_from('<I', frame.payload)
+    t = context.data
+    v = next((x for x in p.vsitems if x.inven_idx == inven and x.state != 4), None)
+    kit = next((i for i in p.items if t.item_info(i.table_idx).kind == 'item_recycle' and i.stack > 0), None)
+    vis = t.visuals.get(v.table_idx) if v else None
+    if not vis or active(v) or not kit:
+        why = 'no such item' if not vis else 'not expired' if active(v) else 'no Item Recycling Kit'
+        session.log.note(f'recycle refused: {why}')
+        return send(session, Frame(0x4c0, struct.pack('<II', v.table_idx if v else 0, 0)))
+    gains = Gains()
+    info = t.item_info(kit.table_idx)
+    gains.items.append(await take_one(p, kit))
+    await use_up(p, v)
+    send(session, vs_mod_list((v, REMOVED)))
+    won = roll(info.reward)
+    names = []
+    for kind, item, period, count, _ in won:
+        if kind == 'Recycle':
+            await give_drift_item(p, v.item_id, period, gains, session)
+            names.append(f'{vis.name} ({period} days)' if period else vis.name)
+    await give(session, p, [w for w in won if w[0] != 'Recycle'], gains)
+    for kind, item, _, count, _ in won:
+        if kind == 'NormalItem' and item in t.item_index:
+            names.append(t.item_info(t.item_index[item]).name + (f' x{count}' if count > 1 else ''))
+        elif kind == 'SkidItem' and item in t.visual_index:
+            names.append(t.visuals[t.visual_index[item]].name)
+    session.log.note(f'recycled {vis.item_id}: {won}')
+    gains.send(session, p)
+    send(session, Frame(0x4c0, struct.pack('<II', v.table_idx, 1)))
+    if names:
+        from .. import admin
+        admin.message(session, f"By recycling {vis.name}, you've received {', '.join(names)}.")
 
 
 async def open_gift_box(session, p, info):

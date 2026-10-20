@@ -120,6 +120,8 @@ class Context:
                   win_rate=30, lose_rate=10, test=False)
     # emulator.ini [undercity] (game/undercity.py): the test mode (one player alone, with the /ucm .. chat commands)
     undercity = dict(test=False, phase=1, beta_class=4, enhancer='i_n_00003', enhancers=(1, 1, 2, 3, 3))
+    # emulator.ini [pickem] (game/pickem.py): the spectators' Pick'em: EXP / Mito per medal unit, free entry
+    pickem = dict(enabled=True, free=False, exp=100, mito=1000)
     # emulator.ini [cbattle] (game/channels.py): the channels and their crews' battles. main / semi: (max level, min car
     # grade, max car grade), 0 = no limit; semi by Semi-channel number (from 1); eu_*: the EU clients' rules
     cbattle = dict(channels=13, day=-1, hour=-1, open_minutes=10, battle_minutes=60, coupon=True, defence_reward=5000,
@@ -132,7 +134,7 @@ class Context:
     # 0-6 or None for every day, hour, minute), local time; maps: the stages' tracks (PVPTrackInfo Id), prelim first;
     # rewards: (class, rank) -> (Mito, item id, count)
     championship = dict(enabled=True, schedule=[], pre=30, wait=3, main=8, final=10, min_players=8, min_players_ini=8,
-                        touring_a=361, touring_b=341, maps=[0, 1, 2, 3, 4], map_flag=0x04,
+                        touring_a=361, touring_b=341, maps=[0, 1, 2, 3, 4], map_flag=0x04, rotate=True, pool=[],
                         rewards={(7, 1): (100000, '', 1), (7, 2): (50000, '', 1), (7, 3): (30000, '', 1),
                                  (8, 1): (200000, '', 1), (8, 2): (100000, '', 1), (8, 3): (50000, '', 1),
                                  (9, 1): (300000, '', 1), (9, 2): (150000, '', 1), (9, 3): (80000, '', 1),

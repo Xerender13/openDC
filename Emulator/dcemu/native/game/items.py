@@ -793,7 +793,8 @@ async def use_item(session, frame):
     if info.kind in ('bacchus_f', 'bacchus_d'):
         send(session, bacchus_frame(p, 1 if info.kind == 'bacchus_f' else 2))
     send(session, mod_list((it, state)))
-    if info.kind in ('giftbox', 'giftbox_car', 'giftbox_lv') and info.reward:   # gift boxes, Gotcha car boxes: their RewardGroup
+    # gift boxes, Gotcha car boxes, Pick'em Slot Tickets (kind gacha, gacha_observe_v<N>: rw_gacha_ob_v<N>): their RewardGroup
+    if info.kind in ('giftbox', 'giftbox_car', 'giftbox_lv', 'gacha') and info.reward:
         from .driftuse import open_gift_box
         for _ in range(count):
             (await open_gift_box(session, p, info)).send(session, p)

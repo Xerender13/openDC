@@ -86,6 +86,85 @@ loaded, right before the 0x1ea (progress); 2016 unchanged (after the 0x1e7). Tes
 Emulator 2011/ and its server restarted (pid 56072). **User-confirmed: "All good now"** (AIs on the grid during
 the countdown).
 
+**GT Championship info window: empty top box (user screenshot 21:29:53, log Emulator 2011/logs/20261020-211449,
+`gmtour test` + `gmtour start` at 21:29:41):** the box of dialog 4080000 holds ID_TOUR_INFO_RACE_NAME / _DESC / _TIME
+(0x3e4186-8). NAME and DESC are only ever set to "" (0x592aca / 0x592ada); TIME is written by 0x5919d0 as a countdown
+to window +0x3e4 (GlobalText 11597 "%d day(s) left." / 11598 hours / 11599 "%02d min %02d sec left."; "" when not in
+the future) or 11600 "Match in Progress" when the PvP manager's vfunc 0x1c says so. +0x3e4 = 0xd4e @0xa (0x52a68b ->
+0x591cb0 -> 0x591d34): the time, not the round as our docstring said. We sent the round (0 before the preliminaries),
+so the line was empty. **Fix:** championship.info_time: the preliminaries' start, the running round's end, else the
+next scheduled championship (0 without a schedule). Test test_championship (2). Copied to Emulator 2011/, restarted
+(pid 62525; a restart ends a running championship). **Not yet confirmed in game.**
+
+**GT Championship schedule and track rotation (user, same day):** Emulator 2011/emulator.ini `[championship] schedule =
+sun 20:00` (user; the main Emulator/ ini keeps none). "Rotate them randomly each week": new `rotate = 1` (default) and
+`pool =` (empty: PVPTrackInfo Support 1 with a Recommend bit and no MissionBattle bit, 70 tracks in 2011):
+championship.drawn_maps draws the five stages' tracks at random, all different, once per championship (kept until
+finish(), so the info window shows the coming one's preliminaries track); a GM's 0xd4f still wins; `rotate = 0` = the
+fixed `maps`. gmtour status lists them. Tests RotationTest (3). 2011 server restarted (pid 64704). The user confirmed
+the info window countdown ("It works now"). Rotation **not yet seen in game.**
+
+**Pick'em (spectator gacha, "Display Gotcha"; user: "implement Pick'em", then "Build it anyway"):**
+- Ticket: VShopItem gacha_observe_01/10/30 (category 33) -> inventory item `gacha_observe` x1/10/30 (driftuse
+  AT_PURCHASE). The window (game.nui 1930000, ID_VIEWING_GACHA_*: 16 seat rows with select BG / check and
+  gold / silver / bronze symbols, a use-ticket prompt with a timer gauge, a race gauge with 50 % cars and a gate
+  icon, multiplier pictures x1..x10, help picture) is the spectator's. Prompt (0x7af4f0): only while the window's
+  init flag +0x69c = 0, the room has **more than 3 members** (0x529ec0: member list / 0xcc), race progress (0x7acb30)
+  below 50 % and the player holds an item named "gacha_observe" (0x8e15b0); without a ticket it starts free when
+  +0xa24 is set or content flag net+0x2b4 & 0x1000 with room flag & 0x200. Not in AI battles (text 11398).
+- C>S 0x834 ObsGachaInit (0x805c90: u32 @2, char[32] @6; YES button 0x1d7323) -> 0x835 (0x16; 0x52b0c0 ->
+  0x7ab420): i8[16] @6 per seat -> window +0x62c (1 gold, 2 silver, 3 bronze symbol by the seat's racer; 0 none),
+  multiplier = 1, then the client auto-picks the first 3 members with 0x836.
+- C>S 0x836 (u32 serial, u32 1 pick / 0 unpick; 0x7a6840, at most 3 picks at +0x620) -> S>C 0x836 (10; 0x7a68a0):
+  the same, applied.
+- C>S 0x837 ObsGachaUp (0x805d90; from 0x7acbb0 when the race's gate counter [+0x418c] changes): u32 @2 (window
+  [+0xa38]+0xa0), u32 @6 gate - 1, u32 n @0xa (3), n x (u16 serial, u16 seat + 1) @0xe -> S>C 0x838 (6; 0x7a6940):
+  u32 multiplier -> +0x6ac (shown as x1..x10, controls +0x534 + m * 4).
+- S>C 0x839 SelectState (u16 n @2, 3 x u32 picks @4; size n * 2 + 6; 0x7a6910).
+- S>C 0x83a ObsGachaResult (0x52cc70; size n * 8 + 0x2c): u32 n @2, u32 @6, u32 @0xa = the prize's inventory id
+  (GameData_FindItem 0x7178e0: the draw window shows rank picture gacha_observe_v1..v10 if the item's name is one),
+  i32 @0xe Mito gained (char vfunc 0x18 + the window), i64 @0x12 Mito total (char +0x46), u32 @0x1a EXP gained,
+  u16 @0x1e level (+0x38), @0x20 / 0x24 / 0x28 -> char +0x3a / +0x3e / +0x42 (EXP i64 + next), entries of 8 bytes
+  from @0x2c whose high word at +6 is a medal: the first three -> the draw window 3720000 (0x6bd930: three reels
+  stop on 0 bomb / 1 gold / 2 silver / 3 bronze, sorted; EXP / Mito numbers).
+- Prizes: RewardGroup rw_gacha_ob_v1 .. v10 (passive assists; each tier includes the previous) = the multiplier.
+- The prize: inventory item gacha_observe_v<N> "Slot Ticket Grade N" (kind gacha, its reward rw_gacha_ob_v<N>) -
+  what the draw window's rank pictures are named after. Used (0x1a1, kind 0x2b: nothing special on the client) it
+  now opens its group like a gift box (items.item_use).
+- **Implemented: game/pickem.py** (layouts and *our rules* in its docstring): 0x834 takes one `gacha_observe` and
+  answers 0x835 with the seats' symbols (racers by car grade, then level: weakest third gold, middle silver,
+  strongest bronze); 0x836 echoed for up to 3 picks of racers; 0x837 -> 0x838 multiplier +1 per gate where a pick is
+  among the first three passers (room.gates), max 10; at the race result (rooms.result -> pickem.on_result) each
+  spectator who played gets EXP / Mito per medal (pick's symbol if it finished top 3, else bomb; [pickem] exp 100 /
+  mito 1000 per unit, gold 3x, silver 2x, bronze 1x, times the multiplier), one Slot Ticket of the multiplier's grade
+  if any medal, and 0x83a. Only for the 2011 client, while the room loads or races, not with AI racers, more than 3
+  racers. A new race (room.gates replaced) drops old picks. New `[pickem]` section (enabled, exp, mito, free).
+  Tests test_pickem (3, stub sessions). **Not tried in game: it needs 4 human racers and a spectator.** Unknowns:
+  0x834 @2, 0x835 @2 (sent 0), 0x83a @6 (sent 0); the original server's odds and payouts.
+
+**Complete Bonus Reward (user screenshot: the room window's "< Complete Bonus Reward >", Bonus Stage stars, EXP 0 /
+MITO 0; "find and implement"):** client-drawn (room dialog 1000000 ID_PVP_WAIT16_STAR_*, bound in 0x5a6000, filled by
+0x59ec60 when [net+0x29c] & 0x30000000, i.e. ChannelNewbie / ChannelPro) from Init/Reward_ExpMito.xlt (15 rows, "US
+only": Bronze = Newbie section 11, Silver = Pro with the speed limit (map flag 0x4000), Gold = Pro without; star points
+1..15 by player count), loaded by 0x7894a0 into 0x955118. Stars = the row's place for the human racers (0x5b0330:
+members below serial 0x10000), none alone. Per lap (text 11963): EXP = players x 1.025 x section x points (0x788e70),
+Mito = points x players x 1.8 x section (0x789340); section 3 for Newbie, the Pro tier 4 / 6 / 8 / 16 (0x59ec60).
+The result entries' extra 8 bytes are not read for it (0x778980). **Implemented (rooms.complete_bonus, our choice
+for the payout):** a finisher gets the per-lap amounts x the track's LapCount on top of the result's EXP / Mito (US
+players only; not in Mission Battles). Example: Newbie, 8 players, 2 laps = 246 EXP + 432 Mito. Test
+test_complete_bonus. **Not yet confirmed in game** (needs 2+ human racers; alone the panel and the bonus are 0).
+
+**Item Recycling Kit (user: "implement item recycling kit functionality"):** inventory item i_n_00114 (kind
+item_recycle, group rw_item_recycle). The drift inventory offers it on an **expired** drift item (confirmation box
+0x2c8e47, 0x5f70a0) and sends C>S 0x4bf RecycleVSItem (u32 the item's InvenIdx, item +0x14) -> S>C 0x4c0
+RecycleVSItemAck (u32 VisualItem id, u32 1 = done; 0x517160 prints 11295 "1 Recycling Kit has been used. Expired Drift
+Item %s has been thrown away.", name by 0x769c20; the client does not remove the item itself). **Implemented
+(driftuse.recycle):** one kit used, the expired item removed (0x4b2 state 2), one roll of rw_item_recycle: Reward_Type
+Recycle = the same drift item again for 1 / 3 / 5 days (weights 35 / 12 / 6; driftuse.roll now keeps Recycle rows,
+give() skips them), else the 100k Mito item, 5 Mitron Enhancers or a part as a gift box gives them; then 0x4c0 and a
+message like text 11294 ("By recycling %s, you've received %s.", *ours*). Refused (0x4c0 result 0) for an item that
+has not expired or without a kit. Test test_recycle (3). **Not yet confirmed in game.**
+
 **Client zips** in `Drift City Project/Releases/` (next to the repository folder): `openDC Client US 2011.zip`, `openDC Client EU 2011.zip`, `openDC Client US
 2016.zip` (folders Client US / Client EU / DriftCity Dev Ed), without logs, dumps, `version.dll*` (the decomp
 proxy and its backups), `DriftCity2016Test.exe`, pc_spec.txt, play_record.r0, goption.ini.orig.

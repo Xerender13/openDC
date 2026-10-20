@@ -172,6 +172,13 @@ def native_setup(cp):
             if semis:
                 c[key + 'semi'] = semis
         c['channels'] = max(10, min(24, c['channels']))
+    if cp.has_section('pickem'):
+        pk = cp['pickem']
+        context.pickem['enabled'] = pk.get('enabled', '1').strip() not in ('0', 'no', 'off')
+        context.pickem['free'] = pk.get('free', '0').strip() in ('1', 'yes', 'on')
+        for k in ('exp', 'mito'):
+            if pk.get(k, '').strip():
+                context.pickem[k] = int(pk[k])
     if cp.has_section('championship'):
         ch, c = cp['championship'], context.championship
         c['enabled'] = ch.get('enabled', '1').strip() not in ('0', 'no', 'off')
@@ -183,6 +190,8 @@ def native_setup(cp):
             c['maps'] = [int(x) for x in ch['maps'].replace(',', ' ').split()] or c['maps']
         if ch.get('map_flag', '').strip():
             c['map_flag'] = int(ch['map_flag'], 0)
+        c['rotate'] = ch.get('rotate', '1').strip() not in ('0', 'no', 'off')
+        c['pool'] = [int(x) for x in ch.get('pool', '').replace(',', ' ').split()]
         days = {'sun': 0, 'mon': 1, 'tue': 2, 'wed': 3, 'thu': 4, 'fri': 5, 'sat': 6, '*': None}
         c['schedule'] = []
         for entry in ch.get('schedule', '').split(','):     # "sat 20:00, * 21:30"

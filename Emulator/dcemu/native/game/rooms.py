@@ -800,6 +800,72 @@ def section_rule(channel, room_type=0, x=None):
     return (eu and context.sections_eu.get(channel)) or context.sections.get(channel)
 
 
+# ---- complete bonus (the room window's "< Complete Bonus Reward >": "You can acquire Mito and EXP by completing each
+# Lap.", GlobalText 11963 / 12084 / 12085) -----------------------------------------------------------------------
+# The client draws it itself (0x59ec60, content flags ChannelNewbie / ChannelPro: [net+0x29c] & 0x30000000) from
+# Init/Reward_ExpMito.xlt (US only; loaded by 0x7894a0, object 0x955118): rows of star kind Bronze (Newbie, section
+# 11), Silver (Pro with the speed limit, map flag 0x4000) and Gold (Pro without), star points and the player-count
+# range (Newbie / Pro columns); the stars = the row's place in its kind (0x788fc0) for the human racers (members below
+# serial 0x10000, 0x5b0330), nothing alone. Per lap (0x788e70 / 0x789340): EXP = players x 1.025 x section x points,
+# Mito = points x players x 1.8 x section; section = 3 (Newbie) or the Pro tier 4 / 6 / 8 / 16 (else 1).
+# *Our choice* (the client shows the amounts, the server pays them): a finisher gets them x the track's LapCount on
+# top of the race result's EXP / Mito (US players; the EU client's table has no such rows).
+BONUS_KINDS = {'Bronze': 0, 'Sliver': 1, 'Silver': 1, 'Gold': 2}
+_bonus_rows = None
+_laps = None
+
+
+def bonus_rows():
+    """[(kind 0 bronze / 1 silver / 2 gold, points, newbie min, max, pro min, max)] of Reward_ExpMito.xlt."""
+    global _bonus_rows
+    if _bonus_rows is None:
+        from ..data import read_xlt
+        _bonus_rows = []
+        try:
+            for r in read_xlt(os.path.join(context.data.root, 'Init', 'Reward_ExpMito.xlt'))[3:]:
+                if len(r) > 7 and r[1].strip() in BONUS_KINDS and r[3].strip().isdigit():
+                    _bonus_rows.append((BONUS_KINDS[r[1].strip()], *(int(x) for x in r[3:8])))
+        except (OSError, ValueError):
+            pass
+    return _bonus_rows
+
+
+def lap_count(map_id):
+    """PVPTrackInfo.xlt LapCount of a track (the first row of its Id)."""
+    global _laps
+    if _laps is None:
+        from ..data import read_xlt
+        _laps = {}
+        try:
+            rows = read_xlt(os.path.join(context.data.root, 'Init', 'PVPTrackInfo.xlt'))
+            c_id, c_laps = rows[2].index('Id'), rows[2].index('LapCount')
+            for r in rows[3:]:
+                if len(r) > c_laps and r[c_id].strip().isdigit() and r[c_laps].strip().isdigit():
+                    _laps.setdefault(int(r[c_id]), int(r[c_laps]))
+        except (OSError, ValueError):
+            pass
+    return _laps.get(map_id, 1)
+
+
+def complete_bonus(channel, room_type, map_flag, players):
+    """(EXP, Mito) per lap, as the room window shows them (0x59ec60), or (0, 0)."""
+    if channel == 11:
+        kind, section = 0, 3
+    elif channel == PRO_CHANNEL:
+        kind = 1 if map_flag & 0x4000 else 2
+        section = next((m for bit, m in ((0x20000, 4), (0x40000, 6), (0x80000, 8), (0x100000, 16))
+                        if room_type & bit), 1)
+    else:
+        return 0, 0
+    if players <= 1:
+        return 0, 0
+    for k, points, nmin, nmax, pmin, pmax in bonus_rows():
+        low, high = (nmin, nmax) if kind == 0 else (pmin, pmax)
+        if k == kind and high and low <= players <= high:
+            return int(players * 1.025 * section * points + 0.5), int(points * players * 1.8 * section + 0.5)
+    return 0, 0
+
+
 def car_allowed(session, channel, room_type=0):
     """The section's rules (emulator.ini [battlezone]: the grade of the car driven, V1-V9, and optional
     level limits, none by default; Pro rooms: their tier's). The 2008 server had no such check on its side. -> True, or False after telling the player."""
@@ -1695,6 +1761,13 @@ async def result(room):
         from .licenses import CITY_SUFFIX, city_of_track, count_many
         city = city_of_track(room.map_id)
         exp, money = play_bonus(p, exp, money, 'battle_team' if team_room(room.type) else 'battle_personal', city)
+        from .. import nation
+        if end_type == FINISHED and not nation.is_eu(m.session):      # the complete bonus, per lap (see above)
+            bonus = complete_bonus(room.channel, room.type, room.map_flag, len(room.racers))
+            laps = lap_count(room.map_id)
+            if bonus != (0, 0):
+                exp, money = exp + bonus[0] * laps, money + bonus[1] * laps
+                m.session.log.note(f'complete bonus: {laps} laps x {bonus} (EXP, Mito), {len(room.racers)} players')
         if room.type & MISSION_ROOM:            # a Mission Battle pays as its instant mission (instant.py)
             exp = money = 0
         exp += await battle_exp_item(m.session, p, exp)
@@ -1735,6 +1808,8 @@ async def result(room):
     room.cast(room.master_frame(), result_frame, *([ready_frame(host)] if host else []), *map(ready_frame, room.ais))
     for s in room.observers:                    # BS_OBSRoom::SetResult
         send(s, result_frame)
+    from .pickem import on_result               # spectators' Pick'em draws (after the result they see)
+    await on_result(room)
     lists_changed(room.channel)
     hook = getattr(room, 'on_result', None)     # a channel battle round (channels.race_result)
     if hook:
