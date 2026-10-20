@@ -7,8 +7,9 @@ The client recognizes a training car by the short at XiStrCarUnit+0x12 == 3 (201
 0x5d3: four u32 (result, elapsed, returned car ID, reserve), permanent Car record,
        i32 Mito award, i64 total Mito. Size including type: 0x4f / 0x50.
 Client handlers 2011 0x519510 / 2016 0x52ccb0 add/select the new car then remove the
-returned one. They drive the field handoff locally; the next FirstPosition starts
-Director Green's existing intro (state 0). No speculative training cash award.
+returned one. 2011: the next FirstPosition starts Director Green's existing intro (state 0).
+2016: the client stays in the Driver Dome (no FirstPosition follows): the character is saved
+there (state 3) and the license system starts (licenses.start). No speculative training cash award.
 """
 import struct
 
@@ -85,5 +86,19 @@ async def complete(session, frame):
     from .login import send, stat_frames
     keys = await link_keys(p)
     send(session, *([mod_list(*[(key, NEW) for key in keys])] if keys else []), *stat_frames(p))
+    from ..version import is_2016
+    if is_2016():
+        # The 2016 client stays in the Driver Dome after 0x5d3 (no FirstPosition follows: logs/2016 20261020-074157,
+        # -114415): the tutorial ends here. State 0 left the licenses off (they start on leaving the gate, which
+        # never came) and sent a relogin into the old gate tutorial (user, 2026-10-20). Driver Dome (3), saved; then
+        # the license system as on leaving the gate.
+        from .position import DRIVER_DOME, save
+        c.pos_state = DRIVER_DOME
+        await save(c)
+        session.log.note(f'apprentice complete: {c.name!r}, elapsed {elapsed}, training {old.car_id}'
+                         f' -> starter {car.car_id} (type {car_type}); Driver Dome, licenses start')
+        from . import licenses
+        await licenses.start(session, p)
+        return
     session.log.note(f'apprentice complete: {c.name!r}, elapsed {elapsed}, training {old.car_id}'
                      f' -> starter {car.car_id} (type {car_type}); field introduction next')

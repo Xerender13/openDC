@@ -8,6 +8,749 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 39 (2026-10-20): one emulator.ini for both builds, a local 2011 copy, client zips
+
+**User:** one emulator.ini for both versions with a section for the 2016 settings (no switching on the fly); a second
+emulator copy for local 2011 play (not on GitHub); clean up; zip the 2011 US / EU and the 2016 US clients; push.
+
+**Config:** `server_data_2016/emulator.ini` (and its `test_serverlist.txt`) is gone. `emulator.ini` `[client] version`
+picks the build (**2016** in the repository, the user's choice); with 2016, `dcemu/__main__.py` `apply_2016` copies each
+`section.key = value` of the new `[2016]` section over that setting (first dot splits: `flags.Main.PasserBy`).
+`[2016]` holds what the old file changed: logs/2016, control 11199, services on 111xx, server list
+`server_data_2016/serverlist.txt`, database SKDB2016TEST / server id 2016, gotcha season 60 (needed: the shared
+`[gotcha] season = 13` would otherwise win over the 2016 default), drift-item auctions, Main.PasserBy. `listen` is now
+0.0.0.0 for 2016 too (was 127.0.0.1). Environment DCEMU_DB_* still wins. `python -m dcemu --get section.key ...`
+prints resolved settings; `launch.sh` reads version, auth/area port, database name and password with it (status
+shows them), starts `../DriftCity Dev Ed/DriftCityLauncher2016` for 2016, and init-db / backup-db / restore-db use
+`[database] name` (setup-db.sh takes DB_NAME; restore maps the backup's logical files by RESTORE FILELISTONLY).
+`start_db` starts the existing dcemu2011_db container directly (both copies share it), compose only creates it.
+`launch.ps1` parses emulator.ini itself (same [2016] rule) for the port, database and client folder;
+docker-compose.yml also publishes 111xx. Scripted-test ports moved 111xx -> **112xx** (`tools/test_ports.ini`,
+`tools/client.py` TEST_PORTS), since 111xx is the 2016 server now. `prepare2016` writes `serverlist.txt`.
+Test test_version.test_2016_section_replaces_settings_only_for_2016. **153 tests pass.**
+
+**2011 copy:** `../Emulator 2011/` (local only: `.git/info/exclude`): Emulator/ without logs, server_data_2016 and
+client_backup (a symlink to `../Emulator/client_backup`), `version = 2011`, its own .venv / pid file / logs. It is a
+snapshot: later fixes in Emulator/ must be copied over (e.g. `rsync -a --exclude logs/ --exclude client_backup
+--exclude server_data_2016/ --exclude emulator.ini --exclude .emulator.pid Emulator/ "Emulator 2011/"`).
+Both started side by side and checked: 2011 copy pid 10710 (110xx, SKDBTW), main 2016 pid 10826 (111xx,
+SKDB2016TEST, log logs/2016/20261020-200502.msgs.txt). launch.ps1 not run (no PowerShell here).
+
+**Cleanup (user-approved):** deleted `../DriftCity Dev Ed (loose)` (4.5 GB, the copies `pack_client clean` moved out:
+the packs are the only copy now) and 341 emulator logs older than 3 days. `pack_client pack` now refuses a pack that
+has entries without a loose file (it would have dropped them). `port2016` and `semi_tooltips` (2016 bubble) read
+loose 2016 files: they no longer find them (their results are in git / client_backup already); to run them again,
+extract the files from the 2016 packs first.
+
+**Client zips** in `Drift City Project/Releases/` (next to the repository folder): `openDC Client US 2011.zip`, `openDC Client EU 2011.zip`, `openDC Client US
+2016.zip` (folders Client US / Client EU / DriftCity Dev Ed), without logs, dumps, `version.dll*` (the decomp
+proxy and its backups), `DriftCity2016Test.exe`, pc_spec.txt, play_record.r0, goption.ini.orig.
+
+## Session 38 (2026-10-20): 2016 parts shop refused every purchase
+
+**User:** the parts shop doesn't let me buy parts (suspected a packet mismatch). Scope 2016 only.
+
+**Observed:** logs/2016/20261020-102056.msgs.txt 11:00:57: 0x195 `00000000 01000000 ffffffff` -> error 20024
+(NotFoundItem, shown as "Cannot find a Delivery Service request"). Not a wire mismatch: 2016 sender 0x852f30 writes
+the same layout as 2011 (TableIdx @2, count @6, -1 @0xa); shop dialog 0x5f4fa0 stores item record +0x3fc (2016
+TableIdx; 2011 +0x2fc) at window +0x1bc, callback 0x5f4d60 sends it. TableIdx 0 = i_s_000001 "Small" (250 Mito),
+a real shop part. 0x196 handler 0x521af0 reads TableIdx @2, count @6, price @0xa (unchanged).
+
+**Cause:** 2016 ItemClient.tdf column 15 no longer holds True/False: the 20 rows 2011 had as True are '1F', the
+Neo weapons/armour 'B1F' (the shop floor), others 'False'. data.item_info read `r[15] == 'True'`, so no 2016 part
+was sold. **Fix:** data.SHOP_MARKS = True / 1F / B1F. 2011 check (user asked): server_data/tables/ItemClient.tdf
+column 15 has only True (20) / False (729); all 749 rows give the same shop flag as before, so 2011 is unchanged.
+Test test_items2016.test_parts_shop_sells_the_floor_marked_parts (buy of TableIdx 0 -> 0x196 (0, 1, 250) + 0x192).
+127 tests pass. 2016 emulator restarted: PID 100911 stopped, new PID **118254** (tools/test2016.ini),
+log logs/2016/20261020-110533.msgs.txt. **Not yet confirmed in game.**
+
+**Buying confirmed in game by the user** (log 20261020-110533, 11:06:35: i_s_000001 for 250 Mito).
+
+**Empty Modify / Combine / Convert tabs (user screenshot, 2016 parts shop):** no traffic on clicking them. Tab switch
+0x68e520 (from tab handler 0x68f2e0) shows [[shop+0x9d8]+0xc] / [[shop+0xab4]+0xc] / [[shop+0xafc]+0xc]; the live client
+(PID 115334, shop = [[[0x9d10d0]+0x158]+0x338]) had them on dialogs 1270000 / 1300000 / 1320000, whose controls are
+all bare `<INFO TYPE EC />` in the Dev Ed game.nui. The Origin client's game.nui
+(/home/deck/Drift City Origin/Client/Data/GameUI/game.nui, read only) has the same four bare dialogs, so they are not
+the missing content. Selector 0x68e890: flags +0xc bit 28 = **Main.NewItemUpgradeUI** -> Modify = 1280000
+(UPGRADECH, if GlobalContent UseUpgradeChanceTime = 1: it is), Combine and Convert = the new sub-panels (shop+0xad8 /
++0xb10; 1330000 Convert); without it Combine uses flags +8 bit 12 (Main.OptionItem) for 1350000, else 1300000.
+Fix: login.content_flags sets Main.NewItemUpgradeUI = 1 for 2016 only (the 2011 flag table has no such flag;
+test_version checks 2016 bit 28 and identical 2011 GameSetting bytes). The new panels send the same 0x19d / 0x1ae /
+0x1aa / 0x1ac / 0x1b3 / 0x20b as before (callers 0x6921d5, 0x692735, 0x6945eb, 0x68c332, 0x68dbd9, 0x692789); 0xfb8
+(sender 0x853a60, from 0x6927ce: [shop+0xa0e] set and a use kind 0x69 item held) has no handler yet. 128 tests pass.
+2016 emulator restarted: PID **122531**, log logs/2016/20261020-111318.msgs.txt. **Not yet confirmed in game**
+(needs a fresh login; flags are sent at login).
+
+**Tabs confirmed working by the user.** Buying Converting Solution Type A then failed (log 20261020-111318, 11:14:05:
+0x195 TableIdx 0x715 = i_n_00040, count 99 -> 20024): UseItemClient column 13 has the same floor marks (25 '1F',
+5 'B1F': solutions, fuel, repair kits, seeds, Lv Down 40/60/70, Neo capsules ...). data.item_info now uses SHOP_MARKS
+for usable items too; 2011 UseItemClient has only True/False, all 1330 rows unchanged. 128 tests pass. Restarted:
+PID **123457**, log logs/2016/20261020-111529.msgs.txt. **Not yet confirmed in game.**
+
+**Auction drift tab broke the window (user screenshot 11:15):** cause = session 36's own layout: the drift list
+widened to 755 px (what the 2016 rows need) inside the 700 px frame, over the NPC; text headers with C1_1 FFFFFFFF
+(opaque white fill) and a label without colours = white boxes. The Origin client's game.nui (read only) has the
+complete drift design for dialog 1360000: an 817 px frame (pieces 3,771~820,905 / 3,908~820,980 of
+ui_contents28.dds, which the 2016 uitex.agt lacks), positions for every control, named controls 1360030..38 /
+1360057 ID_AUCTION_CHK_VSITEM / 1360058 TEXT_VSITEM / 1360059 OPTION_SEARCHTEXT. 2016 exe facts: 0x5f6dd0 mode 2
+(drift) shows 1360031..38 (0x5f6d20; 1360030 always hidden) and hides only the five normal headers
+[+0xc8..+0xd8] (1360012..16): Level 1360010/11 stays; drift search 0x5f7188 sends 1360021 text first, 1360059
+second (Origin: "Option Name"); sorts 1360032 = listing days (14/15), 1360033 = lifetime (16/17), unlike Origin's
+pictures ("Option", a Korean term), so those are not used. **tools/shop2016.py** now: copies Origin's two frame
+pieces into tex\E.ntx of the 2016 uitex.agt (both clients keep ui_contents28 there; header 20..31 kept; backup
+client_backup/shop2016/2016_uitex.agt.before) and rewrites dialog 1360000 from the 2016 original: Origin positions
+and sizes, Origin frame pictures, Origin's 1360057..59; 2016 pictures elsewhere; the NPC keeps its own crop; normal
+headers at 2016's own offsets from the list (x 227); drift headers as transparent text labels (C1_* FFFFFF, Origin
+header colour FFC68200) at the 2016 renderer columns. Same output from the original or the session 36 file; the
+rest of game.nui unchanged; second run changes nothing; Origin files checked unchanged (sha256). tools/agt.py:
+ORIGIN_KEY + key parameters + entry-header bounds checks (a wrong key raises instead of huge allocations).
+Server: 2016 drift search matches the first box against item name or seller, the option box against the name
+(no option data known). 129 tests pass. Restarted: PID **127741**, log logs/2016/20261020-112510.msgs.txt.
+Preview rendered from the real pieces (scratchpad); **not yet seen in game: needs a full 2016 client restart.**
+
+**Auction layout confirmed working by the user.**
+
+**Part Option Extractor (user request; game/extractor.py, docstring = layouts):** drift packs category 33
+(i_d_assist_transfer / _10 / _25 -> "i_n_assist_transfer N", already given at purchase). Client 0x6355b0 (use the
+extractor on a part): refuses an expired extractor (0x785200, text 10795), a part on a car (12811), parts 0x62e980
+does not take (client types 1-4; 6-10 with Main.OptionItem; 12812); confirm 12809 (KR: move the part's
+변형옵션 = converting options to the extractor) for use code 0x6b atransfer (0x62d7c0), 12810 for the used one;
+callback 0x62dca0 -> sender 0x86b6e0: **0xfc1** (u32 part @2, u32 extractor @6, u8 fresh @0xa); handler 0x52d5f0:
+**0xfc2** u16 result (0 silent, 1 -> 12812, 2/3 -> 12811, 13 -> 10795). Server: extract = the part's ASSIST_A/B
+(convert.py) onto a new i_n_assist_transfer_used (UseItemClient column 4; sent in its assist slots, keeps the fresh
+one's expiry; 720 h period), part cleared and tradeable, one extractor used; apply = the used extractor's options
+replace the part's (convert binding: tiers 1-4 untradeable), extractor deleted; 0xfc2 then 0x192. Main.
+AssistTransferBelongLevel: no client read found; unused. 2016 only. tests/test_extractor2016.py (2): 131 tests
+pass. Restarted: PID **138194**, log logs/2016/20261020-113408.msgs.txt. **Not yet confirmed in game.**
+
+**Extractor confirmed working by the user.**
+
+**2016 battle zone rooms (user screenshot 11:36: a Newbie room created with an empty map; picking a map by hand
+works; member name shown as "nder"):** log 20261020-113408 11:36:26: 0x1cc logged as map 128, flags 0, capacity 1
+("after: 0x50080008"); every 2011 room had map 0. Cause: 2016 UserInfo and XiCarAttr are 16 bytes (2011: 12), so
+every room message carrying them moves. Measured in the 2016 exe: 0x1cc sender 0x84a44f (UserInfo @2, room type
+@0x12, map @0x16, capacity @0x18, map flag @0x1a, name @0x24, password @0x60, XiCarAttr @0x9c; size 0xac vs 0xa4);
+0x1be handler 0x543040: members @0xf4, stride 0x47 (2011 0x3f), name at +0x27; join senders: 0x1d4 / 0x1d7 0x18c
+(0x184), 0x1bc 0x1c2 (0x1ba), 0x1bb 0x106 (0xfe), 0x1bd 0x10a (0x102), 0x370 0x16 (0x12); PlayerInfo stays 0xd8.
+0x1cd / 0x1d3 handlers read 4 bytes later (UserInfo). 0x1c7 (Real Match car) part entries 0x50 (2011 0x4c;
+handler 0x541290). 0x1ec entries 0x48 already right (pack_exp). 0x1d0 list, 0x1d5 / 0x1d6 / 0x1e7 / 0x1eb / 0x26e /
+0x271 unchanged. Fix (rooms.py): user_info_size() / car_attr_size() (16 for 2016), JOIN / DIRECT / CREATE offset
+tables per year, members / AI / car_attr_of padded to the sizes, channels.py 0x370 / 0x376 the same. 2011 values
+unchanged (test). tests/test_rooms2016.py (3; the user's RoomCreate rebuilt: type 0x80, map 0, 8 seats, 0x5008,
+member record 0x47 with the name at +0x27). 134 tests pass. Restarted: PID **156434**, log
+logs/2016/20261020-114415.msgs.txt. **Not yet confirmed in game.** The 2016 XiCarAttr's trailing u32 is unknown
+(1 in the client's 0x1cc, 0 in its moves); server-made records send 0. Still open: area 0x21d moves are 116 bytes
+in 2016 (2011 100: "unknown or cut command 0x0000 at 100 of 116"); relays to other players use the 2011 size.
+
+**2016 race moves (user: two players raced, the other car drawn broken):** log 20261020-114415: every 0x21d logged
+"unknown or cut command ... at 100 of 116". 2016 0x21d = 0x6e with type: XiCarMove 0x3a @2 (XiCarAttr @4, 16 bytes;
+position @0x18; copy 0x548450) + XiCarState 0x32 @0x3c (builder caller 0x86516e, 12 dwords + word); the frame's
+remaining 6 bytes were a 0x239. S>C sizes from the 2016 handlers' returns (2011 in brackets): 0x221 0x74 (0x6a),
+0x222 0x7c (0x78), 0x224 0x42 (0x3e), 0x225 0x8e (0x84), 0x23e 0x3c (0x38), 0x21f 0x76 / 0x80 (0x6c); 0x223 / 0x220 /
+0x2d0 / 0x21e / 0x2bd / 0x2c2 unchanged. Client senders: 0x21d 0x6e, 0x225 0x8e, 0x21f 0x76, 0x212 0x1da. Fix
+(area.py): size_of() / carmove_size() / pos() with the 2016 values; relays stay "as sent + 6", 0x226 / 0x23e
+slices 0x3a. Test Area2016Test with the user's real frame. 0x212 GhostStart's 2016 contents (bigger stats) are not
+handled yet (channels.py ghosts). **Not yet confirmed in game.**
+
+**New player: no licenses after the 2016 tutorial, and the old gate tutorial after a reconnect (user):** log
+20261020-114415: apprentice complete 11:56:03 -> pos_state 0 ("field introduction next"); the 2016 client stayed in the
+Driver Dome (no 0x30e / 0x310 / 0x314 followed; the same in 20261020-074157), so licenses.start (on leaving the gate)
+never ran, and the relogin at 12:01 found state 0 = Director Green's gate tutorial. Fix (apprentice.complete, 2016
+only): state DRIVER_DOME (3), saved, then licenses.start (flags without TUTORIAL_FLAGS, check, 0x32c / 0x32e / 0x330,
+monthly pay). 2011 keeps state 0 + field intro (no 2011 completion log to compare). Test in test_apprentice.
+Newbie's row (state 0, now in the gate tutorial) not edited: leaving the gate to the city starts its licenses.
+136 tests pass. Restarted: PID **164082**, log logs/2016/20261020-120303.msgs.txt. **Not yet confirmed in game.**
+
+**Pedestrians again (user: "enabled yesterday for the other PC"):** Main.PasserBy = 1 was only in
+server_data_2016/emulator.ini; the running instance is started with -c tools/test2016.ini, which is the only file read
+(dcemu/__main__.load_config), and it had no [flags]: every 2016 GameSetting today had flags+8 bit 23 = 0. Added
+[flags] Main.PasserBy = 1 to tools/test2016.ini (GameSetting bit checked = 1). The other [flags] of that profile
+(ManufacturingSystem, City.Taipei, FloorB1, FrontAi) are still not in test2016.ini: not changed without asking.
+goption.ini ShowPassenger=true. Restarted: PID **164528**, log logs/2016/20261020-120409.msgs.txt. **Pedestrians
+not yet seen in game.**
+
+**One 2016 config (user: "move all the test2016 stuff to emulator.ini"; chose the 2016 profile):** every value of
+tools/test2016.ini was already in server_data_2016/emulator.ini (same ports, database, logs, [auction] drift_items,
+Main.PasserBy); tools/test2016.ini deleted; the 2016 server now runs with `-c server_data_2016/emulator.ini`
+(header comment added). Effect: the 2016 instance now also gets the rest of that profile (a copy of the main
+emulator.ini): its [flags] Main.ManufacturingSystem = 1, City.Taipei = 1, BattleZone.FrontAi = 0, OMDBase.FloorB1 = 0,
+and the main sections ([battlezone], [items], [gotcha], [traffic] ...) instead of code defaults. README, Launcher
+comments (common.go, client2016.go; comments only, no rebuild) and HANDOVER updated. Emulator/emulator.ini (2011)
+untouched. Restarted: PID **165567**, log logs/2016/20261020-120631.msgs.txt; 136 tests pass.
+
+**2016 message sweep (user: another player's info fetch mismatched; check other changed packets):** method: every
+registered S>C handler of both exes (`push handler; push type; mov ecx,esi|edi; call`) with the sizes it returns
+(`mov ax, N` / count x stride + head), and every C>S sender's allocation (the push before 0x807450 / 0x86c800);
+compared with what the server sends (sizes from today's 2016 logs) and parses. Many "differences" were noise
+(dynamic sizes, internal object offsets): 0x1c3, 0xf3, 0x122, 0x45b, 0xe75, 0x341, 0xb5 identical in both.
+Fixed (2016 only; 2011 output unchanged):
+- **0x295 GameCharInfoAck** (F2 profile; handler 0x529160): 0x499 with type: char 0x141 @2, car 0x32 @0x143, stats 0x70
+  @0x175, XiStrTeamInfo **664** @0x1e5, serial @0x47d, location @0x489 / @0x48f, u32 @0x495 (was the 2011 877).
+  The user's 0x294 at 12:06:49 had an empty name: the client did not know the player yet (its own 0x321 came 3 s
+  later), not a 0x329 problem: 0x329 / 0x322 records are 0xd8 in both. 2016 0x294 is 0x30 (+ u32 @0x2c, unused).
+- **XiStrTeamInfo 664** (2016; 0x349 handler 0x5462e0 copies 0xa6 dwords; 0x34a sender 0x29a): crews.team_info_size();
+  the 2011 fields keep their offsets (client copy at char +0x1acc read at the same relative places; 2016 adds from
+  +0x178). 0x34b / 0x34d / 0x356 / 0x34f / 0x35b follow; 0x349 + two u32 (@0x2aa / @0x2ae, 0); 0x34a parse sized.
+- **0x297** GameCharInfoEx: 0x1fd (2016 records, the 24-byte tail @0x1e5). **0x2f9** party bonus 44 (was 40).
+- **0x19e / 0x1af / 0x1ab** (enhance / Booster / convert acks): + one u32 at the end (0x19e's goes to the result
+  display 0x795580; meaning unknown, 0). **0xfa1**: 0x9a6 (two 0xd0 records, -1 @0xd2, u32 @0x1aa, 0x7f8 block).
+- **0x358** crew member entries 0x50 (XiCarAttr 16). **0x371** CBattleRoomJoin: UserInfo 16 + XiCarAttr 16, channel @0x20.
+- **Ghosts**: 0x213 answers the first 0x1d4 bytes (handler size 0x1d6; block places inferred from the 2011 rule, the
+  ack handler only shows the size), 0x217 0x34 (0x36).
+Checked and already right: 0x56 / 0x5a / 0x62 / 0x6d / 0x169 (records), 0x10b / 0x146 / 0x3e5 / 0x3ea / 0x52c / 0x7d1 /
+0xc26 / 0xb8 (pack_exp), 0x425, 0x5d3, 0x2f8, 0x221 / 0x23e / 0x226; requests 0xb7 / 0xbb / 0x1dc / 0x26f (fields
+@2 / @6 / @0xa kept, + @0xe) / 0x52c / 0xe78 (2016 fields after the name already read).
+Not done: channel-battle stake entries (XiCBattleItemInfo 0x88 -> 0x8c in 0x35d / 0x38d / 0x391 / 0x392 / 0x388; where
+2016 inserts the dword is not established; [cbattle] major_stakes = 0). tests/test_info2016.py (3). 139 tests pass.
+Restarted: PID **172448**, log logs/2016/20261020-121910.msgs.txt. **Not yet confirmed in game.**
+
+**Perfect Base (user: do parts drop with different base stats? implement PB for 2011 and 2016):** 2008 server
+(ZoneServer.exe + ZoneServer.syms): XiCsCharInfo::TakeItem 0x5d6340 (and RewardItems 0x5d3028) call
+**ItemRandValue 0x5c7bb0**: types 6-10 (option parts) -> 0; else random = item +0x130 + rand() % (item +0x134 -
++0x130 + 1), i.e. uniform over [lo, hi] both included; then (parts with item +0x144 != 0) one or two random assists
+from the item's assist groups (+0x2d4 list, weights = assist +0x48): **the random drop options are not implemented**.
+XiItemTable::LoadFile 0x65b540 reads kind, -, id, group, name, grade, level, value, then lo / hi = ItemServer.tdf
+columns 8 / 9 = ItemClient.tdf columns 10 / 11 (same values; Small 0 / 2, Middle / Big 0 / 3, 2016 some 10 / 15),
+then the assist count (col 12: 1 / 2) and groups (col 13 "ab", "abc"). TakeItem is the path of nearly every gain
+(PickUpItem / PickUpChaseItem drops, quest / job / instant / Undercity rewards, Cmd_BuyVisualItem drift packs, web
+items); BuyItem 0x5d64c0 passes 0 (shop parts at the table value); CombiItem uses ItemRandValuePlus. The client and
+player.stats already add NRANDOM (@0xc) to the table value. Implemented (both versions): items.roll_base (parts
+types 0-3 only; docking items keep NRANDOM for purple points), new_item rolls when no value is given; the parts shop
+passes 0; gmitem gives the perfect base (the top); mail / auction / combine keep their own values. emulator.ini
+(both profiles) [items] random_base = 1 (0 = table values). ItemInfo.base_range. tests/test_perfect_base.py (2:
+range {0,1,2} for Small in 2011 and 2016, shop 0). 141 tests pass. 2016 restarted: PID **175267**, log
+logs/2016/20261020-122536.msgs.txt; the 2011 server was not running (gets it on its next start). Existing items keep
+their stored NRANDOM. **Not yet confirmed in game.**
+
+**Real Match car window, 2016 (user screenshot: top box empty):** dialog 1160000 (ID_PVP_RMCARINFO_*); open
+0x5e3c20 hides the static EMBLEM 1160003 / MARK 1160004 and each frame (event 0x2001 of 1160053) draws the car-name
+model list [[root +0x158] +0x1c4] (404 children named by VehicleList old file names, e.g. sp07_02_a, pc_0427s) at
+their places: 0x57d960 shows the child whose "%s.nif" equals the car record's old file name (record +0xc0; map
+[root +0x124] +0x1dc by car type, 0x4d6c20). The car type = [root +0x168] +0xa0 (vtable 0x96f178; getter vcall 0x1c
+0x7cf520, setter vcall 0x18 0x7cf510). Read live from the user's client (PID 159077, ptrace): **0** -> no record, no
+model. Setters: 0x1b9 handler 0x53fb00 branch 0x53fefe (while @0x12 Real Match open) **@0x1a** (2011 0x52a447: a
+flag there), and 0x1c8 notice type 4 (sets **157**, Ferrari F2003-GA "F03-MS": apparently the official 2016 Real
+Match car; type 5 re-sets the same). The server sent section_tail's 0 @0x1a. Fix: rooms.section_frame sends
+context.realmatch_car's type @0x1a for 2016 while open (2011 unchanged). Data checked: the 0x1c7 layout (stats @2,
+bonuses @0x72 / @0x9e, 56 unused bytes, count @0x102, 0x50 entries: TableIdx + 76-byte unit) is right.
+**GM: `realmatch car [NAME [V1-V9]]`** (chat gmrealmatch car ..., control port / gmctl realmatch car ...): the car
+everyone drives in Real Match (find_cars as gmcar; V9 default; until restart, then emulator.ini realmatch_car); players
+in the battle zone get 0x1b9 again, waiting Real Match rooms' members get 0x1c7 and drive it (enter_real_match) and
+the room state. Tests in test_rooms2016 (2). 143 tests pass. Control port checked on the live 2016 server.
+
+**Manufacturing shop, 2016 (user: not showing):** the 2016 shop check 0x8170ea is the 2011 one (flags +0x274 &
+0x60000 >= 0x20000; Main.ManufacturingSystem 1 passes) and the server has sent 1 since the profile merge (12:06; 0
+before: tools/test2016.ini had no [flags]). The Dome scene with the shop NPC is built once per client run: the
+user's clients were started 11:25 / 11:51 -> a full client restart is needed. Goods rs_manufashop_01..03 (21 items)
+all in the 2016 tables. No change. Restarted: PID **181342**, log logs/2016/20261020-123905.msgs.txt.
+**Neither confirmed in game.**
+
+**The 2016 client logs packet size mismatches itself:** `DriftCity Dev Ed/DriftCity_Log/PacketAnalyzeLogC0NN.txt`
+"Wrong Packet Size. CMD(decimal type) CmdLen (expected, with type): N, AnalysisSize (received): M" - check it first
+after a 2016 change. Today's: 545 (0x221) / 761 (0x2f9) / 4001 (0xfa1) / 661 (0x295) fixed earlier; new fixes:
+**1201 0x4b1 / 1202 0x4b2** (XiStrMyVSItem 0x74 -> 0x78; handler 0x52efb0 steps 0x78, 0x4b2 0x7c with the state;
+2011 fields unchanged: tooltip 0x6a5fc8 reads the Aero points @0x4e as 2011; 4 zero bytes at the end) and **581 0x245
+/ 589 0x24d** (item auction entries 0x64 / 0xa2 -> 0x68 / 0xa6: the item unit is 76 in 2016, auction body
+encode()[8:0x54]). VisualItem.encode(version). Test VisualItem2016Test. 144 tests pass.
+
+**Real Match cars in 2016:** the client special-cases the Real Match car type 50 (Bugatti "Duel") and 157 (Ferrari
+"F03-MS") only (0x5c6220 / 0x5c7fc0: other types take another branch); use one of these with realmatch car.
+
+**Open (user screenshots 12:40 / 12:4x, Real Match room, alone):** player car models (the user: "player owned cars
+from garage"; one looks like the user's own white 370Z) stand / drive in the race and can be driven through. The
+server relayed no 0x221 / 0x225 / 0x23e (log 20261020-123905, only Xerender in barea 901); traffic ids are the same
+in both VehicleLists; 0x425's 2016 layout matches. Suspect: the Real Match car swap (rooms.drive -> 0x425 with the
+player's own serial and car id, now that 2016 also gets the Real Match car type in 0x1b9). Further tests (user): also with Traffic None and in a normal (not Real
+Match) room -> not traffic, not the swap. BattleZone.FrontAi was 0 in every 2016 login. The phantom = the garage car
+whose car id equals the player's serial (serial 2 -> car 2 Honda Civic "Metro"; at 12:39 serial 3 -> car 3 370Z;
+current car 5 Audi R8). Test: 2016 serials from 0x1000 -> **phantom still there** (serial 4098): coincidence;
+reverted (login.serial_of kept as the one place serials are made, = session id). 0x1e7 / practice type 100 handled the
+same in both clients (vcall 0xe0, 0x7d0370). **Resolved by a client restart (user):** stale client state from
+earlier in that client run (it had received 2011-sized 0x221 / 0x425 / room records before today's fixes) - after a
+2016 protocol fix, restart the client before judging race / room display problems.
+2016 restarted: PID **185378**, log logs/2016/20261020-124719.msgs.txt.
+
+**AI racers, 2016 and 2011 (user: "implement the AI opponents; they use tracks flagged for AI", then "implement and
+enable AI for the 2011 client as well"):** the parked AI work (BATTLEZONE.md) had the cars never moving. The 2016 client
+names its handlers (0x86b800 registrations: names16.tsv in the scratchpad): 0x271 = **Cmd_RoomAiCarAssign**. Handler
+0x542270 -> room vfunc 0x1e0 = 0x7d91f0 (2011: 0x52c420 -> 0x77b1c0, same code, member stride 0xcc / 2016 0xd4), per
+6-u32 entry (key, driver, AICarParam Idx, car type, colour, colour 2): finds the member whose serial is exactly
+key << 16 (else ignores the entry), names it from AICarParam, sets its serial to key << 16 | driver (seats too), makes
+its car (0x558e40, AI flag car +0x41f0), and **when driver == the client's own serial ([net+0x3d41c]; 2011 +0x3d414)
+that client drives the AI** (0x7d9632 -> 0x7d9800 / 0x456220). Our 0x1d4 used key << 16 | key and 0x271 sent the key as
+driver: no client found or drove the AIs. Also: 0x21f in 2016 is the UDP peer-to-peer move (0x847760 sends it to a
+peer's IP / port, net list +0x3d6a0, only peers with a port; the server's 0x221 / 0x323 carry port 0) - not AI moves.
+**Fix (rooms.py, both clients):** AiMember(key, row, car, driver): joins (0x1d4) as key << 16, 0x271 names the master
+as driver, afterwards serial key << 16 | master; a joiner gets the room (0x1be) with the AIs' unassigned serials, then
+0x271; a leaving master hands the AIs to the new one (0x1d5, then 0x1d4 + 0x271 again; in a waiting room only).
+area.move: in races (barea) a move's +4 is not taken for a rush HUV number (the AI's move goes out as sent). Switched
+on: BattleZone.FrontAi = 1 in both inis; 2011 Client US GlobalContent BattleRoomAI 0 -> 1 = the original value
+(Patch.000 now identical to client_backup/Patch.000.orig in content, header bytes 20-31 kept; restart the 2011 client).
+EU client unchanged (its columns are 0 in the original). Races with AIs only on PVPTrackInfo AI = 1 tracks (unchanged).
+How the driver's client sends the AI cars' moves (0x21d with the AI's serial? something else?) is not read yet: check
+the log of the first AI race. Tests test_ai_racers (3); 147 pass. 2016 restarted: PID **196215**, log
+logs/2016/20261020-131003.msgs.txt; the 2011 emulator was not running. **Not yet confirmed in game.**
+
+**AI racers, first try (user: "only 1 AI car shown without name", "and it doesn't move"; log 20261020-131003):** the
+0x271 went out (bundled after 0x1d4) and worked: live client memory (members list 0xa02630, stride 0xd4) had the 5 AIs as
+0x10002..0x50002 with their AICarParam names. But the client keys a car by (u16 serial, u16 member +4 = the "age" word
+of 0x1d4 = XiCarMove @2): 0x7d93c9 -> 0x558e40(serial low word, age). All AIs were (2, 1) = the driver's own car pair:
+one car, no name, the race object's driven list (+8..+0xc, 12-byte entries) had 1 car. **Fix (wrong, see the second try):** AiMember.age =
+0x4000 + key. The driver's AI moves should then come as 0x21d with serial = driver, sort = that age (area.move
+relays them as objects). Restarted: PID **208081**, log logs/2016/20261020-133655.msgs.txt. **Not yet confirmed.**
+Our AI names (from server_data AICarParam rows) differ from what the client shows (it names them from its own table by
+Idx): harmless, only in our notes.
+
+**AI racers, second try (user: "the AI copies my name, still only 1 AI car"; log 20261020-133655):** the members had
+ages 0x4001.. and their names, the race still drove 1 car: the age is not the car key. 0x558e40 keys a car by
+**(car attr word 0) << 16 | serial low word** (map at net+0x178); our AIs' car attr word 0 was 0 -> key 2 = the
+driver's own car (so it took the driver's name). **Fix:** AI car attr word 0 = 0x4000 + key (rooms.AI_CAR_ID), age 1
+again. Restarted: PID **208914**, log logs/2016/20261020-133843.msgs.txt. **Not yet confirmed.**
+
+**AI racers, third try (user: "client crashed on trying to add AI racer"; log 20261020-133843, client GameLog
+13:40:06 "GetVehicleInfo - wrong id: 49", "carmodel fail 0 74103"):** the second AI got car 49 (BMW 760Li), VehicleList
+"Support" = 0 in 2016 (no model). Not the car key change. **Fix:** rooms.pick_ai only takes PlayerCar rows with
+Support = 1 (2011: 9 such cars too). Test PickAiTest. Restarted: PID **210515**, log logs/2016/20261020-134204.msgs.txt.
+**Not yet confirmed.**
+
+**AI racers, fourth try (user: "no AI cars shown in the race"; log 20261020-134204):** live client: the 5 AI members
+right (car attr word 0 0x4001.., names), 5 AI car objects (car manager [root+0x124]+0xe4, keys 0x4001..|3, AI flag
++0x41f0), but the race object drove only the last one: **each 0x271 first empties the client's driven list** (vfunc
+0x1dc = 0x7d6020) and we sent one 0x271 per AI; they were also set up in the room before the track (grid place
+0x7d2700 at creation). And the client finds an AI only by key << 16, so a later 0x271 cannot name an assigned one.
+**Fix (rooms.py):** AIs stay key << 16 in the room (0x1d4 only); at the go (progress -> 0x1ea) Room.assign_ais sends one
+0x271 with all of them, driver = the master; after the result Room.reset_ais: each AI 0x1d5 + 0x1d4 again unassigned.
+hand_over_ais and the joiner's 0x271 dropped (not needed: unassigned while waiting). Tests rewritten (147 pass).
+Restarted: PID **212343**, log logs/2016/20261020-134547.msgs.txt. **Not yet confirmed.**
+
+**AI racers drive (user, 2026-10-20: "They showed up now, after race started"; "They work, but they didn't show
+before the countdown finish"; log 20261020-134547):** with one 0x271 at the go the client drove all 5 (driven list 5).
+User-confirmed: AI cars drive in the race (2016). What the driver's client sends for them: bundled 0x21d moves on barea,
+one per AI (@0 driver serial, @2 0x1b1 for all, @4 the AI's car id 0x4001..), 0x1ed gate passes and 0x1eb ends with
+u32 car key (0x4001 << 16 | driver). Problems found and fixed: (1) an AI's gate was counted as the driver's (gate 0
+"position 1 of 1, reward 1" to serial 2) -> gate(): a car key of the room's AI (Room.ai_by_car) takes its place at the
+gate, 0x1ee (car key, reward 0); race_end(): the AI's end takes a finishing place, 0x1eb with its car key, the driver's
+own end untouched; (2) area.move in races keys an AI's move by @4 (relayed as sent); (3) the 0x271 now goes right after
+0x1e7 (load) instead of at the go, for the AIs to stand on the grid during the countdown *(not confirmed: if the AIs
+are then missing, it goes back to the go)*. 0x2d5 on barea (566 bytes, from the driver; also in a 2016 log of 11:44
+without AIs) has no handler: not read. Tests AiRaceTest (2); 149 pass. Restarted: PID **215012**, log
+logs/2016/20261020-135152.msgs.txt. **(1)-(3) not yet confirmed.** The 2011 client is untested with AIs.
+
+**AI racers, round 5 (user, 2026-10-20: "AI works now" - shown during the countdown with the 0x271 after 0x1e7;
+"Pos 1/4" while behind the AIs; "AI opponents don't show up in the race results"; the next race refused "All players
+must click Ready"; log 20261020-135152):**
+- Position: the race's ranking (0x7d83f0, list +0x3c4, members with +0x9c >= 100, sorted by member +0x68 / +0x6c)
+  finds a member's car by the member's serial (0x7d5f80 -> 0x556c10 on the car map keyed car attr word 0 << 16 | serial
+  low word). With word 0 = 0x4000 + key the AI cars never matched their members. **Fix:** AI car attr word 0 = key, so
+  car key = member serial key << 16 | driver (the 0x1ed / 0x1eb / 0x21d @4 the client sends then carry that).
+- Results: 0x1ec now has the AIs too (rank by their 0x1eb ends, unfinished = RETIRED last; no EXP / Mito), and the
+  players' rank and the reward table's field size count them.
+- Next race: error 20182 was ours: result() set every member but the host not ready, AIs included. AIs stay ready;
+  reset_ais also sends their 0x1e5 ready.
+151 tests pass. Restarted: PID **225677**, log logs/2016/20261020-141833.msgs.txt. **Not yet confirmed.**
+
+**AI racers, round 6 (user, 2026-10-20: positions now right; the AIs again only appear when the countdown ends, and
+start ahead of the player; "make the AI start together with player"):**
+- Not shown: the load puts every member's car on the grid (2016 race vfunc 0x54 = 0x7d42b0: 0x558e40 per member,
+  name, AI flag, grid slot 0x7d2700) but skips members whose serial low word is 0 (`test [m], 0xffff`): unassigned AIs.
+  **Fix:** Room.assign_ais (the one 0x271) now goes just before the 0x1e7.
+- Grid: BattleZone.FrontAi is only the AIs' grid offset (2016 flag block 0x34 bit 6, 4 bits = flags +0x29c & 0x3c0;
+  2011 0x30 bit 5 = +0x298 & 0x1e0; read only by 0x7d43a4 / 0x7d93ff, 2011 0x776634 / 0x77b3cf): not 0 -> slot = seat -
+  (8 * value + 16), in front of the players. The AI seat option is GlobalContent BattleRoomAI (2011). **Fix:** FrontAi = 0
+  in both inis (grid by seat), the server's AI switch is now emulator.ini [battlezone] ai = 1 (context.battle_ai) instead
+  of the flag. *Whether the 2016 client still offers the AI seats with FrontAi 0: to be seen.*
+151 tests pass. Restarted: PID **227296**, log logs/2016/20261020-142234.msgs.txt. **Not yet confirmed.**
+
+**AI racers, round 7 (user: "Now the AI cars don't appear anymore", 0x271 before 0x1e7, FrontAi 0; log
+20261020-142234):** live client: 7 AI members, 7 AI cars (AI flag set), all 7 in the driven list, but none shown in the
+race. Before the 0x1e7 the 0x271 makes the cars in the room (no track: 0x7d91f0's grid / track placement has no track
+data, [root+0x124]+0x9c = 0) and the load apparently does not place them again. Back to the 0x271 right after the 0x1e7
+(where they drove), now with FrontAi 0 (grid slot = the seat; with 1 it was seat - 24, maybe why they showed only after
+the countdown). Restarted: PID **228297**, log logs/2016/20261020-142508.msgs.txt. **Not yet confirmed.**
+
+**AI racers, round 8 (user, 2026-10-20: "Now AI appears correctly" - **user-confirmed: AIs on the grid with the
+player and drive** (0x271 right after 0x1e7, FrontAi 0); but gate rewards ignore the AIs and the AIs are missing from
+the end-of-race statistics; log 20261020-142508):**
+- Gates: "position 8 of 1": the field size was the players only. Now players + AIs.
+- Statistics: the 0x1ec had all 8 entries, but reset_ais sent each AI's 0x1d5 + 0x1d4 right after it, which took
+  them out of the result screen; and the result came as soon as the player finished (only players were waited for).
+  Now: the AIs are waited for too (their 0x1eb from the driver; the usual finish timer after the first finisher still
+  ends the race), their 0x1e5 ready goes with the result, and reset_ais runs at the next start, before the 0x1e7.
+151 tests pass. Restarted: PID **230024**, log logs/2016/20261020-142949.msgs.txt. **Not yet confirmed.**
+
+**AI race end (user: "the race end doesn't wait for the AI behind you"; log 20261020-142949):** the client's own rule.
+When the player finished (14:32:30.002) the driving client sent 0x1eb type 2 (record 0) for its 3 unfinished AIs 15 ms
+later: race vfunc 0xbc = 0x7d9fe0 @0x7da8a5 retires every driven AI not finished when the race deadline (+0x108) has
+passed **or race +0x138 = 0**, the count of human members still racing (0x7dcc00 counts serials <= 0xffff). So the race
+ends with the last human; no server change (the server places them RETIRED after the finishers). Changing it would need
+a client patch: not done (vanilla client).
+
+**Other players' decals (user, 2026-10-20: "player decals are not showing for other players", 2016; "same issue could
+be on 2011 as well"):** the car model reads the XiVisualItem (player info +0x5a; 2016 0x471170 from 0x4c8c90, 2011
+0x468100) as the 2008 struct for its first fields: **neon @0, plate @2 (category 9; plate text @0x26), decal @4, decal
+colour u32 @6** (with Etc.ColorSetReform on an ARGB, else a palette byte), u32 @0xa (not known), then the aero slots
+@0xe.. as before (bumper 0xe, hood 0x10, aero 0x12, flame 0x14, wheels 0x16, spoiler 0x18, 47 @0x1a, 52 @0x1c; 2016 also
+reads @0x1e for category 57). We had neon @6, plate @8, decal @0xa (the "6 bytes on" of the aero slots applied to all):
+decal 12 went into the u32 @0xa and the neon into the decal colour. **Fix (misc.VISUAL_OFFSETS, both clients):** neon 0,
+plate 2, decal 4; the decal's colour = its item text (signed ARGB, "-16185079" = 0xff090909) @6. Test test_visual_item.
+Not done: the plate text @0x26, category 57 @0x1e, neon stat items (index 0, colour in the text). 2016 restarted: PID
+**250443**, log logs/2016/20261020-152845.msgs.txt; the 2011 emulator was not running. **Not yet confirmed.**
+
+**Decals user-confirmed (2026-10-20, 2016).** Then (user): neon not shown to others, nor the plate text; "same to fix for
+2011 too". **Neon:** the car's neon (2016 0x4cd2b0 via 0x4c6bd0 = car data +0x14c, the XiVisualItem copy; 2011 0x4c0cf9):
+neon = i16 @0; with Etc.ColorSetReform (flags +0x2c0 / 2011 +0x2bc & 0xe00 in 0x201..0x600) and a neon above 6 its colour
+is the **u32 @0xa** (0 = no neon), RGB, drawn with alpha 0.6 (0x477e60 -> 0x4417d0); neons 1-6 are fixed colours. We sent
+0 there. **Plate text:** wchar[8] @0x26 (0x43ddd0 copies at most 8 into car data +0x172, wcscmp), applied with a valid
+plate style @2. **Fix (misc.visual_item, both clients):** neon colour = the neon item's text (decimal RGB, "16382457" =
+0xf9f9f9) @0xa; plate text = the plate item's text @0x26. test_visual_item extended. Restarted: PID **255258**, log
+logs/2016/20261020-153632.msgs.txt. **User-confirmed in game (2016, 2026-10-20): decals, plates and neon all show to other players.** 2011: same code, not yet tested in game.
+
+**Paint and window tint (2016):** user-confirmed correct for other players (2026-10-20), although the player's own 0x21d
+XiCarAttr carried 0x01010102 / 0x82cccccc: the colours reach the others another way (car record / 0x425), no change.
+
+**Queued (user):** the 2016 level-down items (Lv Down 40/60/70: buyable, not usable).
+
+## Session close (2026-10-20)
+
+User requested handoff and end of session. Consolidated current state, validation, unresolved reports and ordered
+resume steps written at the top of HANDOVER.md. Scope remains 2016 only; no commits. Server PID 100911 verified
+running and left running with tools/test2016.ini / SKDB2016TEST. No implementation changes after the 126-test pass.
+Full client restart and in-game confirmation remain pending. Do not treat earlier handoff PIDs as current.
+
+## Session 37 (2026-10-20): 2016 Battle Zone slots and inventory auction follow-up
+
+**User:** enable Battle Zone usable-item slots; check inventory drift-item auction registration tab,
+including the held Inventory Expansion item. Scope remains 2016 only.
+
+Battle quick slots were already enabled by NEW_FLAGS. Verified the actual running client (PID 73494):
+net singleton [0xa059b0] = 0x043f7fe8, byte [net+0x29a] bit 0 is set. Native 0x5d5568 / 0x62e627 /
+0x63ecbb / 0x640500 test this bit to show/enable the controls. The 2016 flags mapping is offset 0x30,
+bit 16. Native game.nui dialogs 4930000/4940000 contain both complete Battle quick-slot controls.
+No client bypass or server change made for an already enabled setting. Asked whether the user sees missing
+boxes, grey boxes or an item refusal, and which item; response pending. Eligible UseItemClient kind battle_quick:
+Crash Capsule, Boost Recharger, Invincible Rush Capsule, Drift City Capsule, Emergency Boost Kit,
+Mk.II Battle Quick Repair Kit. Regular EXP/item/Mito drinks are not this item kind.
+
+Inventory investigation complete: native sixth tab 4980020 is already a complete clickable button.
+0x649980 dispatches it to 0x649a00, selecting drift-auction state 6. Visibility 0x651751..0x65176e and keyboard
+access 0x649a2f..0x649a45 depend on local AuctionVSItem. Session 36 already enabled it; **fully restart the client**
+to load that change. PID 73494 is still the earlier client. Own-listing pane 5150000 has all eight rows and
+register/cancel/collect controls. Initial suspicion about empty control 4980021 was wrong: the event jump table
+routes it back to Parts, an intentionally empty keyboard-cycle target. No UI edit was made for that suspicion.
+Native eligibility 0x785220 tests VShop row +0xfc (CC UseHancoin); 0x857248 sends registration 0x642 with four u32,
+matching server. Inventory Expansion 10407 / i_d_ivn_01 ("Expand inventory", UseHancoin=1, Instant=0, Main=6400)
+qualifies unused, unbound and state 0. No new source/config/assets changes or restart in this follow-up;
+existing auction tests from session 36 apply. In-game tab/registration and reported Battle slot state remain
+unconfirmed; user clarification pending on whether slots are missing/grey or refusing a particular item.
+
+## Session 36 (2026-10-20): 2016 rental countdown, HOME, drift auction and driving skills
+
+**User reports/scope:** HOME grey in Drift Shop; implement drift-item auction; one-day rental shows 15340 days
+22 hours; then fix Turbo Booster / Skill Item Slot. This entire session remains **2016 only**. No 2011 assets or
+config changed for these fixes; no commits or manual player row edits. Screenshots 100607/100700 show the problems.
+
+**Rental countdown:** tooltip 0x6536b1 calls 0x69fc80 with 2012-01-01, then subtracts current UTC seconds since that
+epoch from rental expiry. Server emitted Unix time, giving 42 extra years. Rental.encode now converts internal
+shifted Unix time to UTC seconds since 2012 (`expires - CLOCK_SHIFT - 1325376000`). DB expiry stays intact.
+New regression compares both sides of the client's countdown to 86400 seconds. Existing rentals correct on reconnect.
+
+**HOME:** topbar 0x6e9b30 calls 0x8b0a20 to test category summary TopMenuEnable. VShopCategory.xlt Top 0's first two
+retired paint rows have TopMenuEnable 0; the new small topbar labels this HOME. Click 0x6eb67a already invokes
+the homepage (0x6c5320 / 0x6c9510 / 0x6c38d0). Enabled only TopMenuEnable for Top 0; individual old paint categories
+stay Enable 0. Cause is local client data, not a missing server bit. **Not yet confirmed in game.**
+
+**Drift auction:** existing lifecycle was disabled by server drift_items and local AuctionVSItem settings.
+2016 game.nui third checkbox 1360057 and alternate headers 1360030..38 were empty. Native 0x77c6a0 / 0x77c780 /
+0x77e280 confirm existing drift record sizes: 156 public, 94 own, 104 registration including message type.
+Enabled only 2016 profile and tools/test2016.ini. Added tools/shop2016.py: backups under client_backup/shop2016;
+changes Data/Init.agt VShopCategory, Data/Localize.agt US AuctionVSItem, loose Data_US/gameui/game.nui.
+Every unrelated pack entry and header bytes 20..31 checked unchanged. Filled checkbox, label, seller search and
+seven alternate text headers. List widened leftwards 104 pixels to x=238, width=755; body backdrop, normal headers
+and NPC moved to match. Native widths: 725 content + 12 seller spacer + 18 scrollbar; live font scale 1.0
+(global [0x9de208], window+54, list+4, font+10). Header x positions: 261/442/472/568/689/752/914.
+0x5f99c0..0x5f9b99 maps name/price/count/seller/sales plus sorts 14/15 listing days and 16/17 item lifetime.
+Extra sorts implemented only for 2016 drift listings. Revalidate registration/cancel/collect after awaiting lock:
+prevents duplicate fees, stale cancellation after purchase, double collection. Bound items and count other than 1
+rejected for 2016. Existing CC-only eligibility remains. **UI/trade flow not yet confirmed in game.**
+
+**Turbo/Drift Booster and Skill Item Slot:** category 58 was never equippable in emulator; DRIVE_PASSIVE shop
+row 100 disabled. Native category jump table 0x767dc4[57]=21, 0x767d68[21]=0x767d51 returns slot 20;
+0x76d240 fills it only for matching car and state 1. No client slot/exe patch needed. Enabled category row 100.
+2016 category 58 purchases/gifts now bind/equip on current car; replacement deletes previous skill there;
+unequip keeps binding; another car cannot equip it. Existing BonusAssist wire sends a_00002/a_00118 when on
+current car. Existing car-sale/auction cleanup removes bound skills. Login repairs earlier unbound purchases
+without extending term, retaining newest skill for current car; other cars untouched. Category 41 passive items
+retain existing behavior. **Not yet confirmed in game.**
+
+**Validation/deployment:** 126 unit tests pass, including 10 rental, 11 auction, 10 driving-skill and 2 shop-transform
+tests. Mocked auction lifecycle covers registration/list/search/buy/cancel/collect and race/failure paths.
+No synthetic logins or player edits. Client setup rerun verifies idempotence. Only 2016 server restarted:
+previous PID 93645 stopped, new PID **100911**, tools/test2016.ini, SKDB2016TEST/server 2016, 111xx/control 11199.
+All seven listeners verified. Log: logs/2016/20261020-102056.msgs.txt. **Fully restart 2016 client for shop assets.**
+Rental limits from session 35 remain: meter-rated kind 2 and explicit 0x6c early return.
+
+## Session 35 (2026-10-20): 2016 time-limited rental capsule use
+
+**User:** rental purchase works; using it is missing; ptrace enabled, rental allocation window open (similar to
+Mk.2 aero). User clarified twice: **this session concerns the new 2016 client only; 2011 does not use this feature.**
+No client files changed. No commits. Existing unrelated changes preserved.
+
+**Observed:** logs/2016/20261020-093620.msgs.txt, 09:38:23: 0xfb4 (48-byte frame, 44-byte payload), no handler:
+`213,9,1,1,0,115,0,280,185,250,85` (11 u32). Live read-only /proc/73494/mem: root [0x9d10d0],
+UI +0x158, rental window +0x448 = 0x041d3ee8. Window +0x1dc: car 213, size 0, kind 1, special 1,
+parts 0, capsule inventory 115, term 0; +0xe8: speed 280, accel 185, crash 85, boost 250.
+2016 exe SHA256 52acaca96cb9f1e88d1f52bf5f8fa6db80daaa9ecbaae4c7c86eae92cd19657a.
+
+**Static evidence (objdump):** window 0x594340 reads capsule object +0x58 into term +0x1f4: the 2016 item
+record's formerly-zero dword at +0x50. 0x594650 sends grade 9, then kind/special/parts/inventory/term;
+0x5946b2 reorders points to **speed, accel, boost, crash**. 0xfb5 handler 0x524270 adds/selects a 50-byte car,
+refreshes garage, closes window; no result dword. 0xfb6 handler 0x53c170 reads count and 61-byte entries via
+0x4b80c0, keyed by car id @16. 0x78400e tests car record u16 @0x12 = rental kind 1/2; 0x7840ca replaces
+base stats with the distributed points. Rental list layout used: points x4, car id, expiry (0x6a6806), two
+u16 part-set ids (inferred), char[32] special assist (0x4b7d60 / 0x770ce0 / 0x784096), trailing byte 0
+(unresolved). 0x6d return handler 0x538f70: removed car id + replacement/current car record.
+REA/Ghidra import timed out (330 seconds per queued query); no decompiler result used. Session closed.
+
+UI picture `8,53~694,263_ui_contents64.dds` extracted read-only via tools.ui_texture: special options Turbo
+Start / Drift Booster / collision speed loss -20% / critical damage +10%; parts combine A+B / C+D / E+F / G+H.
+Implemented with native Assist_Client ids a_00002 / a_00118 / a_00081 / a_00221 and ItemClient's four-part
+r_type_1..8 sets (both lines, eight equipped parts). The client's set bonuses come from column 20; conversion
+assist slots stay empty to avoid doubling them. Server mirrors those set assists in stats and AddSpeed.
+**The pairing/option encoding and visible effects still need in-game confirmation.** UI text is not wholly
+consistent with the table values (e.g. the acceleration/speed combination); implementation follows the tables.
+
+**Implemented:** game/rentals.py, registered 0xfb4, gated to is_2016. Validates held, unbound capsule, selected
+car/kind, V9, option ranges, server-side period and RentCarOptionPoint size minima/maxima. Redeems in one SQL
+transaction: lock/consume capsule, PC_SKID_CREATECAR, persist SKID_RENTCAR_TB metadata, give eight bound rental
+parts, select car. Sends 0x192, 0xfb6, 0xfb5, stats and visual update. Replay cannot create another car.
+Purchase now keeps days in capsule NRANDOM; 2016 Item.encode exposes them at +0x50. Older capsules with no
+period use one day (the observed purchase was one day); request cannot extend it. Stored rental metadata loads
+before login/key generation; rentals get no permanent key, cannot be sold, rental parts cannot be moved/sold.
+Expiry at login, DriveInfo or periodic 0x32d returns to an owned car, removes rental/parts/metadata, returns
+other gear/cosmetics to inventory and updates garage count. Permanent cars keep their original slot bits
+(including apprentice training marker). 2011 emits none of the new rental packets.
+
+**Validation:** 102 tests pass (nine new tests/test_rentals2016); captured request success, bad selections/stats/term
+preserve capsule, DB refusal, duplicate use, period wire/purchase, metadata reload, expiry and 2011 gating.
+Real SQL Server test in SKDB2016TEST used a new temporary fixture character inside an outer transaction:
+redemption produced car + 8 parts + metadata and removed capsule; expiry removed all three; duplicate refused;
+outer transaction rolled back, no fixture character/items/sequence changes persisted. Only the new empty
+metadata table persists. No player rows manually altered.
+
+**2016 server restarted:** PID 93645, tools/test2016.ini, listeners 111xx, log
+logs/2016/20261020-100336.msgs.txt. First restart exposed missing module import is_2016 in login.load_char;
+fixed and added a login-handler regression test (the original rental-handler tests did not cover login).
+During the first server's shutdown at 10:03:24 the user sent a new 0xfb4 for capsule 115, term 1 and
+points speed 270 / accel 180 / boost 250 / crash 100. Its SQL transaction completed before shutdown;
+no final handler note/ack was logged. On reconnect at 10:03:53 the rental car (id 4, type 213, V9) and
+all eight parts loaded, metadata 0xfb6 sent. **Runtime verified read-only via /proc/73494/mem:** native
+stat object 0x9e3b28 +0x294 = (270,100,180,250), next four ints equip = (0,800,0,1). This confirms
+rental persistence, wire decoding, allocated stats and rental-set bonus totals without duplication.
+**User visual/driving confirmation still pending** (window success/expiry display/special key behavior).
+**Open:** meter-rated kind 2 remains refused without consuming capsule (its shop rows have SellStage 0); fuel
+allowance/renewal not established. Trailing rental-list byte and part-set ids need runtime confirmation;
+explicit early-return action (0x6c), if used, has not been implemented. Time-limited 1/7/30-day redemption is the
+implemented path. Next items remain the session-34 round-2 list.
+
+## Session 34 (2026-10-20): 2016 drift items, Ultra parts, car bonus assists (round 1)
+
+**User: implement the 2016 drift items absent from 2011, the new Ultra part tier and anything else; then the new
+cars' bonus stats (Exp +100%); then Gotcha changes.** Survey (2016 tables vs 2011): VisualItem 1585 -> 2204 rows; new
+drift categories 56 Manufacturing Booster ("i_n_createdouble N"), 58 DRIVE_PASSIVE Turbo / Drift Booster (VShopItem
+Bonus Assist a_00002 / a_00118, "Available when Skill Item Slot is equipped", bound to the current car), 59 Upgrade
+Chance Enhancing Fluid ("i_n_chancetime N"); category 23 Booster packs now give i_n_double; 19 Parts box packs name
+their count. UseItemClient 1330 -> 3285 rows. The 2016 kind -> code table (0x759f00: compare + `mov [ebx], code`; all
+2011 codes unchanged) adds 0x65 neoquest_item, 0x66 repair_neoparts, 0x67 safe_upgrade, 0x68 rent_car_capsule, 0x69
+fullchance_upgrade, 0x6a parts_craft_up, 0x6b atransfer (grades too: S 0x20001, H 0x20002, U 0x20003). Messages only
+in 2016 (handlers named Cmd_*): 0x20b -> 0x20c UpgradeItemSafe (u32 part, enhancer, 1, a kind 0x67 item: none in
+the tables), 0xfb4 -> 0xfb5 RentCarItem (46 bytes: 7 u32 + 16 bytes @0x1e; sender 0x861e10 from 0x86ae90 / 0x594712)
+and 0xfb6 RentCarStatPointList (RentCarOptionPoint.xlt: SMALL / MEDIUM / LARGE stat points), 0xfc1 -> 0xfc2
+AssistTransferUse (u32 @2, u32 @6, u8 @0xa; from 0x62dcd7: Part Option Extractor i_n_assist_transfer ->
+_used), 0x4c4 -> 0x4c5 RepairNeoParts (u32). Parts: ItemClient 749 -> 1217 rows: grade U (Ultra: speed / crash /
+accel / boost Gaia, Thor .. levels 90-108, with _g and scorched _b twins, not sold), OU (Ultra dockings A-O, level
+90), R (NeoCity weapon / coil / fuse / armor), new kinds neo_weapon / neo_coil / neo_fuse / neo_armor. Ultra items:
+Seed U / Seed PLUS U, Ultra Heat Treatment Kit (value 3), Ultra Parts Components (piece) -> Incomplete Ultra parts
+(incom*, value 3), Ultra Parts Dust, no Ultra Mittron Enhancer or restoration kit.
+Done (round 1; script-tested with tests/test_items2016.py, 8 tests; **not yet confirmed in game**):
+- drift packs 23 / 56 / 59 give their inventory items, Parts box packs their count (driftuse.GIVES_ITEMS; the 2011
+  i_d_double / i_d_partsbox, value 100, unchanged).
+- 0x1ae with an inventory Booster (2016 client 0x6926c8: drift category 0x17, else kind 0x50 -> @16): one i_n_double
+  used per try (upgrade.enhance).
+- i_n_chancetime used (0x1a1): the Modify chance gauge full (upgrade.GAUGE_MAX), ack code 0x69.
+- Ultra: upgrade odds U = Hyper x [items] ultra_odds (1.0; a guess, the 2008 table stops at H); options on U parts
+  FN / FS / FH / OU (items.GRADE_FITS); U parts scorch like H; heat kit by grade (H 2, U 3: items.HEAT_GRADES /
+  kit_fits); OU counts as a hyper docking; docking U: 15 letters, white 24-40 x 0.6 (guess; docking_chances.txt).
+- Manufacturing Booster: 2016 0xe78 = char[56] + u32 @0x3a + u32 @0x3e (window +0x544 / +0x548); when one is the
+  InvenIdx of a held i_n_createdouble the result is doubled and one used (which field: not confirmed; both logged).
+- **Car bonus assists** (user: "new cars bonus stats (experience +100% for example)"): VehicleList "Car Assist" was
+  never in assists.car_assists, so its server kinds did nothing: exp (a_00190 "Exp +100%": TOYOTA FT-86, CROWN
+  ATHLETE 13), mito (a_mito_100 "Mitto +100%": FT-86, LaFerrari 2014; new server kind, items.play_bonus), speedup (21
+  cars, a_00125 "Speed Up 6" / "+3.6 MPH": Porsche 918, Aventador, ...), chance (3), partycrashup (4), partyspeedup
+  (1). Now counted for the car being driven. Also changes the 2011 client (its tables have the same cars): the
+  speedup cars' AddSpeed; that the client does not add a car's speedup itself is from the 2011 analysis, not seen.
+**Gotcha 2016** (user: "check Gotcha for any changes in 2016"): 0xdac unchanged (24 bytes). The 2016 GlobalContent:
+GotchaViewSeason 60 (groups to season 62; Etc.GotchaSeason 6 bits), Gacha_Price_PartsMito 25000, GachaUpdate2015 = 1 ->
+the window's car price (0x6bf872 / 0x6bf940) is GachaUpdate2015Cash 300 / Mito 50000 for every season. New group
+rw_cash_gacha_2015: 7 slot cars (ST / BT V1 boxes: Dominator 5 %, Hykan 10, Prometheus 15, GRAVITY 20, PLUCK 15, Honour
+10, Pandora 5) or 10 Capsule Points (i_n_gacha_point, 20). gotcha.py for the 2016 client: those prices, G Coin car
+capsules roll rw_cash_gacha_2015 (Mito ones the season group: a reading, not confirmed), season default 60 without
+[gotcha] season (server_data_2016/emulator.ini: 60). 2011 unchanged (test). Not done: the Battle Zone OB Gacha
+(BattleZone.ObserveGacha, Etc.EventFreeOBGacha; 0x834 (38 bytes) / 0x836 (10) / 0x837 -> 0x835 .. 0x83a), the
+Capsule Points' use, Etc.ShowGotchaOldStyle.
+User then: "Gotcha showed Failed to use item and doesn't show the reward icon" (log logs/2016/20261020-090208, 09:12:51:
+0xdac G Coin, car, **season 0**, price 300 -> error 20036). The 2016 car machine (GachaUpdate2015) sends season 0: now
+accepted for the car machine of the 2016 client, rolled from rw_cash_gacha_2015 / rw_mito_gacha_2015 (both exist).
+Reward icon: the 2016 NotifyEvent type 23 (0x5304d4) passes u32 @0xa to the prize window (0x6c2590) with the item:
+the count; it was 0. Now the count for the 2016 client (2011 unchanged). Server restarted (pid 72424, logs/2016/20261020-091443.msgs.txt). **Not yet
+confirmed in game.**
+User: "No more failed to use item message, but still no icon": log 09:15:22 "rewards: []". **Cause: RewardGroup.xlt
+2016 has a Trade Restriction column at 10, Probability moved to 11; driftuse.groups read column 10, so every 2016 row
+had chance 0: no gift box, lucky bag or Gotcha capsule gave anything on the 2016 client.** Now the column by its
+header (2011 unchanged; test). Rolls checked: rw_cash_gacha_2015 -> Capsule Points ~20 %, else an ST / BT V1 car box.
+Server restarted (pid 73338, logs/2016/20261020-091659.msgs.txt). **Not yet confirmed in game.**
+User: "With 100 capsule points you receive a ST vehicle ticket". UseItemClient kind piece: column 4 = the item made,
+column 5 = the pieces it takes (also the stack size): i_n_gacha_point 100 -> i_n_ticket_st_100per (giftbox ->
+rw_i_n_ticket_st_100per, an ST car), Liquid Mittron 10 -> Mittron Enhancer, components 10 -> Incomplete H / Ultra
+parts, event tokens. The emulator used a piece up for nothing (0x1a1). Now items.make_from_pieces: enough pieces ->
+that many used, the item given, 0x1a2 kind 1, 0x192, prize window. Also **0x19f ItemUnion is the stack merge** (u32
+the stack dropped on, u32 the stack dragged; senders 2016 0x853d40 / 2011 0x7f15d0, from six inventory windows after
+"max stack - stack" checks; 0x1a0 ack 8 bytes): it had no handler, now items.item_union (first named merge_stacks, which hid the login's own merge_stacks: every login failed at load_char, 'stuck at loading character'; renamed). Tests (12 in
+test_items2016). Whether the client sends 0x1a1 for a piece: **it does not** (user: using the 100 points did
+nothing; log: no request at all; the 2016 inventory dispatcher 0x630a00.. has no case for kind 1). The 2008 rule
+(ZoneServer.syms): XiCsCharInfo::AddItem 0x5c6940 calls XiCsItem::IsFullPiece 0x599620 (use item, kind piece, stack
+>= its count [+0x1f8]) -> ChangeNextItem 0x599ab0 (the record becomes the next item [+0x20c], stack 1, ExpireTick
+recalculated); UnionItem 0x5c73e0 (0x19f) is a plain stack merge (GetEnableStackNum, same period, AddItem / SubItem).
+Now items.complete_piece: a full piece stack becomes its item when pieces are added (driftuse.give_item: Gotcha
+prizes, GM items, rewards), on a stack merge (0x19f) and at login (stacks full from before). Server restarted (pid
+78627, logs/2016/20261020-092923.msgs.txt). **User-confirmed 2026-10-20 ("Works now"): the 100 Capsule Points became the ST Vehicle Ticket.** (The earlier
+0x1a1 make_from_pieces stays for a client that sends it.)
+**Rental cars, step 1** (user: buying a rental car -> "No such Item!"; log 09:34:07: 0x4b3 for VShopItem 20947
+rent_period_rep_s, item text "20954"). The 2016 drift shop sells packs rent_period_rep_s/m/f (time-limited, value
+"p_s".."p_f"; periods 1 / 7 / 30 days at 85 / 190 / 350) and rent_fuel_rep_s/m/f (meter-rated, "f_*"); the player
+picks the car, sent in the item text as its VisualItem id (category 33, value "<car type> <size 0 small / 1 mid / 2
+large> <1 time-limited / 2 meter-rated>": pc_rent_gigasmini_p "213 0 1"); the same id is a UseItemClient item of kind
+rent_car_capsule (0x68). Now driftuse.parse_value gives that capsule when its size and kind match the pack (else no
+sale). Using a capsule with 0x1a1 is refused and keeps it (it would have been used up). **Step 2 not done**: 0xfb4
+RentCarItem (46 bytes, sender 0x861e10 via 0x86ae90, built by the rental window 0x5946b2: @2 = window +0x1dc, @6 = 9,
+@0xa..@0x16 = +0x1e4/+0x1e8/+0x1ec/+0x1f0, @0x1a = +0x1f4, @0x1e = 4 dwords from the chosen option row (window +0xe8..
++0xf4: the stat points, RentCarOptionPoint.xlt SMALL / MEDIUM / LARGE: speed / accel / crash / boost defaults, min 600
++ bonus 200, max 800, max 280 each)); reply 0xfb5 RentCarItemAck (0x524270: @2 handed to the character, 0x760e70 /
+0x761340, then the garage refreshed: probably a car record) and 0xfb6 RentCarStatPointListAck (0x53c170). Which
+action sends 0xfb4 (the capsule's use, the shop) and the rental period's place: next, with a runtime trace (ptrace
+is on). Not yet confirmed in game.
+2016 server restarted (pid 81552, log logs/2016/20261020-093620.msgs.txt). 93 tests pass.
+Round 2 (not done): rental car step 2 (above), rental car capsules, Part Option Extractor, NEO parts repair, Drive skill boosters (category 58,
+Skill Item Slot), item union (Ultra Components -> Incomplete Ultra parts; not implemented for any grade), combining
+above level 70 for Ultra parts, NeoCity R parts.
+
+## Session 33 (2026-10-20): first-start client tables tool; 2016 Battle Zone window opened at once
+
+**Clean 2016 test DB on this machine:** `SKDB2016TEST` did not exist here; created from `db/0*.sql` (63 tables,
+admin/admin, no characters) and saved as `db/SKDB2016TEST_clean.bak` (gitignored). 2016 server started with
+`tools/test2016.ini`. `SKDBTW` untouched.
+
+**Client tables on first start (user: client files stay out of git; a tool asks for the client folder when the
+server is first launched with podman / docker).** The pulled `server_data_2016/tables/` had only the git files, and
+the 2016 server crashed on `ItemClient.tdf`. New `tools/client_setup.py`: reads the config (`[client] version` ->
+server_data or data_2016), and if `tables/ItemClient.tdf`, `QuestClient.tdf`, `Instant_Client.tdf`, `Tutorial.tdf` or
+`teammark/` are missing, asks for the client folder (terminal), else `--client`, `$DCEMU_CLIENT`, `/client`, the default
+folder. It refuses a folder whose game exe's PE time stamp is the other version (2011 vs 2016) or that lacks the
+tables. Extracts with `sync_data.sync` to a temp folder and copies **only missing files** into `tables/` and
+`teammark/`; never `Init/` (in git, the port2016 tables) and with `--refresh` still never `UseItemClient.tdf`; then
+loads `Tables` to validate. Wired in: `launch.sh` (server / all / emu / emu-bg / setup = `--refresh`; the old
+`setup` ran `sync_data`, which overwrote the git `Init/` tables), `launch.ps1` (`Client-Tables`: `--check` in the
+container, then Read-Host for the folder, mounted via `DCEMU_CLIENT_DIR`), `docker-compose.yml`
+(`${DCEMU_CLIENT_DIR:-../Client US}:/client:ro`), `Dockerfile` CMD (`client_setup && exec dcemu -q`, so a plain
+`docker compose up` copies them on first start). `dcemu/__main__.py` names the tool when the tables are missing.
+Script-tested on `git archive` copies of both data folders: 190 files added each, git files byte-identical, the 2016
+result identical to the live folder, wrong-year client refused, terminal prompt (bad path, 2016 client, then the US
+client) works; 73 tests pass. **Not tested:** the Docker image build, `launch.ps1` on Windows, podman-compose run.
+
+**User report: in the 2016 guided tutorial the Battle Zone window opens by itself before driving into the Battle
+Zone.** Cause (client files, not the server): this machine's `DriftCity Dev Ed/Data/Localize/GlobalContent.xlt` had
+`ApprenticeFlowType = 4` (the shipped value), while `DriftCity2016Test.exe` (copied from another machine) already had
+the session-32 guided byte (0x5ca8ed `cmp eax,1`). At 0x5ca8d6 the client reads ApprenticeFlowType (key 0x955934,
+lookup 0x8a11c0); 4 != 1 -> `jne 0x5ca914`, the Battle Zone window path, while apprentice stage was 1 (live memory
+of the running client via ptrace: root [0x9d10d0] +0x158 +0x250 +0x48 = 1). Fix: `tools.tutorial_flow --only 2016`
+(new `--only 2011|2016`) set the Dev Ed table to mode 1 (5 bytes, backup `client_backup/tutorial_flow/`); the 2011
+clients were left as they are (their tables are mode 4 with unpatched exes). Needs a full client restart.
+**Not yet confirmed in game.** The 2011 clients on this machine have not had `tutorial_flow` applied.
+
+**User asked for the game launcher for the 2016 client.** Same `DriftCityLauncher` (Launcher/client2016.go), chosen by the
+exe: PE time stamp >= 2016 plus the known bytes (else it refuses the build). Dev Ed facts (DriftCity.exe 2016-02-16,
+not packed, no GameGuard object): the community patch made 0x54f6b0 read `Data/init/network.txt [Host] Auth`
+(GetPrivateProfileStringA via the `poly` section stub 0xaf72a0) and then NOP'd the nation jumps (0x54f72e, 0x54f741) so
+it always takes inet_addr of the US slot 0x957760 ("127.0.0.1") into [esi+0x4c]; same function 0x54f6bf
+`mov word [0x9bc374], 11005` (immediate at 0x54f6c6, file 0x14eac6; Auth Server Not Exist string 0x957744). The
+launcher writes slot, immediate, data word and the guided byte 0x5ca8ef (4 or 1; `[client] guided_tutorial = auto` reads
+`Data/Localize/GlobalContent.xlt` Value_US) once the port instruction is readable (Linux /proc/pid/mem poll, 1 ms;
+Windows CREATE_SUSPENDED + VirtualProtectEx, then ResumeThread). Token as US 2011. 2011 memory patches (icons, cargo,
+passive slot) off for 2016 (other addresses). New ini key `[server] port` (2016 only); a new 2016 folder's ini gets
+`main_ui_type = auto`. Both clients share the drift2011-pfx prefix (no drift2016-pfx on this machine). build.sh also
+installs into `../DriftCity Dev Ed`; installed there now (2011 folders still have the previous build) with an ini at
+port 11105. go vet (linux + windows/386) and a temporary test against the real exes (detection of all four exes, the
+table mode, the write list, apply only once mapped) passed. **Not run yet:** the launcher has not started a 2016 client
+(the user was playing); Windows path untested.
+
+**User: can the 2016 client still use .agt packed assets only, and can it be made to accept only them?** Dev Ed ships
+all 27 .agt (and Patch.000-010, PatchMod.000) as 32-byte empty NayaPack stubs; the assets are loose (Data 4.4 GB). The
+exe still mounts every pack (0x4ffe..0x5015: `new` 0x24 -> CNPacker ctor 0x89b900 into [0x9d6284] and the NiSystem
+import `NiFile::m_pNPacker` [0x943abc]; mount 0x89b310 per name, all must succeed: "Failed to load .agt files."
+0x9516b4). The lookup is in NiSystem20VC71.dll: Dev Ed's (2013-08-20) has the same code as the 2011 one (only the time
+stamp and PDB GUID differ). `NiFile::NiFile` 0x10004580: path through m_sfConvertLocalizingFilePath (the exe's 0x4fe790,
+the Data_US overlay), then for read mode `m_pNPacker->Find` 0x10009210; found -> read from the pack (0x1000468e), else
+fopen (0x10004657). So **packs win and loose files are only a fallback: no patch is needed to run from full packs.** The
+exe's NOP runs (0x4ffea0, 0x50149b, 0x501590, 0x5023f0, 0x54f72e) are community changes around the nation / GameGuard
+startup, not the file layer; the `poly` section is only import thunks. Pack-only (refuse loose reads): a code cave in
+NiSystem's ctor at the miss path (read mode, packer present, not found -> the failed-open path 0x1000468b; 0x10004657
+is also the write path, so it cannot be patched in place). Needs full packs first (the stubs would leave nothing),
+and an allow-list for the files the client writes and reads back (tempsticker.DDS, Sticker/, screenshots...).
+
+**User: pack all the assets back and make the patch; then clean the client of duplicates outside the packs.** New
+`tools/pack_client.py` (pack / verify / patch / clean / status; docstring has the rules). pack: the 27 packs from their
+folders (PACKS; entry names relative to the .agt's folder, as the 2011 packs), streamed, 16 KiB zlib chunks, header bytes
+20-31 of the stub kept, 6 processes: 11115 files, 4.7 GB -> 1.2 GB in 42 s; stubs backed up in
+`client_backup/DriftCity_Dev_Ed/packs/`. verify: every entry equals its loose file (SHA-1). Kept loose (as 2011):
+*.ini, *.ufm, .agt, folders without a pack (Data/audio, miles, Sticker, GameUI/cursor|fonts|teammark, Data_US/gameui
+game.nui ...) and **Data/World/{hitbox,env_shader,shader_terrain,pc_shader}.nif** (no pack has them; the 2011 client keeps
+them loose too). patch: `tools/packonly/cave.s` (GNU as, 248 bytes at 0x10012da0 in .text slack; VirtualSize raised) and the
+folder list (`folder_table()`, from PACKS, 484 bytes at 0x1001c240 in .rdata slack); 0x10004650 `cmp eax,ebx; mov
+[esi+0xc],eax; jne 0x1000468e` -> `jmp 0x10012da0; nop; nop`. The cave: found -> 0x1000468e; miss -> _fullpath (import
+0x100131f8), lower case, '/' -> '\'; *.ini / *.ufm / *.agt allowed; a path containing a packed folder ("\data\world\cras\")
+-> as a failed fopen ([esi+0x20] = 0, [esi+0x28] = 0, jmp 0x1000468b), else the original fopen (0x10004657).
+Position independent (all Gamebryo DLLs prefer 0x10000000: call/pop delta for the import and the table). Original in
+`client_backup/DriftCity_Dev_Ed/NiSystem20VC71.dll.orig`; `patch --undo`. First version refused all of `\data\world\`:
+the client crashed after "Vehicle Texture Load" (NPluto dump: NiMain +0x2825a from exe 0x841fc0), twice; the four loose
+Data/World models were refused. Exact folders since then; a static check of the rule over every loose file: 0 refused
+files outside the packs. In game: packs with the original DLL started and **the user logged in (08:26)**; the patched DLL
+starts to GameCreate() done and **the user logged in and played on it (08:33)**; inotify during a packed start: no loose
+file of a packed folder opened except the *.ini. clean: 11115 identical loose files (4.5 GB) moved to the sibling
+`DriftCity Dev Ed (loose)` (same tree; `clean --undo` moves them back), empty folders removed except the packs' own;
+client 6 GB -> 1.5 GB; a cleaned + patched client starts to GameCreate() done. Tools that read the 2016 client follow:
+client_tables (packs first, a loose file only for what no pack has: as the engine; its test changed), tutorial_flow
+(packed GlobalContent.xlt first, Localize.agt rewritten with replace_entry, loose too while it exists; guided_mode the
+same, so client2016), port2016 / semi_tooltips (loose_path: the sibling folder first), the launcher (Launcher/nayapack.go:
+Data/Localize.agt first; same bytes as Python). build.sh installs the Dev Ed launcher as DriftCityLauncher2016 (the
+user's rename). Tests: tests/test_pack_client.py (3); 78 pass. **Open:** loading from the packs is slower: Quest 1.0 s ->
+10-12 s, Load World data 3.5 s -> 18-22 s, with and without the patch (so the packs, not the cave); the 2011 client
+writes no GameLog to compare.
+
+**User: on 2016 the licenses don't work properly; the new tutorial puts the player in the Driver Dome right after the
+race, and the licenses did not activate.** Log `logs/2016/20261020-074157.msgs.txt`: Rookie gained at 07:57:14 in the
+middle of the training race (a 0x3f2 ran licenses.check; Rookie's "any ladder rate >= 0" is everyone's), its 0x331 notice
+lost there; completion 0x5d2 at 07:59:03; gate left at 08:00:46 (nothing left to announce); after a relog at 08:03:47 the
+client asked 0x32b / 0x32d. Causes (emulator): check() gated on pos_state < IN_CITY only, and the training car is in the
+Driver Dome (state 3); login sends TUTORIAL_FLAGS (Main.License, Etc.NewLicenseSystem, ... = 0) while in_tutorial and
+they came back only with the next login: the apprentice tutorial goes on to the field without one. The 2016 license
+handlers read the 2011 layouts (0x53ace0 / 0x53a450 / 0x532ec0 vs 2011 0x525e50 / 0x525690 / 0x51e920: same fields; only
+char offsets 0x1b1c -> 0x1db0, 0x1b20 -> 0x1db4). Fix: check() and pay_monthly() return while login.in_tutorial (also the
+session-32 Rookie reward during training); new licenses.start() when position.my_city_position leaves the tutorial gate:
+a second 0x1e GameSetting without TUTORIAL_FLAGS (mid-session 0x1e works: Real Match), then check() with the notice and
+0x32c / 0x32e / 0x330, then pay_monthly. Shared code: the same for the 2011 client (user: the new tutorial runs there
+too) and for the legacy tutorial. Tests: TutorialLicenseTest (2) in test_position, the start run for both versions
+(0x1e of 0x62 / 0x6a bytes); 75 pass. The 2011 server was not running: it gets the fix on its next start. 2016 server restarted (pid 36771, log `logs/2016/20261020-081025.msgs.txt`). Xerender already holds
+Rookie (row not edited): a new character shows the fix. **Not yet confirmed in game.**
+
 ## Session 32 (2026-10-19): guided race prompts fixed; next-session handoff
 
 User reports mode1 stalls at Battle Zone (no Tutorial button), suggests skipping the button, then reports

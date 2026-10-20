@@ -5,10 +5,15 @@
     fee, the client takes it off its money itself; u32 Result; u32 part, u32 enhancer, i32 count; client
     0x515290). Result (2008): 0x30000 success, 0x30001 failed (nothing changes), 0x30002 the part is destroyed.
 0x1ae UpgradeItemDouble (2011: 22 bytes; + u32 the drift inventory index of the Mittron Enhancer Booster, + u32
-    an inventory item's InvenIdx (client kind 0x50, none in the 2011 tables: ignored)) -> 0x192, 0x4b2 (the
-    Booster used), 0x5dd, 0x1af UpgradeItemDoubleAck (Gold, Result1, Result2, part, enhancer, count, Booster;
-    2011 + 4 bytes; client 0x515370). The client sends it instead of 0x19d when the 0x5dd double-upgrade flag
-    is set and a Booster (drift category 23, i_d_double) is held (client 0x64d680).
+    the InvenIdx of an inventory Booster: use kind 0x50 double_upgrade, i_n_double, only in the 2016 tables, bought
+    as drift packs "Mittron Enhancer Booster (1/10/25)") -> 0x192, 0x4b2 (a drift Booster used), 0x5dd, 0x1af
+    UpgradeItemDoubleAck (Gold, Result1, Result2, part, enhancer, count, Booster; 2011 + 4 bytes; client 0x515370).
+    The client sends it instead of 0x19d when the 0x5dd double-upgrade flag is set and a Booster is held: the 2011
+    client a drift one (category 23, i_d_double; 0x64d680), the 2016 one a drift one else an inventory one (0x6926c8:
+    category 0x17, else kind 0x50; the other field 0). One inventory Booster is used per try.
+0x20b UpgradeItemSafe (2016 only: u32 part, enhancer, 1, the InvenIdx of a kind 0x67 safe_upgrade item; client
+    0x69273f, sender 0x853bd0) -> 0x20c (Cmd_UpgradeItemSafeAck 0x528780): no item of that kind in the 2016 tables,
+    so not answered.
 
 2008 rules (XiCsCharInfo::UpgradeItem 0x5d75b0, UpgradeItemDouble 0x5d0920): the part is not boxed or in a trade;
 the enhancer is a usable item of use kind "upgrade" whose value fits the part's grade (N 0, S 1, H 2; 99 = the
@@ -85,6 +90,8 @@ def tables():
             for k, g in enumerate('NSH'):
                 c = 7 + 4 * k
                 odds[level, g] = (float(r[c] or 0), float(r[c + 1] or 0))
+            # 2016 Ultra parts: the 2008 table stops at Hyper; their odds = Hyper's x [items] ultra_odds (a guess)
+            odds[level, 'U'] = (min(100.0, odds[level, 'H'][0] * context.ultra_odds), odds[level, 'H'][1])
         for level, r in enumerate(read_tdf(os.path.join(context.data.server_data, 'ItemUpgradeClient.tdf')), 1):
             if len(r) < 14:
                 continue
@@ -123,6 +130,13 @@ async def use_enhancers(p, it, count):
     await db.execute(DELETE_SQL, (db.server_id, p.char.cid, it.inven_idx))
     p.items.remove(it)
     return it, REMOVED
+
+
+def tail_2016():
+    """2016 acks 0x19e / 0x1af / 0x1ab carry one more u32 at the end (handlers 0x528580: @0x16 passed to the result
+    display 0x795580 with result and fee; 0x5286b0 0x26 vs 0x22; 0x528800 0x36 vs 0x32); its meaning is unknown: 0."""
+    from ..version import is_2016
+    return bytes(4) if is_2016() else b''
 
 
 async def gauge_of(p):
@@ -168,13 +182,17 @@ async def enhance(session, frame, double):
         send(session, mod_list(await use_enhancers(p, enh, enh.stack)))
         error(session, '20033')
         return None
-    booster = None
+    booster = inv_booster = None
     if double:
         vs_idx = struct.unpack_from('<I', frame.payload, 12)[0] if len(frame.payload) >= 16 else 0
         booster = next((v for v in p.vsitems if v.inven_idx == vs_idx), None)
         vis = context.data.visuals.get(booster.table_idx) if booster else None
         if not vis or vis.category != 23:                # Mittron Enhancer Booster (i_d_double)
             booster = None
+        inv_idx = struct.unpack_from('<I', frame.payload, 16)[0] if len(frame.payload) >= 20 else 0
+        if not booster and inv_idx:                      # 2016: an inventory Booster (i_n_double)
+            inv_booster = next((i for i in p.items if i.inven_idx == inv_idx and i.stack > 0 and not i.car_id
+                                and info_of(i) and info_of(i).kind == 'double_upgrade'), None)
     level = part.upgrade if part else 0
     odds = tables()[0].get((level + 1, pinfo.grade if pinfo else ''))
     fee = tables()[1].get((level + 1, pinfo.grade if pinfo else ''), (0, 0))[1]
@@ -182,7 +200,7 @@ async def enhance(session, frame, double):
     if fee:                                              # mounted licenses: ME_EnhanceFeeDis / ME_FeeDis (the ack has it)
         fee = fee * (100 - licenses.fee_discount(p, 'enhance')) // 100
     if (not pinfo or pinfo.type not in (0, 1, 2, 3) or level < 0 or not einfo or not fits(einfo, pinfo) or count < 1
-            or enh.stack < count or level >= MAX_LEVEL or not odds or (double and not booster)
+            or enh.stack < count or level >= MAX_LEVEL or not odds or (double and not (booster or inv_booster))
             or fee > p.char.mito or not await add_money(p.char, -fee)):
         session.log.note(f'enhance {part and part.item_id} +{level} with {enh and enh.item_id}: refused')
         error(session, '20033')                          # ItemUpgradeFail
@@ -217,6 +235,8 @@ async def enhance(session, frame, double):
     await set_gauge(p, gauge)
     changes.append((part, CHANGED))
     changes.append(await use_enhancers(p, enh, count))
+    if inv_booster:
+        changes.append(await use_enhancers(p, inv_booster, 1))
     session.log.note(f'enhance {pinfo.item_id} +{level} ({pinfo.grade}, {success}% / destroy {destroy}%) with '
                      f'{einfo.item_id}{" + Booster" if double else ""}: {[hex(r) for r in results]} -> '
                      f'{"broken" if DESTROYED in results else "+%d" % part.upgrade}, gauge {gauge}/{size}, fee {fee}')
@@ -224,16 +244,16 @@ async def enhance(session, frame, double):
     # leaves the window waiting for the list; the other way round the parts shop could not be left (user)
     if double:
         send(session, Frame(0x1af, struct.pack('<III', fee, *results) + frame.payload[:16]
-                            + frame.payload[16:20].ljust(4, b'\0')))
+                            + frame.payload[16:20].ljust(4, b'\0') + tail_2016()))
     else:
-        send(session, Frame(0x19e, struct.pack('<II', fee, results[0]) + frame.payload[:12]))
+        send(session, Frame(0x19e, struct.pack('<II', fee, results[0]) + frame.payload[:12] + tail_2016()))
     send(session, mod_list(*changes))
     send(session, gauge_frame(gauge))
     # licenses: this month's modify tries (GC_UpgradeThisMonth / LastMonth), parts enhanced to +10 .. +19 or higher
     await licenses.count_monthly(session, 'Upgrade', len(results))
     if gained and DESTROYED not in results:
         await licenses.count_many(session, [f'PartsEnhance{name}' for name, lv in ENHANCE_LEVELS if part.upgrade >= lv])
-    if double:
+    if booster:
         from .driftuse import USED, use_up
         from .items import bonus_update
         from .vshop import vs_mod_list

@@ -91,6 +91,12 @@ def tpath(*parts):
     """A path in the target client: tpath('DATA', 'gameui', 'game.nui') -> .../Data_US|Data_EU_eng/gameui/game.nui."""
     return os.path.join(T['root'], *[T['data'] if x == 'DATA' else x for x in parts])
 DEV = os.path.join(ROOT, 'DriftCity Dev Ed')
+
+
+def dev_path(*parts):
+    """A 2016 client file: its loose copy (moved out by tools/pack_client.py clean, the packs being the client's copy)."""
+    from pack_client import loose_path
+    return loose_path(DEV, *parts)
 BACKUPS = os.path.join(HERE, '..', 'client_backup')
 SERVER_DATA = os.path.join(HERE, '..', 'server_data')
 
@@ -254,8 +260,8 @@ def dev_piece(name):
     """A picture piece by name: the 2016 client's loose tex\\*.ntx, else the Drift City World client's uitex.agt
     (WORLD_UITEX; the 2016 Dev Ed files lack many pieces its own game.nui names, e.g. most car name images)."""
     global _world
-    path = os.path.join(DEV, 'Data_US', 'gameui', 'tex', '%x.ntx' % container_of(name))
-    for cand in [path] + [os.path.join(DEV, 'Data_US', 'gameui', 'tex', '%x.ntx' % h) for h in range(16)]:
+    path = dev_path('Data_US', 'gameui', 'tex', '%x.ntx' % container_of(name))
+    for cand in [path] + [dev_path('Data_US', 'gameui', 'tex', '%x.ntx' % h) for h in range(16)]:
         if not os.path.exists(cand):
             continue
         ntx = open(cand, 'rb').read()
@@ -279,7 +285,7 @@ class Interface:
         self.nui_path = tpath('DATA', 'gameui', 'game.nui')
         self.tex_path = tpath('DATA', 'gameui', 'uitex.agt')
         self.nui = open(self.nui_path, 'rb').read().decode('cp949')
-        self.dev_nui = open(os.path.join(DEV, 'Data_US', 'gameui', 'game.nui'), 'rb').read().decode('cp949')
+        self.dev_nui = open(dev_path('Data_US', 'gameui', 'game.nui'), 'rb').read().decode('cp949')
         header, files = agt.read(self.tex_path)
         self.tex_header, self.tex_files = header, files
         self.pieces = {}
@@ -443,7 +449,7 @@ def port_tracks():
         path = tpath('Data', 'World', pack + '.agt')
         have = pack_entries(path)
         prefix = next(iter(have.values())).split('\\')[0]          # the pack's own spelling of the city
-        src = os.path.join(DEV, 'Data', 'World', city)
+        src = dev_path('Data', 'World', city)
         add = {}
         for folder in folders:
             for f in sorted(os.listdir(os.path.join(src, folder))):
@@ -459,7 +465,7 @@ def port_tracks():
     # PVPTrackInfo
     init = tpath('DATA', T['init'])
     old = xlt_lines(read_entry(init, 'Init\\PVPTrackInfo.xlt'))
-    dev = xlt_lines(open(os.path.join(DEV, 'Data', 'Init', 'PVPTrackInfo.xlt'), 'rb').read())
+    dev = xlt_lines(open(dev_path('Data', 'Init', 'PVPTrackInfo.xlt'), 'rb').read())
     lines, n, tracks = ported_tracks(old, dev)
     data = xlt_bytes(lines)
     print(f'PVPTrackInfo.xlt: {n} rows of {len(NEW_TRACK_IDS)} tracks added, {tracks} tracks')
@@ -590,7 +596,7 @@ INIT_ENTRY = 'Init\\%s.xlt'
 
 
 def dev_xlt(name):
-    return xlt_lines(open(os.path.join(DEV, 'Data', 'Init', name + '.xlt'), 'rb').read())
+    return xlt_lines(open(dev_path('Data', 'Init', name + '.xlt'), 'rb').read())
 
 
 def cells(line):
@@ -920,7 +926,7 @@ def port_cars(dry=None):
         entry = c.files[path][2][0]
         key_data = c.read('UseItemClient.tdf')
     have_keys = {r[0] for r in _tdf_rows(key_data)}
-    dev_keys = {r[0]: r for r in read_tdf(os.path.join(DEV, 'Data', 'World', 'Data', 'UseItemClient.tdf'))}
+    dev_keys = {r[0]: r for r in read_tdf(dev_path('Data', 'World', 'Data', 'UseItemClient.tdf'))}
     keys = []
     for f, uid in cars:
         k = f[7][:-4]
@@ -931,7 +937,7 @@ def port_cars(dry=None):
     key_data = tdf_append(key_data, keys) if keys else key_data
     print(f'  {len(keys)} car keys -> {pack_rel} {entry}')
     # files: models, textures, neon, tires
-    vdir = os.path.join(DEV, 'Data', 'vehicle')
+    vdir = dev_path('Data', 'vehicle')
     index = {}
     for root, _, fs in os.walk(vdir):
         for f in fs:
@@ -950,7 +956,7 @@ def port_cars(dry=None):
     add = {}
     for n in sorted(want):
         if n in index and n not in have:
-            rel = os.path.relpath(index[n], os.path.join(DEV, 'Data')).replace(os.sep, '\\')
+            rel = os.path.relpath(index[n], dev_path('Data')).replace(os.sep, '\\')
             add[rel] = open(index[n], 'rb').read()
     print(f'  {len(add)} vehicle files ({sum(map(len, add.values())) // 1000000} MB)')
     # interface: car pictures and aero icons
@@ -977,7 +983,7 @@ def port_cars(dry=None):
     pack_update(os.path.join(T['root'], pack_rel), {entry: key_data})
     ui.save()
     # engine sounds (loose files)
-    adir, out_dir = os.path.join(DEV, 'Data', 'audio', 'engine'), tpath('DATA', 'audio', 'engine')
+    adir, out_dir = dev_path('Data', 'audio', 'engine'), tpath('DATA', 'audio', 'engine')
     sounds = 0
     for f, uid in cars:
         for kind in ('idle', 'mid'):

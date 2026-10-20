@@ -174,7 +174,8 @@ async def modify_item(session, frame):
                         f'{part.assist_a} + {part.assist_b}{" (untradeable)" if part.belonging else ""}'))
     slots = [assist_index(part.assist_a), assist_index(part.assist_b)] + [0] * 8
     # the ack first, then the list (2008)
-    send(session, Frame(0x1ab, struct.pack('<I10II', src, *slots, MODE_KEPT if kept else MODE_NORMAL)))
+    from .upgrade import tail_2016
+    send(session, Frame(0x1ab, struct.pack('<I10II', src, *slots, MODE_KEPT if kept else MODE_NORMAL) + tail_2016()))
     send(session, mod_list((part, CHANGED), *changes))
     from .licenses import count_monthly
     await count_monthly(session, 'Enchant')             # licenses: this month's convert tries (GC_EnchantThis/LastMonth)

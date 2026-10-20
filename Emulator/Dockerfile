@@ -5,4 +5,5 @@ FROM python:3.12-slim
 RUN pip install --no-cache-dir python-tds
 WORKDIR /emu
 ENV PYTHONUNBUFFERED=1
-CMD ["python", "-m", "dcemu", "-q"]
+# the first start copies the client's tables (not in git) from the client mounted at /client
+CMD ["sh", "-c", "python -m tools.client_setup && exec python -m dcemu -q"]

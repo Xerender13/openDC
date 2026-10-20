@@ -33,7 +33,7 @@ def prepare(client, baseline, out):
             if source.find(table) is None:
                 raise ValueError(f'2016 client is missing required table {table}')
         sync(str(client), str(staged))
-        (staged / 'test_serverlist.txt').write_text(
+        (staged / 'serverlist.txt').write_text(
             '2016 Dev2016 127.0.0.1 11111\t127.0.0.1 11121\t'
             '127.0.0.1 11131\t127.0.0.1 11141\t100\n', encoding='utf-8')
         from dcemu.native.data import Tables

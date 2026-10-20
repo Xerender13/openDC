@@ -19,19 +19,25 @@ the original server's layout: separate services and ports, the same SQL Server d
 | `Emulator/dcemu/native/` | native services: `auth.py`, `lobby.py`, `area.py`, `nation.py` (US / EU rules), `game/*.py` (one module per feature: rooms, quests, mothers, instant, items, licenses, ...) | yes |
 | `Emulator/dcemu/handlers/game.py` | content flags sent to the client (`NEW_FLAGS`: flags new in 2011 or missing from the 2008 `Contents.ini`) | yes |
 | `Launcher/` | Go source of the client launcher (`build.sh`) | yes |
-| `Client US/`, `Client EU/` | the game clients (shared separately) | **no** |
-| `Server2008/`, `Handoff/`, `DriftCity Dev Ed/` | 2008 server, research tools, hand-over copies | **no** |
+| `Client US/`, `Client EU/`, `DriftCity Dev Ed/` | the game clients: 2011 US / EU, 2016 US (shared separately; zips in `../Releases/`) | **no** |
+| `Emulator 2011/` | local copy of `Emulator/` set to 2011, for playing | **no** |
+| `Server2008/`, `Handoff/` | 2008 server, research tools, hand-over copies | **no** |
 
 ## Running
 
+`Emulator/emulator.ini` serves both builds: `[client] version` (2016 in this folder and on GitHub) and a `[2016]`
+section whose `section.key = value` lines replace settings for 2016 (ports 111xx, database SKDB2016TEST, logs/2016).
+`Emulator 2011/` is a local copy for playing 2011 (version = 2011, 110xx, SKDBTW; not in git: `.git/info/exclude`,
+created 2026-10-20). It does not follow `Emulator/` by itself: copy fixes over when the user asks.
+
 ```sh
-cd Emulator
-./launch.sh                 # database + traffic agent + emulator + client
+cd Emulator                 # or "Emulator 2011" for the 2011 server
+./launch.sh                 # database + emulator + the client of the configured version
 ./launch.sh restart-emu     # after a code change (disconnects connected clients)
 .venv/bin/python -m tools.gmctl who | item NAME ITEM-ID [count] | drift NAME ID [days] | kick NAME ...
 ```
 
-Logs: `Emulator/logs/<date>-<time>.msgs.txt` has every message both ways, one file per emulator start.
+Logs: `logs/<date>-<time>.msgs.txt` (2016: `logs/2016/`) has every message both ways, one file per emulator start.
 `logs/emulator.out` has the console. Start every bug hunt by finding the user's report in the newest log
 (`grep -n "#N game  --"` gives the server's own notes).
 
@@ -59,7 +65,7 @@ Logs: `Emulator/logs/<date>-<time>.msgs.txt` has every message both ways, one fi
 - **Commit only when asked.** Commit as `Xerender13 <sasuke8453@gmail.com>`. Publishing rules and what must stay
   out of git are in `docs/HANDOVER.md` §4. This repository is public: never put passwords, tickets or personal data
   in it.
-- Scripted-client tests run on a second emulator on ports 111xx (`tools/test_ports.ini`), never on the live one.
+- Scripted-client tests run on a second emulator on ports 112xx (`tools/test_ports.ini`), never on the live one.
   Otherwise call the handlers directly with stub sessions (see `tests/`).
 
 ## Reverse-engineering the client

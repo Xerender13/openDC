@@ -137,3 +137,36 @@ class ObjectTest(unittest.TestCase):
         self.assertEqual(b.types(), [0x23e])
         self.assertEqual(struct.unpack_from('<HH', b.sent[0].payload), (2, 1001))
         self.assertEqual(area.car_of(b).pos, (51.0, 0.0))           # the move after 0x23d was not dropped
+
+
+# The user's 2016 race frame (logs/2016/20261020-114415, barea): 0x21d move + state (0x6c) and a 0x239 BlockList.
+MOVE_2016 = bytes.fromhex(
+    '020001000000ab01020101010201010100000000b14605006a8c99c4b8f38fc3e309ab42752835c0000000000000000000000000'
+    '0000000000000100000001000000000000000000000000000000000000000000000000000000000000000000000040560000000000'
+    '000000390200000000')
+
+
+class Area2016Test(unittest.TestCase):
+    """2016 XiCarMove 0x3a / XiCarState 0x32: moves are walked whole, relayed as 0x221 of 0x74 bytes."""
+    def setUp(self):
+        from dcemu.native import version
+        version.configure({'version': '2016'})
+        area.worlds['barea'] = area.World(pvp=True)
+
+    def tearDown(self):
+        from dcemu.native import version
+        version.configure({'version': '2011'})
+
+    def test_2016_move_is_relayed_whole(self):
+        a, b = Session('barea'), Session('barea')
+        area.dispatch(a, frame(enter(2, 'A', 9)))
+        area.dispatch(b, frame(enter(1, 'B', 9)))
+        a.log.note = b.log.note = lambda text: self.fail(text)       # no "unknown or cut command"
+        area.dispatch(a, Frame(0x21d, MOVE_2016))
+        out = [f for f in b.sent if f.type == 0x221]
+        self.assertEqual(len(out), 1)
+        self.assertEqual(len(out[0].payload) + 2, 0x74)              # 2016 handler 0x51d900
+        self.assertEqual(out[0].payload[:0x6c], MOVE_2016[:0x6c])
+        self.assertAlmostEqual(a.state['car'].pos[0], -1228.388, places=2)
+        area.dispatch(a, frame((0x234, struct.pack('<I', 9))))
+        self.assertEqual((b.sent[-1].type, len(b.sent[-1].payload) + 2), (0x226, 0x3c))

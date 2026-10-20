@@ -109,20 +109,40 @@ def play_bonus(p, exp=0, money=0, activity=None, city=None):
     lic_exp, lic_money = license_bonus(p, activity, city)
     from .mita500 import bonus_rate                 # a running Mita 500 buff: x its rate (2008 ApplyMita500BonusMito, Mito
     from .assists import totals                     # exp assists on the car (options, converts, drift items: assists.py)
-    assist_exp = int(totals(p)['exp'])
+    got = totals(p)
+    assist_exp, assist_money = int(got['exp']), int(got['mito'])
     if exp:                                         # only; here exp too, as the client's MITO/EXP label says: user)
         exp += exp * ((context.drink_exp if holds(p, EXP_DRINK) else 0) + bacchus + lic_exp + assist_exp) // 100
         exp = exp * bonus_rate(p) // 100
     if money:
-        money += money * ((context.drink_mito if holds(p, MITO_DRINK) else 0) + bacchus + lic_money) // 100
+        money += money * ((context.drink_mito if holds(p, MITO_DRINK) else 0) + bacchus + lic_money + assist_money) // 100
         money = money * bonus_rate(p) // 100
     return exp, money
 
 
-async def new_item(p, info, count, random=0):
+BASE_TYPES = (0, 1, 2, 3)      # speed / crash / accel / boost parts (not option, docking or usable items)
+
+
+def roll_base(info, perfect=False):
+    """Perfect Base (emulator.ini [items] random_base): a part's random base bonus, NRANDOM, which the client and
+    player.stats add to its table value. 2008 XiCsCharInfo::ItemRandValue 0x5c7bb0 (from TakeItem / RewardItems, the
+    drop and reward path): lo + rand() % (hi - lo + 1) with lo / hi = ItemClient columns 10 / 11 (ItemServer 8 / 9;
+    e.g. Small 0..2, Big 0..3); option parts (types 6-10) get 0. perfect: the top of the range (the perfect base)."""
+    if not context.random_base or info is None or info.type not in BASE_TYPES:
+        return 0
+    lo, hi = info.base_range
+    if hi <= lo:
+        return max(lo, 0)
+    import random as rng
+    return hi if perfect else rng.randint(lo, hi)
+
+
+async def new_item(p, info, count, random=None):
     """A new inventory item. random = NRANDOM: for a car key the CarID of its car (the client finds the car for
     the key's tooltip by it: user, 2026-10-14, a key bought at auction showed no tooltip; the 2008 server's keys
-    have it, the emulator's had 0)."""
+    have it, the emulator's had 0). None: a part gets its random base bonus (roll_base), anything else 0."""
+    if random is None:
+        random = roll_base(info)
     db, c = context.db, p.char
     gid = int((await db.row(NEXT_GID_SQL))[0])
     c.part_inven_idx += 1
@@ -147,7 +167,7 @@ async def link_keys(p):
     character's Metro had no key). -> the keys made."""
     from .apprentice import training_car
     db, t = context.db, context.data
-    permanent = [c for c in p.char.cars if not training_car(c)]
+    permanent = [c for c in p.char.cars if not training_car(c) and not c.rental]
     keys = [i for i in p.items if (info := info_of(i)) and info.kind == 'car']
     taken = {i.random for i in keys if i.random}
     for k in keys:
@@ -231,7 +251,7 @@ async def buy_item(session, frame):
         await db.execute(STACK_SQL, (it.stack, db.server_id, p.char.cid, it.inven_idx))
         state = CHANGED
     else:
-        it, state = await new_item(p, info, count), NEW
+        it, state = await new_item(p, info, count, 0), NEW      # shop parts: no base bonus (2008 BuyItem)
     session.log.note(f'buy item {info.item_id} x{count} for {price}: inventory {it.inven_idx}, stack {it.stack}')
     send(session, Frame(0x196, struct.pack('<III', table_idx, count, price)))
     send(session, mod_list((it, state)))
@@ -245,7 +265,7 @@ async def sell_item(session, frame):
     table_idx, count, inven_idx = struct.unpack_from('<III', frame.payload)
     it = next((i for i in p.items if i.inven_idx == inven_idx), None)
     info = context.data.item_info(table_idx)
-    if not it or not info or it.table_idx != table_idx or count < 1 or count > it.stack or (it.state & 0xffff) == 4:
+    if not it or not info or it.item_id.startswith('r_type_') or it.table_idx != table_idx or count < 1 or count > it.stack or (it.state & 0xffff) == 4:
         return error(session, '20030')                  # (state 4: on auction)                  # ItemSellFail
     from .channels import STAKED_TEXT, staked
     if staked(p, it):                                   # at stake in a Major channel battle (channels.py)
@@ -313,7 +333,12 @@ async def drop_item(session, frame):
 # official 2011 server had them off; sent to the client as Main.OptionItem): refused otherwise.
 OPTION_TYPES, DOCK = (6, 7, 8, 9, 10), 11
 GRADE_FITS = {'N': ('FN', 'ON'), 'S': ('FN', 'FS', 'OS'), 'H': ('FN', 'FS', 'FH', 'OH'),
-              'E': ('FN', 'FS', 'FH', 'FE', 'OE')}
+              'E': ('FN', 'FS', 'FH', 'FE', 'OE'),
+              'U': ('FN', 'FS', 'FH', 'OU')}       # 2016 Ultra parts: the options up to FH (no FU), Ultra dockings
+# Grades that are heat treated (a scorched twin on the car, a Heat Treatment Kit to come off) -> the kit's value:
+# Hyper (i_n_00025, 2) and, 2016, Ultra (i_n_00025_U "Ultra Parts Heat Treatment Kit", 3; Ultra parts have _b twins)
+HEAT_GRADES = {'H': 2, 'U': 3}
+HYPER_DOCKS = ('OH', 'OU')
 ON_CAR = 1
 HEAT_TEXT = 'Use a Heat Treatment Kit on this part to take it off the car.'
 ITEM_STATE_SQL = "UPDATE SKID_ITEM_TB SET CARID=%s, STATE=%s WHERE SERVERID=%s AND CID=%s AND INVENIDX=%s"
@@ -385,7 +410,7 @@ async def equip_item(session, frame):
     from .. import nation
     why = nation.part_allowed(session, p, info, car) if info else None
     if (not it or not info or info.type == 5 or (it.state & 0xffff) == 4 or it.upgrade < 0   # < 0: broken
-            or why or not car or car.on_auction
+            or why or not car or car.on_auction or car.rental or it.item_id.startswith('r_type_')
             or (on_top(info.type) and not context.option_parts)):
         if why:
             session.log.note(f'equip {info.item_id}: refused ({why}; nation {nation.of(session)})')
@@ -448,7 +473,7 @@ async def equip_item(session, frame):
         db = context.db
         await db.execute("UPDATE SKID_ITEM_TB SET BOX=0 WHERE SERVERID=%s AND CID=%s AND INVENIDX=%s",
                          (db.server_id, p.char.cid, it.inven_idx))
-    if info.grade == 'H' and await scorch(p, it, True):
+    if info.grade in HEAT_GRADES and await scorch(p, it, True):
         session.log.note(f'{info.item_id} is scorched: {it.item_id}')
     await save_state(p, *changed)
     session.log.note(f'equip {info.item_id} on car {car_id} slot {slot}')
@@ -479,16 +504,30 @@ async def scorch(p, it, scorched):
     return True
 
 
-def heat_kit(p):
-    """A Heat Treatment Kit held (UseItemClient kind heattreatment, i_n_00025; value 2 = hyper), or None."""
-    return next((i for i in p.items if not i.car_id and info_of(i) and info_of(i).kind == 'heattreatment'), None)
+def heat_kit(p, grade='H'):
+    """A Heat Treatment Kit held for that part grade (UseItemClient kind heattreatment, value HEAT_GRADES: i_n_00025
+    hyper 2, i_n_00025_U Ultra 3), or None."""
+    return next((i for i in p.items if not i.car_id and kit_fits(info_of(i), grade)), None)
+
+
+def kit_fits(kinfo, grade):
+    return bool(kinfo) and kinfo.kind == 'heattreatment' and kinfo.value == HEAT_GRADES.get(grade, 2)
+
+
+def heat_grade(p, it):
+    """The grade whose kit taking it off needs: the part's (H / U), or for a docking the part under it."""
+    info = info_of(it)
+    if info.type == DOCK:
+        part = next((i for i in hyper_docked(p, it) if info_of(i).type != DOCK), None)
+        return info_of(part).grade if part else 'H'
+    return info.grade if info.grade in HEAT_GRADES else 'H'
 
 
 def hyper_docked(p, it):
     """The part + docking pair it belongs to when that slot holds an H docking (grade OH) -> list, else []."""
     pair = [i for i in p.items if i.car_id == it.car_id and slot_of(i) == slot_of(it) and (i.state & 0xffff) == ON_CAR
             and (info_of(i).type == DOCK or not on_top(info_of(i).type))]
-    return pair if any(info_of(i).type == DOCK and info_of(i).grade == 'OH' for i in pair) else []
+    return pair if any(info_of(i).type == DOCK and info_of(i).grade in HYPER_DOCKS for i in pair) else []
 
 
 def needs_heat(p, it):
@@ -500,12 +539,14 @@ def needs_heat(p, it):
     part = it if info.type != DOCK else next((i for i in hyper_docked(p, it) if info_of(i).type != DOCK), None)
     if part and is_set(part):
         return False
-    return bool(hyper_docked(p, it)) or (info.grade == 'H' and not on_top(info.type) and info.type != DOCK)
+    return bool(hyper_docked(p, it)) or (info.grade in HEAT_GRADES and not on_top(info.type) and info.type != DOCK)
 
 
 async def take_off(session, p, it, kit=None):
     """it (and, for a part, the option and docking on its slot; for a hyper docking, its part) comes off the car;
     kit (a Heat Treatment Kit) is used up. -> False if a needed kit is missing."""
+    if it.item_id.startswith('r_type_'):
+        return False
     changed = [it]
     if not on_top(info_of(it).type) and info_of(it).type != DOCK:     # its option and docking come off too
         changed += [i for i in p.items if i is not it and i.car_id == it.car_id and slot_of(i) == slot_of(it)
@@ -514,7 +555,8 @@ async def take_off(session, p, it, kit=None):
     if hyper:
         # an H part, or a slot with an H docking, comes off only with a Heat Treatment Kit; an H docking takes its
         # part with it (the user, wiki)
-        kit = kit or heat_kit(p)
+        grade = heat_grade(p, it)                   # an Ultra part (2016) needs the Ultra kit, a hyper one the kit
+        kit = kit if kit and kit_fits(info_of(kit), grade) else heat_kit(p, grade)
         if not kit:
             return False
         changed += [i for i in hyper_docked(p, it) if i not in changed]
@@ -541,7 +583,7 @@ async def unequip_item(session, frame):
         return
     inven_idx, car_id = struct.unpack_from('<II', frame.payload)
     it = next((i for i in p.items if i.inven_idx == inven_idx and i.car_id), None)
-    if not it:
+    if not it or it.item_id.startswith('r_type_'):
         return error(session, '20028')                  # ItemUnEquipFail
     from .channels import STAKED_TEXT, staked
     if staked(p, it):                                   # at stake in a Major channel battle (channels.py)
@@ -665,7 +707,10 @@ USE_KINDS = {'piece': 1, 'upgrade': 2, 'fuel': 3, 'money': 4, 'fuelsave': 5, 'tu
              'giftbox_auto': 0x55, 'leveldown': 0x56, 'healthup': 0x57, 'healthupnow': 0x58,
              'party_healthupnow': 0x59, 'revival': 0x5a, 'shieldup': 0x5b, 'weapondamage': 0x5c,
              'neowslotextend': 0x5d, 'minimaprader': 0x5e, 'booster_chage': 0x5f, 'loweraggro': 0x60,
-             'repair_waepon': 0x61, 'repair_coil': 0x62, 'repair_fusion': 0x63, 'repair_armor': 0x64}
+             'repair_waepon': 0x61, 'repair_coil': 0x62, 'repair_fusion': 0x63, 'repair_armor': 0x64,
+             # 2016 client only (its kind -> code function 0x759f00; the 2011 codes are the same there)
+             'neoquest_item': 0x65, 'repair_neoparts': 0x66, 'safe_upgrade': 0x67, 'rent_car_capsule': 0x68,
+             'fullchance_upgrade': 0x69, 'parts_craft_up': 0x6a, 'atransfer': 0x6b}
 POINT_UP = {'speedpointup': 0, 'crashpointup': 1, 'accelpointup': 2}       # stat index (speed, crash, accel, boost)
 
 
@@ -684,6 +729,11 @@ async def use_item(session, frame):
     if info.kind == 'gacha_key':                    # Gotcha key parts + vehicle parts A-D -> the car gift box
         from .gotcha import combine
         return await combine(session, p, it, info)
+    if info.kind == 'piece' and info.extra:         # pieces -> their item (make_from_pieces)
+        return await make_from_pieces(session, p, it, info)
+    if info.kind == 'rent_car_capsule':             # Rental capsules use the allocation window (0xfb4 RentCarItem),
+        session.log.note(f'rental capsule {info.item_id} used: kept (use the rental allocation window)')
+        return error(session, '20036')              # not used up for nothing
     if info.kind in ('bacchus_f', 'bacchus_d'):
         from .mita500 import active as mita_active
         if mita_active(p):                          # its tooltip: "Cannot be used with the Mita 500 effect"
@@ -722,6 +772,13 @@ async def use_item(session, frame):
         p.buffs[POINT_UP[info.kind]] = (info.value, time.monotonic() + info.time)
         stats = True
         loop_stats_after(session, p, info.time)
+    elif info.kind == 'fullchance_upgrade':
+        # 2016 Upgrade Chance Enhancing Fluid (i_n_chancetime; "increases upgrade chance. Used for Parts Shop
+        # Enhancement"): the Modify tab's chance gauge full at once, so the next try succeeds (upgrade.py); one used
+        from .upgrade import GAUGE_MAX, gauge_frame, set_gauge
+        count = 1
+        await set_gauge(p, GAUGE_MAX)
+        send(session, gauge_frame(GAUGE_MAX))
     it.stack -= count
     if it.stack:
         await db.execute(STACK_SQL, (it.stack, db.server_id, c.cid, inven_idx))
@@ -749,6 +806,101 @@ async def use_item(session, frame):
     if info.kind == 'instant':                      # Line Ball / Mecha Watch / Exodus Quake Mission Battle (instant.py)
         from .instant import offer_mission_battle
         offer_mission_battle(session, info.value)
+
+
+PIECE_SQL = "UPDATE SKID_ITEM_TB SET ITEMID=%s, STACKNUM=1 WHERE SERVERID=%s AND CID=%s AND INVENIDX=%s"
+
+
+async def complete_piece(p, it):
+    """A piece stack that is full turns into its item, as the 2008 server did on adding to it (XiCsCharInfo::AddItem
+    0x5c6940 -> XiCsItem::IsFullPiece 0x599620: use item of kind piece and stack >= its count, ItemClient/UseItemClient
+    column 5 -> ChangeNextItem 0x599ab0: the record becomes column 4's item, stack 1, its expiry restarted): 100
+    Capsule Points -> ST Vehicle Ticket (user, 2026-10-20: the 2016 client has no use action for pieces; using them
+    sent nothing). The same row and InvenIdx (0x192 CHANGED shows the new item). -> True when it changed."""
+    info = info_of(it)
+    if not info or info.kind != 'piece' or not info.extra or it.stack < max(info.stack_max, 1) or it.car_id:
+        return False
+    t, db = context.data, context.db
+    made = t.item_info(t.item_index.get(info.extra, -1))
+    if not made:
+        return False
+    it.item_id, it.table_idx, it.stack = made.item_id, made.table_idx, 1
+    await db.execute(PIECE_SQL, (made.item_id, db.server_id, p.char.cid, it.inven_idx))
+    from .setparts import start_expiry
+    await start_expiry(p, it)
+    return True
+
+
+async def make_from_pieces(session, p, it, info):
+    """0x1a1 ItemUse on a piece (UseItemClient kind piece, client code 1): column 4 names the item made, column 5 how
+    many pieces it takes (also their stack size): 100 Capsule Points (i_n_gacha_point, from the 2016 Gotcha) -> an ST
+    Vehicle Ticket ("With 100 points, you can get a ST Vehicle Ticket"; user, 2026-10-20), 10 Liquid Mittron (1ml.) ->
+    a Mittron Enhancer, 10 components -> an Incomplete H / Ultra part, event tokens -> their box. Fewer than that:
+    ItemUseFail. Until 2026-10-20 a piece was used up for nothing. -> 0x1a2 (kind 1), 0x192 (pieces, the item), its
+    prize window (0x89 type 23, as a gift box)."""
+    from .driftuse import Gains, give_item
+    t = context.data
+    need = max(info.stack_max, 1)
+    made = t.item_info(t.item_index.get(info.extra, -1))
+    if it.stack < need or not made:
+        session.log.note(f'pieces {info.item_id}: {it.stack} of {need} for {info.extra}')
+        return error(session, '20036')                  # ItemUseFail
+    from .combo import free_slots
+    if not stack_for(p, made, 1) and free_slots(p) <= 0:
+        return error(session, '20036')
+    db, c = context.db, p.char
+    it.stack -= need
+    if it.stack:
+        await db.execute(STACK_SQL, (it.stack, db.server_id, c.cid, it.inven_idx))
+        state = CHANGED
+    else:
+        await db.execute(DELETE_SQL, (db.server_id, c.cid, it.inven_idx))
+        p.items.remove(it)
+        state = REMOVED
+    gains = Gains()
+    await give_item(p, made.item_id, 1, gains)
+    session.log.note(f'pieces {need} x {info.item_id} -> {made.item_id}')
+    send(session, Frame(0x1a2, struct.pack('<II4I', it.inven_idx, need, USE_KINDS['piece'], 0, 0, 0)))
+    send(session, mod_list((it, state)))
+    gains.send(session, p)
+    send(session, Frame(0x89, struct.pack('<IIII', 23, made.table_idx, 1, 0)))
+
+
+@on(SVC, C2S, 0x19f)
+async def item_union(session, frame):
+    """0x19f ItemUnion (u32 the stack dropped on, u32 the stack dragged; both clients, sender 2016 0x853d40 / 2011
+    0x7f15d0, from the inventory windows when one stack of an item is dragged onto another with room: 0x5f6565
+    checks max stack - stack) -> as many as fit move over, 0x1a0 ItemUnionAck (the same 8 bytes; 2016 0x521b90 reads
+    nothing else), 0x192. Was not handled: stacks could not be put together (Capsule Points, user 2026-10-20)."""
+    p = session.state.get('player')
+    if not p or len(frame.payload) < 8:
+        return
+    dst_idx, src_idx = struct.unpack_from('<II', frame.payload)
+    dst = next((i for i in p.items if i.inven_idx == dst_idx), None)
+    src = next((i for i in p.items if i.inven_idx == src_idx), None)
+    info = info_of(dst) if dst else None
+    room = (info.stack_max - dst.stack) if info else 0
+    if (not dst or not src or dst is src or src.item_id != dst.item_id or info.type != 5 or room <= 0
+            or dst.car_id or src.car_id or (dst.state & 0xffff) == 4 or (src.state & 0xffff) == 4):
+        return error(session, '20036')
+    n = min(room, src.stack)
+    db, c = context.db, p.char
+    dst.stack += n
+    src.stack -= n
+    await db.execute(STACK_SQL, (dst.stack, db.server_id, c.cid, dst.inven_idx))
+    changes = [(dst, CHANGED)]
+    if src.stack:
+        await db.execute(STACK_SQL, (src.stack, db.server_id, c.cid, src.inven_idx))
+        changes.append((src, CHANGED))
+    else:
+        await db.execute(DELETE_SQL, (db.server_id, c.cid, src.inven_idx))
+        p.items.remove(src)
+        changes.append((src, REMOVED))
+    session.log.note(f'merge {info.item_id}: {n} onto stack {dst_idx} ({dst.stack}/{info.stack_max})')
+    if await complete_piece(p, dst):                    # a full piece stack becomes its item (2008 AddItem)
+        session.log.note(f'pieces {info.item_id} full -> {dst.item_id}')
+    send(session, Frame(0x1a0, frame.payload[:8]))
+    send(session, mod_list(*changes))
 
 
 def loop_stats_after(session, p, seconds):

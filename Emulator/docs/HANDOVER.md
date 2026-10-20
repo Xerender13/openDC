@@ -4,7 +4,121 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Latest handoff: 2026-10-19 (session 32: guided apprentice race works)
+## Current state: 2026-10-20 (session 39) — resume here
+
+**One `emulator.ini` for both builds** (EMULATOR_NOTES session 39): `[client] version = 2016` in `Emulator/`, its
+`[2016]` section gives 2016 its ports (111xx), database (SKDB2016TEST) and logs (logs/2016). `server_data_2016/emulator.ini`
+and `tools/test2016.ini` are gone; scripted tests use 112xx now. **2011 is played from `../Emulator 2011/`**, a local
+copy (not in git) with `version = 2011` (110xx, SKDBTW). Running at the end of the session: 2011 copy pid 10710,
+2016 pid 10826 (both started with `./launch.sh server`; verify before stopping). Client zips: `Drift City Project/Releases/`.
+The loose 2016 files (`DriftCity Dev Ed (loose)`) were deleted. Session 38's open list below still applies.
+
+## Session closed: 2026-10-20 (session 38)
+
+User requested handoff and end of session. **Current scope is the new 2016 client only.** Preserve all existing
+tracked/untracked work; nothing committed. The entries below are historical snapshots; use this block for current state.
+
+Completed this session: time-limited rental redemption and cleanup; rental countdown epoch correction; HOME
+category enablement; drift-item auction enablement/UI and lifecycle race fixes; category 58 Turbo/Drift Booster
+binding/equipping in native skill slot 20. Battle quick-slot flag is already on and was verified in client memory.
+Inventory has a complete native Drift Auction tab and registration panel; no additional inventory UI patch needed.
+See EMULATOR_NOTES sessions 35–37 for packet layouts, native addresses, files and limitations.
+
+**Running server (then):** PID 255258 (session 38), command `.venv/bin/python -m dcemu -c server_data_2016/emulator.ini -q`
+(that file is merged into emulator.ini since session 39) from Emulator/. Database SKDB2016TEST, server id 2016; ports 11105/11111/11121/11131/11141/11151, control 11199.
+Log: logs/2016/20261020-153632.msgs.txt. Server left running. Verify PID identity before any later stop/restart.
+Last full suite: **128 tests pass** (session 38). 136 tests. 2016 room layouts + race moves (XiCarMove 0x3a / XiCarState 0x32) and apprentice -> Driver Dome + licenses fixed, untested in game. Next (user): 2016 level-down items. Rental SQL redemption/expiry/replay also
+validated with a temporary rolled-back fixture. Auction lifecycle tests use stub sessions, not live character logins.
+
+**Next actions, in order:**
+
+1. Fully restart the 2016 client to load local shop settings and UI. Last inspected client PID 73494 predates those
+   asset changes. Reapply if needed from Emulator/: `.venv/bin/python -m tools.shop2016`.
+   Backups: client_backup/shop2016; pack header bytes 20–31 and unrelated entries preserved.
+2. Confirm one-day rental countdown, HOME page, public drift auction layout and inventory Drift Auction tab in game.
+   Test registration/cancellation/purchase/collection with the unused Inventory Expansion item (10407 / i_d_ivn_01),
+   eligible while unbound and state 0. Do not consume it just to test auction eligibility.
+3. Confirm Turbo/Drift Booster purchase, equip/unequip, replacement and car binding in game. Replacement intentionally
+   deletes the previous skill on that car, matching its table description. Earlier unbound purchases repair at login.
+4. Clarify the Battle Zone slot report if still failing: boxes missing, grey, or refusing a specific item? The actual
+   BattleQuickSlot switch was already 1; do not claim a new enablement fix. Use battle_quick inventory items such as
+   Crash Capsule / Boost Recharger; regular EXP/item/Mito drinks are a different kind.
+5. Resume remaining 2016 work: meter-rated rental kind 2 and explicit 0x6c early return; Part Option Extractor
+   (0xfc1/0xfc2), NEO repair (0x4c4/0x4c5), combining above level 70 for Ultra, NeoCity R parts, Battle Zone OB Gacha,
+   and earlier open items. No further implementation was authorized by this session-close request.
+
+User screenshots confirm the rental car exists, but the new countdown/shop/auction/skill effects still need user
+confirmation. No player rows manually edited. Keep 2011 client/config behavior separate. REA/Ghidra timed out;
+reuse `/tmp/dc-rental/client.dis` and the session notes rather than repeating heavy imports. Runtime memory reads
+were read-only, with ptrace enabled. No client process was stopped by the agent.
+
+## Follow-up: 2026-10-20 (session 37: 2016 slots / inventory drift auction)
+
+Battle quick-slot switch already enabled and verified in running 2016 client memory (net+0x29a bit 0).
+Asked user whether boxes are missing/grey or refusing an item; answer pending. No additional toggle needed.
+Inventory sixth tab 4980020 and registration pane 5150000 are complete. Session 36 AuctionVSItem enablement
+reveals them after **full client restart**; PID 73494 still uses old local settings. Control 4980021 is an
+intentional keyboard-cycle target to Parts, not a missing click overlay. Inventory Expansion 10407 / i_d_ivn_01
+is eligible unused, unbound, state 0. No new implementation changes/restart; server remains PID 100911.
+See session 37 native evidence. In-game confirmation pending.
+
+## Latest handoff: 2026-10-20 (session 36: 2016 shop, auction, countdown, driving skills)
+
+**2016 only.** Rental countdown now uses the 2012 UTC epoch (fixes 15340 days for a one-day rental); DB terms unchanged.
+HOME enabled; drift auction enabled in 2016 config/local table, with native tab/headers restored by
+`python -m tools.shop2016`. Backups: client_backup/shop2016. Full client restart required. Auction lifecycle sizes
+verified; race guards and time-column sorts added. Driving skills (category 58 Turbo/Drift Booster) now bind,
+equip/replace on current car using native slot 20. DRIVE_PASSIVE shop row enabled; login repairs old unbound purchases.
+These new effects are **not yet confirmed in game**. 126 tests pass. Details: EMULATOR_NOTES session 36.
+
+2016 emulator restarted: PID **100911** (verify identity before stopping), tools/test2016.ini, SKDB2016TEST, 111xx,
+log logs/2016/20261020-102056.msgs.txt. All seven listeners verified. No 2011 assets/config changed for these fixes;
+no manual player edits or commits. Preserve earlier dirty work. Meter-rated rentals and early return remain open.
+
+## Latest handoff: 2026-10-20 (session 35: 2016 rental capsule use)
+
+**Scope explicitly clarified by user: this session is the new 2016 client only.** Time-limited rental use now
+implemented in game/rentals.py (0xfb4 -> 0xfb6 + 0xfb5), allocated base stats, chosen special assist and two
+rental sets, persistent terms/metadata, atomic capsule redemption, expiry cleanup. Purchase confirmed by user;
+**rental loaded in the live client after reconnect**, allocated base stats and rental-set bonuses verified in memory.
+User visual/driving confirmation pending. Details/evidence/limitations in
+EMULATOR_NOTES session 35. Meter-rated kind 2 and explicit 0x6c early return remain open. No client changes.
+
+2016 test server now PID **93645** (verify before stopping), tools/test2016.ini, 111xx/SKDB2016TEST,
+logs/2016/20261020-100336.msgs.txt. **102 tests pass**, plus real SQL redemption/expiry/replay check on a temporary
+fixture within a rolled-back transaction. The new empty dbo.SKID_RENTCAR_TB table persists; no player edits.
+No commits. Preserve all earlier dirty work. 2011 does not receive the rental protocol.
+
+## Latest handoff: 2026-10-20 (session 34: 2016 items, Ultra, car assists, Gotcha 2015, pieces, rentals)
+
+Details: EMULATOR_NOTES session 34 (top). **2011 stays the default (110xx, SKDBTW); the 2016 test instance runs with
+`tools/test2016.ini` (111xx, SKDB2016TEST), last pid 81552 (verify before stopping).** The Dev Ed client is packed and
+pack-only (session 33); it is started with `DriftCity Dev Ed/DriftCityLauncher2016` (the user's name). Nothing
+committed this session or the last; 93 tests pass.
+
+User-confirmed this session: 100 Capsule Points -> ST Vehicle Ticket (2008 rule: a full piece stack becomes its item,
+items.complete_piece), login works again after the merge_stacks name clash. Not yet confirmed: the 2016 drift packs
+(categories 23 / 56 / 59, Parts box counts), the inventory Mittron Enhancer Booster in 0x1ae, the Chance Fluid, the
+Manufacturing Booster (which 0xe78 field: logged), Ultra rules (odds = Hyper x [items] ultra_odds, options, heat kits,
+OU dockings, docking letters: guesses marked), car-own assists counted on the server (Exp / Mito +100 %, speedup:
+**also changes 2011**), Gotcha 2016 (season 0, 2015 capsules, prices, prize count), RewardGroup Probability by header
+(2016 gift boxes were all empty before), 0x19f stack merge, rental pack purchase (gives the capsule).
+
+**Next (user's order: 2016 features)**: rental car step 2 (0xfb4 / 0xfb5 / 0xfb6: trace the client when the capsule is
+used), then round 2: Part Option Extractor (0xfc1 -> 0xfc2), NEO parts repair (0x4c4 -> 0x4c5), Drive skill boosters
+(category 58, Skill Item Slot), combining above level 70 for Ultra, NeoCity R parts, Battle Zone OB Gacha (0x834 ..
+0x83a), Capsule Points shop?, Etc.ShowGotchaOldStyle. Open from session 33: packed loading is slower (Quest 1 -> 11 s).
+
+## Previous handoff: 2026-10-20 (session 33: client tables tool, 2016 tutorial window)
+
+The client's tables stay out of git (user, 2026-10-20). `python -m tools.client_setup [-c config]` adds the missing
+ones on first start (launch.sh / launch.bat / the container ask for the client folder); details EMULATOR_NOTES
+session 33. 2016 guided tutorial: the Dev Ed table and test exe must agree (`tools.tutorial_flow --only 2016`).
+Not yet confirmed in game. No commits.
+Dev Ed is now packed and pack-only (tools/pack_client.py; loose copies in `../DriftCity Dev Ed (loose)`); the user played
+on it. Licenses fixed for the apprentice tutorial (licenses.start). Open: packed loading is slower (session 33).
+
+## Previous handoff: 2026-10-19 (session 32: guided apprentice race works)
 
 **User confirms: “Works correctly now” after the tutorial race fix.** Expected route supplied by user:
 drive from Driver Dome to Battle Zone -> guided race with prompts -> normal race -> old field tutorial.
@@ -67,7 +181,7 @@ No exe patches this session, no commits. Preserve earlier workspace modification
 ## Latest handoff: 2026-10-19 (session 29: real 2016 login works)
 
 **2011 remains default and runs on 110xx / SKDBTW.** A separate 2016 instance runs on 111xx /
-SKDB2016TEST with server_data_2016/emulator.ini (gitignored); minimal portable config tools/test2016.ini.
+SKDB2016TEST with server_data_2016/emulator.ini (tracked; tools/test2016.ini was merged into it on 2026-10-20).
 Latest PIDs: 2011 68820, 2016 68796 (verify, do not assume). All 65 tests pass.
 
 2016 client launched and logged in successfully, created a character, entered the world and played Director
@@ -467,7 +581,8 @@ The local EMULATOR_NOTES.md is the redacted version (the second test account's p
 `server_data/` files (except `server_data/Init/` and `server_data/tables/UseItemClient.tdf`: kept in git since
 2026-10-19 at the user's request, they hold the tables `tools/port2016.py` wrote), or database backups other than
 `db/SKDBTW_clean.bak` (`.gitignore` covers these). `server_data_2016/` (the experimental 2016 tables) is in git since
-2026-10-19 under the same rules as `server_data/`: its client-copied `tables/`, `teammark/` and pid files stay out. The tools
+2026-10-19 under the same rules as `server_data/`: its client-copied `tables/`, `teammark/` and pid files stay out
+(the user confirmed on 2026-10-20: never push client files; `tools/client_setup.py` copies them on first start). The tools
 that change client files are in git, so those changes can be made again on another machine (see §5).
 
 ## 5. State at the handover

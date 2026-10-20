@@ -1145,9 +1145,9 @@ async def room_create(session, frame):
     """0x370 CBattleRoomCreate (the crew master / first class): the crew's room in the channel, or into it."""
     from . import rooms
     p = frame.payload
-    if len(p) < 0x10:
+    if len(p) < rooms.user_info_size() + 4:        # XiPvpUserInfo, u32 channel (2016: 16-byte UserInfo)
         return
-    ch, = struct.unpack_from('<i', p, 0xc)
+    ch, = struct.unpack_from('<i', p, rooms.user_info_size())
     got = await checks(session, ch, True)
     if not got:
         return
@@ -1155,11 +1155,11 @@ async def room_create(session, frame):
     pl = session.state['player']
     r = lb.room(t['tid'])
     if r is not None:
-        return join_room(session, lb, r, p[0:rooms.USER_INFO], rooms.car_attr_of(pl.car) if pl.car else bytes(12))
+        return join_room(session, lb, r, p[0:rooms.user_info_size()], rooms.car_attr_of(pl.car) if pl.car else bytes(rooms.car_attr_size()))
     rooms.leave(session)
     test = is_test(session)
     r = crew_room(lb, t, test)
-    m = rooms.Member(session, p[0:rooms.USER_INFO], rooms.car_attr_of(pl.car) if pl.car else bytes(12))
+    m = rooms.Member(session, p[0:rooms.user_info_size()], rooms.car_attr_of(pl.car) if pl.car else bytes(rooms.car_attr_size()))
     m.ready = True
     r.members.append(m)
     r.master = m.serial
@@ -1168,7 +1168,7 @@ async def room_create(session, frame):
     owner = lb.owner and lb.owner['tid'] == t['tid']
     session.log.note(f'channel battle {channel_name(ch)}: room {r.id} of crew {t["name"]!r}'
                      f' ({"owner" if owner else "challenger"}{", test" if test else ""})')
-    send(session, r.master_frame(), r.state_frame(), Frame(0x376, p[0:rooms.USER_INFO] + struct.pack('<i', ch)))
+    send(session, r.master_frame(), r.state_frame(), Frame(0x376, p[0:rooms.user_info_size()] + struct.pack('<i', ch)))
     if owner and lb.state in (PREPARE, WAIT, REST, NONE_) and lb.owner_room is None:
         lb.owner_room = t['tid']
         lb.dirty = True
@@ -1202,11 +1202,14 @@ def join_room(session, lb, r, user_info, car_attr):
 
 @on(SVC, C2S, 0x371)
 async def room_join(session, frame):
-    """0x371 CBattleRoomJoin (a member): into the crew's room in the channel."""
+    """0x371 CBattleRoomJoin (a member): into the crew's room in the channel. UserInfo, XiCarAttr, i32 channel (2011
+    0x1e bytes; 2016 0x26: both records 16 bytes, channel @0x20)."""
+    from . import rooms
     p = frame.payload
-    if len(p) < 0x1c:
+    ui, ca = rooms.user_info_size(), rooms.car_attr_size()
+    if len(p) < ui + ca + 4:
         return
-    ch, = struct.unpack_from('<i', p, 0x18)
+    ch, = struct.unpack_from('<i', p, ui + ca)
     got = await checks(session, ch, False)
     if not got:
         return
@@ -1214,7 +1217,7 @@ async def room_join(session, frame):
     r = lb.room(t['tid'])
     if r is None:
         return error(session, NO_ROOM)
-    join_room(session, lb, r, p[0:12], p[12:24])
+    join_room(session, lb, r, p[0:ui], p[ui:ui + ca])
 
 
 def queue(lb, tid, session=None):
@@ -1696,9 +1699,12 @@ async def _ghost(session, t, p):
     if t == 0x216:
         if gs:
             gs.state.pop('ghost', None)
-        return session.to_client(Frame(0x217, bytes(0x28)))
+        from ..version import is_2016
+        return session.to_client(Frame(0x217, bytes(0x34 if is_2016() else 0x28)))   # 2016 handler size 0x36
     pl = gs.state.get('player') if gs else None
-    if not pl or len(p) < 0x1b0:
+    from ..version import is_2016
+    ack = 0x1d4 if is_2016() else 0x1b0     # 2016: GhostStart 0x1da (blocks @0x1a / @0x8a / @0xb6), ack 0x1d6 (0x542bb0)
+    if not pl or len(p) < ack:
         return
     key = gs.state.get('replay', '')
     r = next((x for x in replays() if x['key'] == key), None)
@@ -1717,7 +1723,7 @@ async def _ghost(session, t, p):
             return admin.message(gs, 'Ghost Battle needs the Ch. Replay Ghost Pass or a Battle Ghost Ticket of this channel.')
         gs.log.note(f'ghost battle in replay {key}: {used} used')
     gs.state['ghost'] = key         # no traffic item drops / combo exp until it ends (combo.traffic_item_event)
-    session.to_client(Frame(0x213, p[:0x1b0]))           # the blocks at the same places as the client sent them
+    session.to_client(Frame(0x213, p[:ack]))             # the blocks at the same places as the client sent them
 
 
 @on(SVC, C2S, 0x212)

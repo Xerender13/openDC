@@ -57,6 +57,8 @@ class Car:
     fuel_bonus: float = 0.0     # % more Mitron capacity: gage assists, the car being driven (assists.py, apply_paints)
     mileage_bonus: float = 0.0  # % more efficiency (distance per Mitron): saving assists, the same
 
+    rental: object = None   # rentals.Rental, persisted separately from the 2008 car schema
+
     def max_mitron(self):
         """The Mitron capacity with the gage assists (2008 GetMitronCapacity: capacity x (100 + bonus) / 100)."""
         return self.capacity * (100 + self.fuel_bonus) / 100
@@ -75,7 +77,8 @@ class Car:
 
     def unit(self):
         """XiStrCarUnit (32 bytes)"""
-        return struct.pack('<6I2f', self.car_id, self.car_type, self.shown_color(), self.shown_grade(), self.slot,
+        slot = ((self.slot & 0xffff) | (self.rental.kind << 16)) if self.rental else self.slot
+        return struct.pack('<6I2f', self.car_id, self.car_type, self.shown_color(), self.shown_grade(), slot,
                            self.auction_cnt, self.mitron, self.km)
 
     def encode(self, version=None):
@@ -208,7 +211,10 @@ class Item:
         # 2016 adds an unknown dword before TableIdx; preserve Belonging at 0x4c
         # provisionally (its order relative to the new field is not established).
         if layout(version).year == 2016:
-            out = out[:0x50] + bytes(4) + out[0x50:]
+            from .. import context
+            info = context.data.item_info(self.table_idx) if context.data else None
+            days = (self.random or 1) if info and info.kind == 'rent_car_capsule' else 0
+            out = out[:0x50] + struct.pack('<I', days) + out[0x50:]
         return out
 
     def data(self):
@@ -235,9 +241,13 @@ class VisualItem:
         t = (self.data or '').rstrip('\0')   # as the client sent it (vshop.item_text)
         return wstr(t if t.strip() else '', 40)
 
-    def encode(self):
+    def encode(self, version=None):
+        # 2016: 0x78 bytes (0x4b1 handler 0x52efb0 steps 0x78, 2011 0x74; 0x4b2 0x7c with the state): the 2011
+        # fields keep their offsets (the tooltip 0x6a5fc8 reads the Aero points @0x4e as 2011), 4 more bytes at the
+        # end (0 here). The 2011 size sent to 2016 was logged by the client: "Wrong Packet Size. CMD(1201/1202)".
         return (struct.pack('<iiII', self.car_id, self.state, self.table_idx, self.inven_idx) + self.plate()
-                + struct.pack('<iii', self.period, self.utime, self.ctime) + self.assist_slots())
+                + struct.pack('<iii', self.period, self.utime, self.ctime) + self.assist_slots()
+                + bytes(4 if layout(version).year == 2016 else 0))
 
     def assist_slots(self):
         """The 48 bytes new in 2011 (@0x44): @0x4c ten assist slots (Assist_Client row + 1), which the client

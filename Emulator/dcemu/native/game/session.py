@@ -204,6 +204,10 @@ async def drive_info(session, frame):
     car = next((c for c in p.char.cars if c.car_id == car_id), None)
     if not car:
         return
+    if car.rental and car.rental.expired():
+        from .rentals import expire
+        await expire(session, p)
+        return
     car.mitron, car.km = max(0.0, min(fuel, car.max_mitron() or fuel)), distance      # gage assists (assists.py)
     db = context.db
     await db.execute(CAR_SAVE_SQL, (car.mitron, car.km, max(step_fuel, 0.0), db.server_id, p.char.cid, car_id))

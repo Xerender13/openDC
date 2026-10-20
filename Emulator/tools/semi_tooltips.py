@@ -36,6 +36,8 @@ ROOT = os.path.join(HERE, '..', '..')
 BACKUPS = os.path.join(HERE, '..', 'client_backup')
 INI = os.path.join(HERE, '..', 'emulator.ini')
 DEV_ED = os.path.join(ROOT, 'DriftCity Dev Ed', 'Data_US', 'gameui', 'tex', 'F.ntx')
+if not os.path.exists(DEV_ED):            # moved out of the client by tools/pack_client.py clean (packs only)
+    DEV_ED = os.path.join(ROOT, 'DriftCity Dev Ed (loose)', 'Data_US', 'gameui', 'tex', 'F.ntx')
 PIECES = ['3,625~179,697_ui_contents56.dds', '3,698~179,770_ui_contents56.dds', '3,771~179,843_ui_contents56.dds',
           '3,844~179,916_ui_contents56.dds', '3,917~179,989_ui_contents56.dds']
 COLOURS = [(214, 85, 255), (90, 190, 247), (140, 235, 16), (255, 162, 0), (222, 44, 173)]   # the 2016 text colours

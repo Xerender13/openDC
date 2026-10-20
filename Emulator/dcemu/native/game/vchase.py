@@ -60,7 +60,7 @@ from ...handlers import on, on_open
 from ...protocol import C2S
 from ...wire import Frame
 from .. import context
-from .login import SVC, send, sessions
+from .login import SVC, send, serial_of, sessions
 
 CALL_UNIT = 'i_n_00062'                     # Tatiana Call Unit
 MODES = (4, 8)
@@ -86,7 +86,7 @@ def test_mode(session):
 
 
 def serial_of(s):
-    return s.state.setdefault('serial', s.id & 0xffff)
+    return serial_of(s)
 
 
 def key_of(session, mode):

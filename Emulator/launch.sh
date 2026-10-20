@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
-# Drift City 2011 emulator launcher: start the components together or one by one.
+# Drift City emulator launcher: start the components together or one by one. emulator.ini [client] version says
+# which client build (2011 or 2016) this server is for; the ports, database and client follow from it.
 #
-#   ./launch.sh [all] [eu]   database + emulator (in the background) + the client (US, or the EU client with eu)
+#   ./launch.sh [all] [eu]   database + emulator (in the background) + the client (US, or the EU client with eu;
+#                            version 2016: the 2016 client ../DriftCity Dev Ed)
 #   ./launch.sh server       database + emulator (in the background), no client
 #   ./launch.sh db           the database only (SQL Server container)
 #   ./launch.sh emu [-q]     the emulator only, in the foreground (Ctrl+C stops it; -q: log to the file only)
 #   ./launch.sh emu-bg       the emulator only, in the background (output: logs/emulator.out)
-#   ./launch.sh client [eu]  the 2011 client: ../Client US/DriftCityLauncher, or ../Client EU/ with eu
+#   ./launch.sh client [eu]  the client: ../Client US/DriftCityLauncher, ../Client EU/ with eu, or for version 2016
+#                            ../DriftCity Dev Ed/DriftCityLauncher2016
 #   ./launch.sh stop [part]  stop everything, or one part: emu, db
 #   ./launch.sh restart-emu  stop and start the background emulator (clients are disconnected)
 #   ./launch.sh status       what is running
 #   ./launch.sh logs [part]  follow a log: emu (default), db
-#   ./launch.sh setup        first time: the Python environment (.venv with python-tds) and the client tables (server_data/Init, server_data/tables)
+#   ./launch.sh setup        first time: the Python environment (.venv with python-tds); after a client patch: copy the
+#                            client tables again (server and emu copy missing ones on their own: tools/client_setup.py)
 #   ./launch.sh init-db      create the game database from db/*.sql (an existing one is DELETED: asks first)
-#   ./launch.sh backup-db [F]    save the game database to a SQL Server backup (default db/SKDBTW_<date>.bak)
+#   ./launch.sh backup-db [F]    save the game database to a SQL Server backup (default db/<name>_<date>.bak)
 #   ./launch.sh restore-db F     replace the game database with the backup F (e.g. db/SKDBTW_clean.bak; asks first)
+# The game database is [database] name: SKDBTW for 2011, SKDB2016TEST for 2016 (emulator.ini [2016]).
 #
 # Needs: Python 3.10+, podman (or docker) with podman-compose / docker compose. The emulator's settings are in
 # emulator.ini; the clients' in ../Client US/DriftCityLauncher.ini and ../Client EU/DriftCityLauncher.ini (the EU client:
@@ -24,10 +29,9 @@ cd "$(dirname "$0")"
 HERE=$(pwd)
 PIDFILE=$HERE/.emulator.pid
 OUT=$HERE/logs/emulator.out
-CLIENT_DIR="$HERE/../Client US"          # the US client: setup copies its tables
+CLIENT_DIR="$HERE/../Client US"          # the US client (its tables: tools/client_setup.py asks for the folder)
 CLIENT_EU_DIR="$HERE/../Client EU"       # the EU client (DriftCityEU.exe, tools/eu_client.py)
-AREA_PORT=11031
-AUTH_PORT=11005
+CLIENT_2016_DIR="$HERE/../DriftCity Dev Ed"   # the 2016 client (its launcher: DriftCityLauncher2016)
 
 die() { echo "launch.sh: $*" >&2; exit 1; }
 
@@ -50,9 +54,15 @@ python() {
   else echo python3; fi
 }
 
-sqlcmd() {      # SQL Server's sqlcmd inside the database container, as sa (password from emulator.ini)
-  local pw; pw=$(sed -n '/^\[database\]/,/^\[/s/^password *= *//p' emulator.ini | sed 's/ *;.*//' | head -1)
-  "$(engine)" exec dcemu2011_db /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$pw" -b "$@"
+# the settings as the emulator resolves them (emulator.ini, with the [2016] section's when version = 2016)
+cfg=$("$(python)" -m dcemu --get client.version services.auth services.area database.name database.password) ||
+  die "emulator.ini: the settings could not be read"
+{ read -r VERSION; read -r AUTH_PORT; read -r AREA_PORT; read -r DB_NAME; read -r DB_PASSWORD; } <<< "$cfg"
+AUTH_PORT=${AUTH_PORT%% *}
+AREA_PORT=${AREA_PORT%% *}
+
+sqlcmd() {      # SQL Server's sqlcmd inside the database container, as sa
+  "$(engine)" exec dcemu2011_db /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$DB_PASSWORD" -b "$@"
 }
 
 listening() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q .; }
@@ -76,8 +86,13 @@ old_stack() {   # the 2008 server's containers use the same database volume and 
 start_db() {
   old_stack
   echo "database: starting"
-  compose up -d db
   local e; e=$(engine)
+  # one database container for every copy of Emulator/ (a 2011 and a 2016 server share it): start it if it is there
+  if $e container exists dcemu2011_db 2>/dev/null || $e inspect dcemu2011_db >/dev/null 2>&1; then
+    $e start dcemu2011_db >/dev/null
+  else
+    compose up -d db
+  fi
   for _ in $(seq 90); do
     [ "$($e inspect -f '{{.State.Health.Status}}' dcemu2011_db 2>/dev/null)" = healthy ] && { echo "database: ready (127.0.0.1:14330)"; return; }
     sleep 2
@@ -97,8 +112,13 @@ after_emu_up() {    # in the background: once the area port listens, the agent c
   ( for _ in $(seq 60); do listening $AREA_PORT && break; sleep 1; done; restart_agent ) &
 }
 
+client_tables() {  # the tables that come from the client (not in git): asks for the client folder the first time
+  "$(python)" -m tools.client_setup "$@" || die "the client tables are missing (tools/client_setup.py)"
+}
+
 start_emu_bg() {
   if pid=$(emu_pid); then echo "emulator: already running (pid $pid)"; return; fi
+  client_tables
   listening $AUTH_PORT && die "port $AUTH_PORT is in use by another program (another emulator?)"
   mkdir -p logs
   echo "emulator: starting in the background (output $OUT)"
@@ -120,17 +140,19 @@ stop_emu() {
   rm -f "$PIDFILE"
 }
 
-start_client() {   # $1: us (default) or eu
-  local dir=$CLIENT_DIR
+start_client() {   # $1: us (default) or eu; version 2016: the 2016 client
+  local dir=$CLIENT_DIR name=DriftCityLauncher
   case "${1:-us}" in us|US) ;; eu|EU) dir=$CLIENT_EU_DIR ;; *) die "client: us or eu, not '$1'" ;; esac
-  local exe=$dir/DriftCityLauncher
+  [ "$VERSION" = 2016 ] && { dir=$CLIENT_2016_DIR; name=DriftCityLauncher2016; }
+  local exe=$dir/$name
   [ -x "$exe" ] || die "$exe not found"
   echo "client: starting (${dir##*/})"
-  (cd "$dir" && nohup ./DriftCityLauncher >> "$dir/DriftCityLauncher.log" 2>&1 &)
+  (cd "$dir" && nohup "./$name" >> "$dir/DriftCityLauncher.log" 2>&1 &)
 }
 
 status() {
   local e; e=$(engine)
+  echo "version:       $VERSION (auth port $AUTH_PORT, database $DB_NAME)"
   if pid=$(emu_pid); then echo "emulator:      running (pid $pid)"; elif listening $AUTH_PORT; then
     echo "emulator:      port $AUTH_PORT in use (started some other way)"; else echo "emulator:      stopped"; fi
   for c in dcemu2011_db; do
@@ -143,7 +165,7 @@ case "${1:-all}" in
   server)    start_db; start_emu_bg ;;
   db)        start_db ;;
   emu)       shift; listening $AUTH_PORT && die "port $AUTH_PORT is in use (./launch.sh status)"
-             after_emu_up; exec "$(python)" -m dcemu "$@" ;;
+             client_tables; after_emu_up; exec "$(python)" -m dcemu "$@" ;;
   emu-bg)    start_emu_bg ;;
   client)    start_client "${2:-us}" ;;
   restart-emu) stop_emu; start_emu_bg ;;
@@ -164,32 +186,40 @@ case "${1:-all}" in
   setup)
     [ -x .venv/bin/python ] || python3 -m venv .venv
     .venv/bin/pip install -q python-tds
-    .venv/bin/python -m tools.sync_data "$CLIENT_DIR" server_data
+    client_tables --refresh
     echo "setup done" ;;
   init-db)
-    read -r -p "This deletes the SKDBTW database (all accounts and characters) and creates it again. Type YES: " a
+    read -r -p "This deletes the $DB_NAME database (all accounts and characters) and creates it again. Type YES: " a
     [ "$a" = YES ] || die "cancelled"
     old_stack
     compose stop db || true
-    compose --profile setup run --rm db-setup ;;
+    compose --profile setup run --rm -e "DB_NAME=$DB_NAME" db-setup ;;
   backup-db)
-    f=${2:-db/SKDBTW_$(date +%F).bak}
+    f=${2:-db/${DB_NAME}_$(date +%F).bak}
     start_db
-    sqlcmd -Q "BACKUP DATABASE SKDBTW TO DISK='/var/opt/mssql/data/backup.bak' WITH INIT, COPY_ONLY" >/dev/null
+    sqlcmd -Q "BACKUP DATABASE [$DB_NAME] TO DISK='/var/opt/mssql/data/backup.bak' WITH INIT, COPY_ONLY" >/dev/null
     "$(engine)" cp dcemu2011_db:/var/opt/mssql/data/backup.bak "$f"
     "$(engine)" exec dcemu2011_db rm -f /var/opt/mssql/data/backup.bak
     echo "database saved to $f" ;;
   restore-db)
     f=${2:-}
     [ -n "$f" ] && [ -f "$f" ] || die "usage: ./launch.sh restore-db FILE.bak"
-    read -r -p "This replaces the SKDBTW database (all accounts and characters) with $f. Type YES: " a
+    read -r -p "This replaces the $DB_NAME database (all accounts and characters) with $f. Type YES: " a
     [ "$a" = YES ] || die "cancelled"
     stop_emu
     start_db
     "$(engine)" cp "$f" dcemu2011_db:/var/opt/mssql/data/restore.bak
-    sqlcmd -Q "IF DB_ID(N'SKDBTW') IS NOT NULL ALTER DATABASE SKDBTW SET SINGLE_USER WITH ROLLBACK IMMEDIATE; RESTORE DATABASE SKDBTW FROM DISK='/var/opt/mssql/data/restore.bak' WITH REPLACE, MOVE 'SKDBTW' TO '/var/opt/mssql/data/SKDBTW.mdf', MOVE 'SKDBTW_log' TO '/var/opt/mssql/data/SKDBTW_log.ldf'; ALTER DATABASE SKDBTW SET MULTI_USER" >/dev/null
+    # the backup's logical file names (SKDBTW / SKDBTW_log in db/SKDBTW_clean.bak) go to files named after DB_NAME
+    mapfile -t logical < <(sqlcmd -h -1 -W -s '|' -Q "SET NOCOUNT ON; RESTORE FILELISTONLY FROM DISK='/var/opt/mssql/data/restore.bak'" | cut -d'|' -f1,3)
+    move=""
+    for row in "${logical[@]}"; do
+      [ -n "$row" ] || continue
+      ext=.mdf; [ "${row#*|}" = L ] && ext=_log.ldf
+      move="$move, MOVE '${row%%|*}' TO '/var/opt/mssql/data/$DB_NAME$ext'"
+    done
+    sqlcmd -Q "IF DB_ID(N'$DB_NAME') IS NOT NULL ALTER DATABASE [$DB_NAME] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; RESTORE DATABASE [$DB_NAME] FROM DISK='/var/opt/mssql/data/restore.bak' WITH REPLACE$move; ALTER DATABASE [$DB_NAME] SET MULTI_USER" >/dev/null
     "$(engine)" exec dcemu2011_db rm -f /var/opt/mssql/data/restore.bak
     echo "database restored (start the emulator: ./launch.sh server)" ;;
-  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (./launch.sh help)" ;;
 esac

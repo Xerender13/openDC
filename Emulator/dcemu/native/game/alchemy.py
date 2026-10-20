@@ -24,6 +24,11 @@ Learning: the client's inventory right-click on a skill book (UseItemClient kind
     clicking an enhancer only opens the manufacturing window (EU exe 0x61d190, kind 0x48), so the server applies it -> 0x0e79 AlchemyResult (char[56] id, u8 1 success / 0
     failure (client 0x5c39b0: the completed count and the sound), u64 EXP, u32 0) + 0x192.
     Refused (not learned, level, missing materials, inventory full): a Send_Error text, no 0x0e79.
+    2016: 0x0e78 is 0x42 bytes: char[56] id, then two u32 @0x3a / @0x3e from the manufacturing window (+0x544 /
+    +0x548; client 0x5f25f5 -> 0x86a5a0, sender 0x861700). The 2016 Manufacturing Booster (i_n_createdouble, kind
+    user_create_source with no value; drift packs category 56: "You can make twice as many parts or items upon
+    manufacturing") doubles the result when one of the two is its InvenIdx; one is used per try. Which field holds
+    it is not confirmed (both are logged).
 Parts Grinder: 0x0e1a -> 0x0e1b, see grind_part below.
 The manufacturing shop (NPC "Sid", texts manufashop_B0_*: in the Driver Dome, city 0): its goods are RewardGroup
     rs_manufashop_01..03 (kits, Parts Grinder, Space Warp Engine, skill books) at their item price; bought with the
@@ -41,6 +46,7 @@ from .login import SVC, error, send
 EXP_MODE, SKILL_PREFIX = 'ALCHEMY', 'SKB_'
 ENHANCER_KIND = 'user_create_source'        # Manufacturing Enhancer (client use kind 0x48)
 NAME = 56                                   # char[56] skill book id in 0x0e78 / 0x0e79 / 0x0e7b / 0x0e7c
+DOUBLER = 'i_n_createdouble'                # 2016 Manufacturing Booster: twice the result (see 0x0e78 above)
 ENTRY = 0x78                                # one skill book id in 0x0e75
 STATE_SQL = ("SELECT MODEID, POINT FROM SKID_PLAYMODE_TB WHERE SERVERID=%s AND CID=%s AND"
              " (MODEID=%s OR MODEID LIKE 'SKB[_]%%')")
@@ -213,7 +219,10 @@ async def manufacture(session, frame):
     result = t.item_info(t.item_index.get(r['result'][0], -1))
     if not result:
         return error(session, 'Manufacturing failed.')
-    if not stack_for(p, result, r['result'][1]) and free_slots(p) <= 0:
+    fields = struct.unpack_from('<II', frame.payload, NAME) if len(frame.payload) >= NAME + 8 else ()
+    doubler = next((i for i in p.items if i.inven_idx in fields and i.item_id == DOUBLER and i.stack > 0
+                    and not i.car_id), None) if any(fields) else None
+    if not stack_for(p, result, r['result'][1] * (2 if doubler else 1)) and free_slots(p) <= 0:
         return error(session, 'Your inventory is full.')
     changes = []
     for item, count in need:
@@ -223,6 +232,8 @@ async def manufacture(session, frame):
     # a mounted license (ME_DoubleUserCreate): the basic production chance + its value %; a Manufacturing Enhancer
     # held: + its value % more, one used up per try
     chance = r['chance'] + licenses.effects(p).get('ME_DoubleUserCreate', 0)
+    if doubler:
+        changes.append(await take_one(p, doubler))
     boost = enhancer(p)
     if boost:
         chance += boost[1]
@@ -230,14 +241,15 @@ async def manufacture(session, frame):
     ok = random.uniform(0, 100) < chance
     gains = Gains()
     if ok:
-        await give_item(p, r['result'][0], r['result'][1], gains)
+        await give_item(p, r['result'][0], r['result'][1] * (2 if doubler else 1), gains)
         bonus, n = r['bonus']
         if bonus in t.item_index and n and random.uniform(0, 100) < r['bonus_pct']:
             await give_item(p, bonus, n, gains)
     a['exp'] += r['exp_ok'] if ok else r['exp_fail']
     await save(p, EXP_MODE, a['exp'])
     session.log.note(f'manufacture {name}: {"success" if ok else "failure"} at {chance:g} %'
-                     + (f' ({boost[0].item_id} +{boost[1]})' if boost else '') + f', EXP {a["exp"]} (level {level_of(a["exp"])})')
+                     + (f' ({boost[0].item_id} +{boost[1]})' if boost else '') + (' x2 (Manufacturing Booster)' if doubler else '')
+                     + (f', fields {fields}' if any(fields) else '') + f', EXP {a["exp"]} (level {level_of(a["exp"])})')
     send(session, Frame(0xe79, name_bytes(name, NAME) + struct.pack('<BQI', 1 if ok else 0, a['exp'], 0)))
     if changes:
         send(session, mod_list(*changes))

@@ -5,6 +5,11 @@ per period, bonus stats); item rows: VisualItem.xlt (data.Tables.visuals: catego
 it fits). Owned items: SKID_VSITEM_TB (ITEMID, INVENIDX, CARID, STATE 1 = on the car, ITEM_DATA, PERIOD
 in days with 0 = for good, CTIME, UTIME). Records: records.VisualItem (XiStrMyVSItem, 2011: 116 bytes).
 
+2016 driving skills (category 58, Turbo / Drift Booster) use the native Visual Item slot 20
+(0x767ca0 / 0x767dc4). A purchase binds/equips on the currently driven car; another skill purchase
+deletes the previous skill on that car. Unequipping retains the binding. Selling/auctioning the car
+already deletes all its bound drift items. The Bonus Assist column supplies a_00002 / a_00118.
+
 **Colours (2011):** colours (category 1), neon (2), window tint (3), decals (11) and glossy colours / RGB paints (32) can
 take any RGB colour (the user): the client sends it in the item's text (XiStrPlateName, 40 bytes in 2011)
 as text. With Etc.ColorSetReform 3 (the colour window) it is the colour as a decimal 0xRRGGBB
@@ -119,9 +124,9 @@ def vs_mod_list(*changes):
 
 
 def fits(v, car):
-    from .driftuse import EQUIP_PASSIVE
+    from .driftuse import EQUIP_PASSIVE, drive_skill
     vis = context.data.visuals.get(v.table_idx)
-    if vis is None or (vis.category not in EQUIPPABLE and v.item_id not in EQUIP_PASSIVE) \
+    if vis is None or (vis.category not in EQUIPPABLE and not drive_skill(vis) and v.item_id not in EQUIP_PASSIVE) \
             or (vis.cars and car.car_type not in vis.cars):
         return False
     from .player import TEMP_UPGRADE, upgrade_grade
@@ -155,8 +160,13 @@ async def save_state(p, *items):
 def put_on(p, v, car_id):
     """Equip v on the car; the item of its category there comes off (paint, neon, tint: is destroyed, see
     FIXED_SLOTS). -> (changed items, destroyed items)."""
-    off = [o for o in p.vsitems if o is not v and o.car_id == car_id and o.state == ON_CAR and slot_of(o) == slot_of(v)]
-    gone = [o for o in off if category_of(o) in FIXED_SLOTS]
+    from .driftuse import drive_skill
+    skill = drive_skill(context.data.visuals.get(v.table_idx))
+    off = [o for o in p.vsitems if o is not v and o.car_id == car_id and (o.state == ON_CAR or skill)
+           and slot_of(o) == slot_of(v)]
+    # The 2016 shop explicitly warns that buying another skill deletes the previous skill on this car,
+    # including one the player took off. Skills on other cars are independent.
+    gone = [o for o in off if category_of(o) in FIXED_SLOTS or skill]
     for o in off:
         o.state = 0
     v.car_id, v.state = car_id, ON_CAR
@@ -189,6 +199,12 @@ async def buy_visual_item(session, frame):
     if vis.category in GIVES_ITEMS and not parse_value(vis.value, item_text(frame.payload[8:48], vis.category)):
         return error(session, 'No such Item!')         # a bundle with nothing to give (or no card picked)
     car = next((x for x in c.cars if x.car_id == car_id), None)
+    from .driftuse import drive_skill
+    if drive_skill(vis):
+        car = p.car                         # native shop description: belongs to the car currently driven
+        if not car or car.on_auction:
+            return error(session, '20050')
+        car_id = car.car_id
     if car_id and not car:
         return error(session, '20050')                  # InvalidData
     charged = await charge(session, p, row, period_idx, use_mileage)
@@ -245,6 +261,9 @@ async def grant(p, vis, table_idx, car, text, days):
     """Give p the drift item (bought, or a gift claimed): added to a held drink / booster (EXTENDS), else a new item,
     on the car when it fits. -> (item, the held item it was added to or None, changed items, destroyed items)."""
     c, db = p.char, context.db
+    from .driftuse import drive_skill
+    if drive_skill(vis):
+        car = p.car                         # gifts follow the same binding rule when claimed
     car_id = car.car_id if car else 0
     held = next((o for o in p.vsitems if o.table_idx == table_idx and o.period and active(o)), None) \
         if days and (vis.category in EXTENDS or vis.item_id == 'i_d_turbo02') else None
@@ -285,7 +304,7 @@ async def finish(session, p, row, vis, v, car, text):
     from .driftuse import AT_PURCHASE, USED, Gains, instant, use_up
     if row.get('Instant') == '1' or vis.category in AT_PURCHASE:    # Mito prizes, inventory item bundles
         gains = Gains()
-        if await instant(session, p, vis, gains, text):
+        if await instant(session, p, vis, gains, text, rental_days=v.period):
             await use_up(p, v)
             send(session, vs_mod_list((v, USED)))
             gains.send(session, p)

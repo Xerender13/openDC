@@ -95,7 +95,7 @@ async def my_city_position(session, frame):
         session.log.note(f'{c.name!r} leaves the tutorial gate: Station 1 {c.pos[:3]}')
         await save(c)
         from . import licenses                      # the license system starts now (login.TUTORIAL_FLAGS): Rookie
-        await licenses.on_login(session, p)
+        await licenses.start(session, p)
     # the 2011 byte after the channel: 1 = the client is about to show the gate dialog (going to the
     # city), 0 = the gate was chosen there; echoed in 0x30f so the dialog stays until a gate is picked
     # (we sent 0 always and the client went straight to Gate 1: user, 2026-10-13)

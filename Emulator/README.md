@@ -36,7 +36,7 @@ TCP connection and relays cars itself.
 `./launch.sh` (Linux) starts the parts together or one by one (`./launch.sh help`); Windows: `launch.bat`, below.
 
 ```sh
-./launch.sh setup        # once: .venv with python-tds, the client's tables -> server_data/Init, server_data/tables (again after a client patch)
+./launch.sh setup        # once: .venv with python-tds (and again after a client patch: copies the client's tables again)
 ./launch.sh init-db      # once, on a new machine: creates the database (deletes an existing one; asks)
 ./launch.sh              # database + emulator (background) + the client
 ./launch.sh server       # the same without the client
@@ -48,22 +48,31 @@ Needs Python 3.10+ and podman (or docker) with podman-compose / docker compose (
 database; its volume is `driftcity2011_mssql-data`, the one the 2008 stack made). Restarting the emulator
 disconnects the clients.
 
+The client's tables are not in git. The first `./launch.sh` / `server` / `emu` (and the first start of the
+container) asks for the client folder and copies them to `server_data/tables` and `server_data/teammark`
+(`python -m tools.client_setup`: the 2011 US client with `[client] version = 2011`, the 2016 client into
+`server_data_2016/` with `version = 2016`). It only adds missing files: the
+tables in git (`server_data/Init`, the 2008 server's tables, `UseItemClient.tdf`) are never replaced.
+`--client DIR` skips the question, `--refresh` copies again after a client patch, `--check` only reports.
+
 ### Windows (Docker Desktop)
 
 The database and the emulator run in containers (`docker-compose.yml` services `db` and `emulator`, the image
 from `Dockerfile`), the client natively. Install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/),
-put the 2011 client in `..\Client US` (next to this folder), then in this folder:
+have the 2011 client (e.g. in `..\Client US`, next to this folder), then in this folder:
 
 ```bat
-launch.bat setup        :: once: builds the emulator image, copies the client's tables to server_data\
+launch.bat setup        :: builds the emulator image, copies the client's tables (again after a client patch)
 launch.bat init-db      :: once: an empty database with the account admin / admin (asks; deletes an existing one)
 launch.bat              :: database + emulator + the client (..\Client US\DriftCityLauncher.exe; "launch.bat all eu": ..\Client EU)
 launch.bat server | client [eu] | stop | restart-emu | status | logs [db] | gm who | help
 ```
 
 `emulator.ini`, `server_data\` and `logs\` are the files in this folder (mounted into the container): edit them
-and `launch.bat restart-emu`. The same works on Linux / macOS with `docker compose up -d` (after
-`docker compose run --rm --no-deps emulator python -m tools.sync_data /client server_data`).
+and `launch.bat restart-emu`. The first `launch.bat` / `launch.bat server` asks for the client folder and copies
+its tables. The same works on Linux / macOS with `docker compose up -d`: the container copies them on its first
+start from the folder in `DCEMU_CLIENT_DIR` (default `../Client US`), e.g.
+`DCEMU_CLIENT_DIR=/path/to/client docker compose up -d`.
 Other players connect to this PC's address: set it in their `DriftCityLauncher.ini` and in
 `server_data\serverlist.txt` (the four addresses), and open TCP 11005-11051 in the firewall.
 
@@ -88,7 +97,7 @@ fullscreen, HUD type, Proton or Wine). `-q` logs to the file only.
 | Folder / file | What |
 |---|---|
 | `dcemu/` | the emulator (`native/` the services, `handlers/` the proxy mode, unused now) |
-| `server_data/` | `Init/` and most of `tables/` (the client's .xlt / .tdf tables and `<City>/` traffic files) come from the client (`./launch.sh setup` / `python -m tools.sync_data`, not in git); from the 2008 server: `tables/` (LevelServer, Contents.ini, ItemServer, drops, upgrade odds, rush hours), exp / money tables, Lap Time and Real Match settings, `Localize/` server messages, `race/` battle zone track paths, `serverlist.txt`, `adminlist.txt`; the editable reward / chance files `delivery_rewards.txt`, `patrol_rewards.txt`, `gate_rewards.txt`, `team_gate_rewards.txt`, `docking_chances.txt` |
+| `server_data/` | `Init/` and most of `tables/` (the client's .xlt / .tdf tables and `<City>/` traffic files) come from the client (`server_data/Init` is in git; the rest is copied on the first start: `python -m tools.client_setup`); from the 2008 server: `tables/` (LevelServer, Contents.ini, ItemServer, drops, upgrade odds, rush hours), exp / money tables, Lap Time and Real Match settings, `Localize/` server messages, `race/` battle zone track paths, `serverlist.txt`, `adminlist.txt`; the editable reward / chance files `delivery_rewards.txt`, `patrol_rewards.txt`, `gate_rewards.txt`, `team_gate_rewards.txt`, `docking_chances.txt` |
 | `db/` | the database schema (`./launch.sh init-db`) and `SKDBTW_clean.bak` (the same, as a backup) |
 | `tools/` | gmctl (GM commands), sync_data, client.py (scripted client), global_content.py / agt.py (client packs), auction_test.py |
 | `client_backup/` | original client packs (Patch.000) for global_content.py `reset` |
@@ -132,6 +141,7 @@ entry in `docs/EMULATOR_NOTES.md`.
 | `dcemu/native/lobby.py` | check-in, character list, name check, character creation, keepalive |
 | `dcemu/native/ranking.py` | the 2011 ranking service (a stub so far) |
 | `dcemu/commands.py` | splits frames carrying several commands (2008 sizes, `data/packets_2008.tsv`) |
+| `tools/client_setup.py` | first start: asks for the client folder and adds its missing tables (2011 or 2016, from the config), never replacing the ones in git |
 | `tools/sync_data.py` | copies the client's effective tables (patches applied, US over base) to `server_data/Init` and `server_data/tables` |
 | `dcemu/native/race.py` | race traffic for the native barea: the TW engine (`../Server/tools/traffic_server.py`), tracks from the 2011 PVPTrackInfo.xlt |
 | `dcemu/native/area.py` | the area/barea services: enter/exit, time sync, area status, move relay |
@@ -199,50 +209,47 @@ Cached data and mode tuning take effect after **Restart emulator**, which discon
 patrol/delivery item rewards reload automatically. GM/account panels require the updated running emulator.
 Changes are not yet confirmed in game. Editor data/account tests: `.venv/bin/python -m unittest tests.test_editor`.
 
-## Optional 2016 client adaptation (experimental)
+## The 2016 client (experimental)
 
-The existing 2011 US/EU protocol remains the default. To prepare the separate 2016 tables, from `Emulator/`:
-
-```sh
-.venv/bin/python -m tools.prepare2016
-```
-
-This reads `../DriftCity Dev Ed`, copies server defaults and overlays that client's tables into
-`server_data_2016/`. It validates the result and refuses to overwrite an existing destination.
-Use `--client PATH`, `--baseline PATH`, or `--out PATH` for another location. It does not edit clients or the DB.
-
-Select the build in `emulator.ini`, then restart the server:
+One `emulator.ini` serves both client builds. `[client] version` picks one (the repository's default is 2016; set
+`version = 2011` for the 2011 US / EU clients) and restart the emulator; one emulator instance serves one build (the
+login packets cannot tell them apart). With `version = 2016` the `[2016]` section at the end of `emulator.ini`
+replaces the settings it names, written as `section.key = value`:
 
 ```ini
 [client]
 version = 2016
-data_2016 = server_data_2016
+data_2016 = server_data_2016      ; the 2016 client's tables
+
+[2016]
+services.auth = 11105 0 56        ; own ports (111xx), so a 2011 server can run next to it
+database.name = SKDB2016TEST      ; own database
+gotcha.season = 60
+flags.Main.PasserBy = 1           ; the first dot splits: [flags] Main.PasserBy
 ```
 
-Set `version = 2011` to use the existing 2011 protocol and `[native]` data paths again. One emulator
-instance serves one build; the login packets cannot distinguish them. Nation/publisher settings are separate.
-`launch.sh` / `launch.bat` still launch the existing 2011 clients; start the experimental client separately.
+`./launch.sh` / `launch.bat` follow the version: the ports and database (`init-db`, `backup-db`, `restore-db` work on
+`[database] name`, so `SKDB2016TEST` for 2016) and the client (`../DriftCity Dev Ed/DriftCityLauncher2016` on Linux,
+`DriftCityLauncher.exe` on Windows). `python -m dcemu --get services.auth database.name` prints settings as the
+emulator resolves them. To run a 2011 and a 2016 server at once, use two copies of `Emulator/` (one per version);
+they share the database container.
 
-The 2016 port covers shared character/car/item/stat records, content flags and widened EXP reward counters.
-Changed movement/room/crew packets and other tutorial paths still need adaptation and in-game validation.
-Use isolated test ports (111xx); see `docs/EMULATOR_NOTES.md` session 28. This is not full 2016 gameplay support.
+The 2016 tables in `server_data_2016/` come from the 2016 client like the 2011 ones (`tools.client_setup` asks for the
+folder on the first start). To build that folder again from scratch: `.venv/bin/python -m tools.prepare2016` (reads
+`../DriftCity Dev Ed`, copies the server defaults, overlays the client's tables, refuses to overwrite).
 
-For the local test instance, a separate `SKDB2016TEST` database and clean snapshot
-`db/SKDB2016TEST_clean.bak` have been prepared (admin/admin, no characters in the snapshot).
-The active test database can contain test characters; live 2011 data stays in `SKDBTW`.
+The 2016 client's `DriftCityLauncher.ini [server] port` must be the auth port (11105). The launcher recognises the 2016
+exe and writes the server address, that port and the guided tutorial byte into the running, unchanged
+`DriftCity.exe` (Linux: Proton / Wine like 2011; Windows: started suspended). `[client] guided_tutorial = auto`
+follows the GlobalContent table, so table and exe always agree. `[client] max_level_2016 = 100` is the 2016 level
+cap; 2011 progression is unaffected. `tools.client2016 launch` is the older way (a patched `DriftCity2016Test.exe`).
 
-```sh
-# Start the optional server, then the patched test client (Linux / Proton):
-.venv/bin/python -m dcemu -c tools/test2016.ini -q
-# In another terminal:
-.venv/bin/python -m tools.client2016 launch
-```
+The 2016 client's assets are in its `.agt` packs only (`tools.pack_client pack` / `patch` / `clean`, 2026-10-20; the
+loose copies were deleted afterwards, so `pack` now refuses to rewrite a pack from loose files: tools change single
+entries).
 
-`tools.prepare2016` supplies the separate test server list on 111xx. The test client tool validates the
-original build, writes `DriftCity2016Test.exe` alongside it and changes the auth socket port to 11105.
-When guided tutorial mode is selected, it also applies the Battle Zone Tutorial-button bypass.
-Use `--proton`, `--prefix` or `--client` for different paths. The original executable stays unchanged.
-`[client] max_level_2016 = 100` controls the 2016 cap; 2011 progression is unaffected.
+Worked on for 2016 so far: login, character creation, the tutorials, level / EXP, items, rentals, auctions, shop, rooms and race
+movement (see `docs/EMULATOR_NOTES.md`). Much is not yet confirmed in game; this is not full 2016 support.
 
 Both clients receive `Main.MainButtonAdvanced = 2` to expose the classic/ADV HUD selector in Video options.
 The 2011 launcher's `main_ui_type = 0` or `1` forces a layout on launch; `auto` keeps the saved client selection.

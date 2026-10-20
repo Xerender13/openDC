@@ -16,6 +16,10 @@ the Battle Zone Package). What an item gives is its VisualItem.xlt value (column
      scratch cards "lotto_scratchies_Natura 1 27": the card x1, 27 = its car).
      "Normal 11" / "ST 5" (Lottery bundles): the scratch card the player picked (item text, see parse_value).
   27 Mito Prize: the amount.
+  2016 packs (category 23 Mittron Enhancer Booster "i_n_double 10", 56 Manufacturing Booster "i_n_createdouble
+     10", 59 Upgrade Chance Enhancing Fluid "i_n_chancetime 1", 19 Parts box "i_n_00027 25"): the inventory items
+     named. The 2011 Booster i_d_double and Parts box i_d_partsbox (value 100) name no item: the Booster stays a
+     drift item (used from the drift inventory by 0x1ae, upgrade.py), the Parts box gives 10.
 Without an inventory item in the 2011 tables (not sold here): Seed Parts (i_n_seed_*), the "ST" / "Normal"
 scratch cards. The two Premium Packages (49) stay drift items and act as the three drinks (items.PACKAGE).
 
@@ -41,7 +45,8 @@ from .records import VisualItem
 
 USED = 2                       # VSItemModList / XiCsVSItem state of a used item (UseVisualItem)
 INVEN_EXT, GARAGE_EXT, MITO_PRIZE, USE_ITEM, PACKAGE_SET = 16, 22, 27, 33, 50
-GIVES_ITEMS = (USE_ITEM, PACKAGE_SET)
+DOUBLE_UPGRADE, CREATE_DOUBLE, FULL_CHANCE = 23, 56, 59      # 2016 packs of inventory items (see above)
+GIVES_ITEMS = (USE_ITEM, PACKAGE_SET, DOUBLE_UPGRADE, CREATE_DOUBLE, FULL_CHANCE)
 # Parts box (i_d_partsbox, category 19, "Sold in bulk of 10 boxes per purchase"): the 2008 server gave 10 inventory
 # Parts Boxes for it (Cmd_BuyVisualItem 0x6043b4: TakeItem(PartsBoxID "i_n_00027", 10)) instead of a drift item; it
 # was kept as an unusable drift item until 2026-10-14 (user). Used on a hyper part with 0x1a3 (items.item_use_ex).
@@ -58,11 +63,15 @@ def groups():
         import os
         from ..data import read_xlt
         _groups = defaultdict(list)
-        for r in read_xlt(os.path.join(context.data.root, 'Init', 'RewardGroup.xlt'))[3:]:
-            if len(r) > 10 and r[1]:
+        rows = read_xlt(os.path.join(context.data.root, 'Init', 'RewardGroup.xlt'))
+        # Probability by its header: column 10 in 2011, 11 in 2016 (a "Trade Restriction" column before it; read at
+        # 10 every 2016 row had chance 0 and no gift box or Gotcha capsule gave anything: user, 2026-10-20)
+        prob = next((i for i, c in enumerate(rows[2]) if c.strip() == 'Probability'), 10) if len(rows) > 2 else 10
+        for r in rows[3:]:
+            if len(r) > prob and r[1]:
                 try:
-                    _groups[r[1]].append((r[3], r[5], int(float(r[6] or 0)), int(float(r[7] or 0)), float(r[10] or 0),
-                                          int(float(r[8] or 0))))
+                    _groups[r[1]].append((r[3], r[5], int(float(r[6] or 0)), int(float(r[7] or 0)),
+                                          float(r[prob].strip() or 0), int(float(r[8] or 0))))
                 except ValueError:
                     pass
     return _groups
@@ -110,6 +119,19 @@ def parse_value(value, text=''):
     item = f and item_named(f[0])
     if item:
         return item, int(f[1]) if len(f) > 1 and f[1].isdigit() else 1
+    if len(f) == 1 and len(f[0]) == 3 and f[0][0] in 'pf' and f[0][1] == '_' and f[0][2] in 'smf':
+        # 2016 rental car packs (rent_period_rep_s .. rent_fuel_rep_f: "p_s" = time-limited small, "f_f" = meter-rated
+        # large): the car the player picked comes in the item text as its VisualItem UniqueId (20954 =
+        # pc_rent_gigasmini_p, value "213 0 1" = car type, size 0 small / 1 mid / 2 large, 1 time-limited / 2
+        # meter-rated); it gives that car's rental capsule (UseItemClient kind rent_car_capsule, the same id)
+        pick = (text or '').split()
+        card = t.visuals.get(int(pick[0])) if pick and pick[0].isdigit() else None
+        cf = card.value.split() if card else []
+        info = t.item_info(t.item_index.get(card.item_id, -1)) if card else None
+        if (info and info.kind == 'rent_car_capsule' and len(cf) == 3 and cf[1] == str('smf'.index(f[0][2]))
+                and cf[2] == ('1' if f[0][0] == 'p' else '2')):
+            return card.item_id, 1
+        return None
     if len(f) == 2 and f[0] in ('Normal', 'ST') and f[1].isdigit():
         pick = (text or '').split()
         card = t.visuals.get(int(pick[0])) if pick and pick[0].isdigit() else None
@@ -163,6 +185,8 @@ async def give_item(p, item_id, count, gains):
             it = await new_item(p, info, n)
             gains.items.append((it, NEW))
         count -= n
+        from .items import complete_piece
+        await complete_piece(p, it)              # a full stack of pieces becomes its item (2008 AddItem)
 
 
 async def give_drift_item(p, item_id, days, gains, session):
@@ -216,7 +240,7 @@ async def give(session, p, rewards, gains):
     session.log.note(f'rewards: {rewards}')
 
 
-async def instant(session, p, vis, gains, text=''):
+async def instant(session, p, vis, gains, text='', rental_days=0):
     """The effect of a drift item that acts by itself (bought "Instant", or used). -> False if it has none.
     text: the item text from the purchase (the card picked for a lottery bundle)."""
     from .setparts import LUBES
@@ -227,14 +251,19 @@ async def instant(session, p, vis, gains, text=''):
         if amount and await add_money(p.char, amount):
             gains.money += amount
         return True
-    if vis.category == PARTS_BOX:
-        await give_item(p, PARTS_BOX_ITEM, PARTS_BOX_COUNT, gains)
+    if vis.category == PARTS_BOX:              # 2016 packs name their count (i_d_partsbox_25: "i_n_00027 25")
+        await give_item(p, *(parse_value(vis.value) or (PARTS_BOX_ITEM, PARTS_BOX_COUNT)), gains)
         return True
     if vis.category in GIVES_ITEMS:
         what = parse_value(vis.value, text)
         if not what:
             return False
-        await give_item(p, *what, gains)
+        if vis.value in ('p_s', 'p_m', 'p_f', 'f_s', 'f_m', 'f_f'):
+            # Capsules are single items; NRANDOM keeps the bought term until redemption.
+            it = await new_item(p, context.data.item_info(context.data.item_index[what[0]]), 1, random=rental_days or 1)
+            gains.items.append((it, NEW))
+        else:
+            await give_item(p, *what, gains)
         return True
     return False
 
@@ -246,7 +275,7 @@ async def convert_bundles(session, p):
     t = context.data
     for v in list(p.vsitems):
         vis = t.visuals.get(v.table_idx)
-        if vis and vis.category not in EQUIPPABLE and vis.category != PASSIVE and v.item_id not in EQUIP_PASSIVE \
+        if vis and vis.category not in EQUIPPABLE and not drive_skill(vis) and vis.category != PASSIVE and v.item_id not in EQUIP_PASSIVE \
                 and (v.state or v.car_id):
             v.state, v.car_id = 0, 0            # bought before drift items stopped going on the car
             await save_state(p, v)
@@ -255,6 +284,7 @@ async def convert_bundles(session, p):
             await use_up(p, v)
             session.log.note(f'drift item {vis.item_id} turned into inventory items')
     await one_paint_per_car(session, p)
+    await restore_drive_skills(session, p)
     from .gifts import return_upgrades
     await return_upgrades(session, p)
     passive_follow(p)
@@ -284,6 +314,35 @@ PASSIVE = 41                     # PassiveAssist drift items: "applied automatic
 # it is on the car being driven, and it can come off again): vshop.fits lets them on; records.VisualItem
 # .assist_slots sends their assist only while VisualItem.on_current_car (Player.apply_paints)
 EQUIP_PASSIVE = frozenset({'passive_a_00118', 'passive_a_00247'})      # PassiveAssist(DriftBooster) x 2
+DRIVE_SKILL = 58                 # 2016 Turbo / Drift Booster: native Visual Item slot 20 (0x767ca0)
+
+
+def drive_skill(vis):
+    """The 2016 car-bound driving skill; the older PassiveAssist inventory items keep their own rules."""
+    from ..version import is_2016
+    return bool(vis and vis.category == DRIVE_SKILL and is_2016())
+
+
+async def restore_drive_skills(session, p):
+    """Repair category-58 purchases from before their car binding was implemented, during character load."""
+    from .vshop import destroy, put_on, save_state
+    car = p.car
+    if not car:
+        return
+    skills = [v for v in p.vsitems if drive_skill(context.data.visuals.get(v.table_idx))
+              and v.state in (0, 1) and active(v)]
+    unbound = [v for v in skills if not v.car_id]
+    if not unbound:
+        return
+    candidates = unbound + [v for v in skills if v.car_id == car.car_id]
+    keep = max(candidates, key=lambda v: (v.ctime, v.inven_idx))
+    # The newest purchase replaces older skills; do not disturb skills belonging to another car.
+    gone = [v for v in candidates if v is not keep]
+    await destroy(p, *gone)
+    if not keep.car_id:
+        put_on(p, keep, car.car_id)
+        await save_state(p, keep)
+    session.log.note(f'driving skill {keep.item_id}: restored car {car.car_id}, {len(gone)} older skills removed')
 
 
 def passive_follow(p):

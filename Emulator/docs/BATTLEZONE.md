@@ -245,6 +245,15 @@ After a practice race (no 0x1ec at all) the same screen appeared once; not looke
   but the AI cars never move: the client sent no 0x21f at all. FrontAi = 0 again (emulator.ini [flags]);
   the code stays. Driving them means a server-side driver along the tracks' paths (race.py has the
   traffic paths) sending their moves to the room.
+- **AI racers again (2026-10-20, 2011 + 2016)**: why they never moved: 0x271 is Cmd_RoomAiCarAssign (2016 name),
+  entries (key, driver, AICarParam Idx, car type, colour, colour 2); the client finds the member with serial key << 16
+  exactly, makes it key << 16 | driver, and the client whose own serial is the driver drives it. Each 0x271 empties
+  the client's driven list, so one 0x271 with all AIs right after the load 0x1e7 (Room.assign_ais, driver = master; before it they never showed), and at the next
+  start the AIs join again unassigned (Room.reset_ais). AI car attr word 0 = key (car key = the AI's serial), cars with
+  VehicleList Support = 1 only. The driver's client sends their moves (0x21d, AI car id @4), gates (0x1ed) and
+  ends (0x1eb) with the car key; gates / ends go to the AI, AIs are in the result and always ready (EMULATOR_NOTES session 38). AIs on the grid and driving: user-confirmed (2016). Gate places and the race end count / wait for the AIs; the
+  driving client itself retires its unfinished AIs when the last human finishes (0x7da8a5, race +0x138). Switch: emulator.ini [battlezone] ai = 1; FrontAi = 0 (it only puts the AIs ahead on the grid); 2011 BattleRoomAI = 1 again.
+  *Not yet confirmed in game.*
 - **Lap Time (first version, 2026-10-13)**: `native/game/laptime.py` (docstring = the flow). The Lap Time
   button sends 0x1bb with filter 4 @0xf8 (was answered "no room": 20159). Arenas per car grade (room type
   0x40, 32 seats), 0x528 load (tracks 70-73 = PVPTrackInfo CityType 4, cities from laptimeinfo.txt),

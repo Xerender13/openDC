@@ -34,6 +34,10 @@ from .login import SVC, error, send, sessions, stat_frames
 from .progress import CHAR_EXP_SQL, add_exp
 
 CHAR_INFO_ACK = 844
+# 2016 (handler 0x529160 / 0x58dbd0, type included: car @0x143, stats @0x175, team @0x1e5, serial @0x47d, location
+# @0x489 / @0x48f, u32 @0x495, size 0x499): the 2016 records (char 0x141, car 0x32, stats 0x70, team 664) in a row,
+# then the 2011 tail (serial, city, zeros) and one more u32. The 2011 layout (877 bytes) left the F2 window wrong.
+CHAR_INFO_ACK_2016 = 0x497
 ADMIN_COMMANDS = ('kick', 'block', 'unblock', 'chatblock', 'ban', 'unban', 'who', 'realmatch')   # native/admin.py
 TEAM_2011 = 384
 NO_TEAM = struct.pack('<qq', -1, -1) + bytes(TEAM_2011 - 16)
@@ -57,9 +61,13 @@ async def game_char_info(session, frame):
     car = p.car
     from .crews import info_bytes, team                 # the character's crew (XiStrTeamInfo, crews.py)
     crew = await team(c.team_id) if c.team_id > 0 else None
-    out = bytearray(c.encode() + (car.encode() if car else bytes(49)) + p.stats().encode() + info_bytes(crew))
+    from .records import Car
+    out = bytearray(c.encode() + (car.encode() if car else bytes(len(Car(0, 0, 0, 0, 0, 0, 0, 0).encode())))
+                    + p.stats().encode() + info_bytes(crew))
     out += struct.pack('<II', s.state.get('serial', 0) if s else 0, c.city)
-    send(session, Frame(0x295, bytes(out.ljust(CHAR_INFO_ACK, b'\0'))))
+    from ..version import is_2016
+    size = CHAR_INFO_ACK_2016 if is_2016() else CHAR_INFO_ACK
+    send(session, Frame(0x295, bytes(out.ljust(size, b'\0'))))
 
 
 @on(SVC, C2S, 0x35e)
@@ -78,11 +86,19 @@ PLAYER_INFO, MAX_KEYS = 0xd8, 0x28
 VISUAL_2011 = 0x36                             # XiVisualItem (2011)
 # VisualItem.xlt category -> offset of its i16 in the 2011 XiVisualItem: the 2008 struct (ZoneServer.pdb:
 # Neon, Plate, Decal, DecalColor, AeroBumper, AeroIntercooler, AeroSet, MufflerFlame, Wheel, Spoiler,
-# Reserve) 6 bytes further on, with two 2011 slots in the old reserve: roof items and air ducts. The client
+# Reserve), from AeroBumper on 6 bytes further on, with two 2011 slots in the old reserve: roof items and air ducts. The client
 # reads @0xe/0x10/0x12/0x18/0x1a/0x1c in the car model 0x468100 with categories 4, 5, 6, 7, 47, 52 and
 # the wheels @0x16 (0x4baf70). The first version put category c @6 + 2c: right for 4-6 and 8 only; the
 # booster flame (10) went into the roof slot and showed an X-cat Doll on the car (user, 2026-10-13).
-VISUAL_OFFSETS = {2: 0x06, 9: 0x08, 11: 0x0a, 4: 0x0e, 5: 0x10, 6: 0x12, 10: 0x14, 8: 0x16, 48: 0x16, 7: 0x18,
+# Neon, plate and decal are at the 2008 offsets (neon @0, plate @2, decal @4, decal colour u32 @6): the car model
+# (2011 0x468100, 2016 0x471170) reads plate +2 (category 9), plate text +0x26, decal +4 and its colour +6. They were
+# 6 bytes on (@6 / 8 / 0xa) like the aero slots: other players saw no decal (user, 2026-10-20, 2016; 2011 too).
+DECAL, DECAL_COLOUR = 11, 0x06                 # VisualItem category of decals; their colour in XiVisualItem
+NEON, NEON_COLOUR = 2, 0x0a                    # neon; its colour (u32 @0xa: 2016 0x4cd2b0 takes it for neons above
+                                                # 6 with Etc.ColorSetReform on, 0 = no neon; 1-6 are fixed colours)
+PLATE, PLATE_TEXT, PLATE_CHARS = 9, 0x26, 8     # licence plates; their text (wchar, the car model copies at most 8 with
+                                                # 0x43ddd0 into car data +0x172 and compares it with wcscmp)
+VISUAL_OFFSETS = {2: 0x00, 9: 0x02, 11: 0x04, 4: 0x0e, 5: 0x10, 6: 0x12, 10: 0x14, 8: 0x16, 48: 0x16, 7: 0x18,
                   47: 0x1a, 52: 0x1c}
 
 
@@ -103,7 +119,7 @@ def aero_model(vis, v, car):
 def visual_item(p):
     """XiVisualItem, 2011 (0x36 bytes): an i16 per look (VISUAL_OFFSETS) holding the item's number inside
     its category (the table's "index" column, from 1; 0 = none, the client then takes the car's default);
-    the rest 0 (the first 6 bytes, the decal colour @0xc and the bytes after 0x1e are not known). A remote
+    a decal's colour (u32 @6, from its item text), the plate's text (wchar[8] @0x26), the neon's colour (u32 @0xa); the rest 0 (the bytes after 0x1e are not known). A remote
     car's info is applied by 0x4bc9c0 -> car model 0x468100, which checks each value with 0x769460 (car
     type, category - 1, number: 1 .. the category's item count, and the item must fit the car type).
     Sending VisualItem ids in the 2008 slots showed no wheels (user, 2026-10-13).
@@ -121,9 +137,22 @@ def visual_item(p):
             continue
         offset = VISUAL_OFFSETS.get(vis.category)
         text = (v.data or '').strip()
-        number = vis.index or (int(text) if text.isdigit() and len(text) <= 4 else 0) or aero_model(vis, v, car)
+        number = vis.index or (int(text) if text.isdigit() and len(text) <= 4 and vis.category != PLATE else 0) \
+            or aero_model(vis, v, car)
         if offset is not None and number:
             struct.pack_into('<h', out, offset, number)
+            if vis.category == DECAL and text.lstrip('-').isdigit():
+                # its colour, from the shop as the item text (a signed ARGB, "-16185079" = 0xff090909): u32 @6
+                # after the decal. The car takes it as a colour with Etc.ColorSetReform on, else its low byte as a
+                # palette number (2016 0x471876, 2011 0x468745); with 0 other players saw no decal (user, 2026-10-20)
+                struct.pack_into('<I', out, DECAL_COLOUR, int(text) & 0xffffffff)
+            if vis.category == NEON and text.isdigit():
+                # its colour, the item text as a decimal RGB ("16382457" = 0xf9f9f9; user, 2026-10-20: no neon for others)
+                struct.pack_into('<I', out, NEON_COLOUR, int(text) & 0xffffffff)
+            if vis.category == PLATE:
+                # the plate's text (the item text as the client sent it; user, 2026-10-20: not shown to others)
+                plate = (v.data or '').rstrip('\0')[:PLATE_CHARS].encode('utf-16le')
+                out[PLATE_TEXT:PLATE_TEXT + len(plate)] = plate
     return bytes(out)
 
 
@@ -356,7 +385,8 @@ async def gm_part(p, info, level, a, b, belonging, white):
     from .items import NEW, new_item
     from .upgrade import UPGRADE_SQL
     db = context.db
-    it = await new_item(p, info, 1)
+    from .items import roll_base
+    it = await new_item(p, info, 1, roll_base(info, perfect=True))     # GM parts: the perfect base
     if info.item_id.startswith('dock_'):
         it.box, it.assist_a = white, a
         await db.execute(POINTS_SQL, (it.random, white, a, db.server_id, p.char.cid, it.inven_idx))

@@ -1,4 +1,5 @@
 // DriftCityLauncher starts the 2011 Drift City client (DriftCity.exe, GamesCampus build of 2011-10-27,
+// or the 2016 Dev Ed client: client2016.go, found by its exe;
 // ASProtect; or DriftCityEU.exe, the same build unpacked and set to an EU nation by Emulator/tools/eu_client.py)
 // against a server of our choice. It lives in the client folder, next to the exe ([client] exe), and
 // reads DriftCityLauncher.ini there (written with the defaults when missing).
@@ -171,6 +172,9 @@ func le32(b []byte) uint32 {
 
 // patchesFor: the patches the settings ask for.
 func patchesFor(cfg Config) Patches {
+	if client2016 { // 2011 addresses
+		return Patches{}
+	}
 	return Patches{icons: cfg.get("client.item_icons", "1") != "0", cargo: cfg.get("client.main_ui_type", "1") == "1",
 		slot: cfg.get("client.passive_slot", "1") != "0"}
 }
@@ -200,10 +204,13 @@ func writeAddress(read func(addr uint32, n int) []byte, write func(addr uint32, 
 	return n
 }
 
-const defaultIni = `; Settings of DriftCityLauncher (the 2011 Drift City client launcher), next to DriftCity.exe
+const defaultIni = `; Settings of DriftCityLauncher (the 2011 / 2016 Drift City client launcher), next to DriftCity.exe
 [server]
 ; the login server (the emulator's auth port 11005) the client connects to: an IPv4 address, at most 15 characters
 address = 127.0.0.1
+; port: the auth port (2016 client only; the 2011 client always uses 11005). The 2016 emulator
+; (Emulator/emulator.ini [client] version = 2016, its [2016] section) listens on 11105
+port = 11005
 
 [client]
 ; the client program in this folder: DriftCityEU.exe (the European client, see Emulator/tools/eu_client.py) or
@@ -214,6 +221,9 @@ main_ui_type = 1
 ; item_icons: 1 = show the items received (combos, traffic items, patrol prizes) as icons on the HUD, 0 = only the
 ; chat line (the US client has the icons switched off; the launcher switches them on while the client runs)
 item_icons = 1
+; guided_tutorial (2016 client): auto = as Data/Localize/GlobalContent.xlt ApprenticeFlowType says (1 = the guided
+; Driver Dome tutorial, Emulator/tools/tutorial_flow.py), 1 = guided, 0 = as shipped (straight to Battle Zone)
+guided_tutorial = auto
 ; passive_slot: 1 = PassiveAssist items on a car show in the inventory's Visual Item tab (the client has no slot for
 ; them; the launcher gives them the rental car slot once logged in), 0 = leave the client as it is
 passive_slot = 1
@@ -228,7 +238,7 @@ display = windowed
 runner = proton
 ; Proton's "proton" script; empty = the newest Proton found in the Steam library
 proton =
-; the Steam folder and the Wine prefix the client uses
+; the Steam folder and the Wine prefix the client uses (the 2011 and 2016 clients can share it)
 steam = ~/.local/share/Steam
 prefix = ~/.local/share/drift2011-pfx
 ; with runner = wine: the wine program
@@ -266,13 +276,22 @@ func parseIni(r io.Reader, c Config) {
 	}
 }
 
-func loadConfig(dir string) (Config, string) {
+// loadConfig reads DriftCityLauncher.ini, written with the defaults when missing (for a 2016 client folder: the HUD
+// as the client saved it; the 2011 ADV HUD default is a 2011 patch).
+func loadConfig(dir string, new2016 bool) (Config, string) {
 	path := filepath.Join(dir, "DriftCityLauncher.ini")
 	c := Config{}
 	parseIni(strings.NewReader(defaultIni), c)
 	f, err := os.Open(path)
 	if err != nil {
-		_ = os.WriteFile(path, []byte(strings.ReplaceAll(defaultIni, "\n", lineEnd)), 0o644)
+		text := defaultIni
+		if new2016 {
+			text = strings.Replace(text, "main_ui_type = 1\n", "main_ui_type = auto\n", 1)
+			text = strings.Replace(text, "; goption.ini MainUIType: 0 = the classic HUD, 1 = the 2011 \"ADV\" HUD\n",
+				"; goption.ini MainUIType: 0 = the classic HUD, 1 = the \"ADV\" HUD, auto = as the client saved it\n", 1)
+			parseIni(strings.NewReader(text), c)
+		}
+		_ = os.WriteFile(path, []byte(strings.ReplaceAll(text, "\n", lineEnd)), 0o644)
 		return c, path
 	}
 	defer f.Close()
@@ -393,16 +412,19 @@ func main() {
 		}
 	}
 	logFile, _ = os.Create(filepath.Join(dir, "DriftCityLauncher.log"))
-	cfg, iniPath := loadConfig(dir)
-	clientExe = cfg.get("client.exe", "")
-	if clientExe == "" {
-		clientExe = "DriftCity.exe"
-		if _, err := os.Stat(filepath.Join(dir, "DriftCityEU.exe")); err == nil {
-			clientExe = "DriftCityEU.exe"
-		}
+	defaultExe := "DriftCity.exe"
+	if _, err := os.Stat(filepath.Join(dir, "DriftCityEU.exe")); err == nil {
+		defaultExe = "DriftCityEU.exe"
 	}
+	new2016, _ := is2016(filepath.Join(dir, defaultExe))
+	cfg, iniPath := loadConfig(dir, new2016)
+	clientExe = cfg.get("client.exe", defaultExe)
 	if _, err := os.Stat(filepath.Join(dir, clientExe)); err != nil {
 		fail("%s is not in %s: put the launcher into the client folder (or set [client] exe in %s)", clientExe, dir, iniPath)
+	}
+	var err2016 error
+	if client2016, err2016 = is2016(filepath.Join(dir, clientExe)); err2016 != nil {
+		fail("%v", err2016)
 	}
 	ip := cfg.get("server.address", "127.0.0.1")
 	for _, a := range os.Args[1:] {
@@ -418,7 +440,9 @@ func main() {
 	if !validAddress(ip) {
 		fail("server address %q: an IPv4 address (at most 15 characters) is needed (%s)", ip, iniPath)
 	}
-	if n := euNation(filepath.Join(dir, clientExe)); n != 0 {
+	if client2016 {
+		logf("client %s (2016), server %s port %s", filepath.Join(dir, clientExe), ip, cfg.get("server.port", "11005"))
+	} else if n := euNation(filepath.Join(dir, clientExe)); n != 0 {
 		clientEU = true
 		logf("client %s (EU, nation %d), server %s", filepath.Join(dir, clientExe), n, ip)
 	} else {

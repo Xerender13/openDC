@@ -129,7 +129,7 @@ class Player:
         s = Stats()
         car = self.car
         if car:
-            s.based = t.car_stats(car.car_type, car.shown_grade())     # a timed upgrade item counts
+            s.based = car.rental.stats if car.rental else t.car_stats(car.car_type, car.shown_grade())     # a timed upgrade item counts
             equip = [0, 0, 0, 0]
             for it in self.items:
                 p = t.part_stat(it.item_id) if it.car_id == car.car_id else None
@@ -170,6 +170,13 @@ class Player:
                 if row:                         # Aero kit Mk.2: the points the player distributed (aero.py)
                     for k, n in enumerate(mk2_points(v)):
                         equip[k] += n
+            if car.rental:
+                from .rentals import gear_assists
+                from .convert import assists, STAT_KINDS
+                for aid in gear_assists(self, car):
+                    _, kind, value = assists().get(aid, (0, '', 0))
+                    if kind in STAT_KINDS:
+                        equip[STAT_KINDS[kind]] += int(value)
             s.equip = tuple(equip)
         from .. import nation
         points = self.char.level // 2 if nation.rule(self, 'half_level_points') else self.char.level

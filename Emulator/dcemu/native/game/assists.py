@@ -21,7 +21,11 @@ assist A and B of each, and an option's own assist (item types 6-10, XiStrItem.S
         (long), Drop, Exp, MitronCapacity, MitronEfficiency (float); 2011: 40 bytes, one u32 more, client 0x72a420).
 Here: the same kinds from the same sources (convert.option_assist for an option's own assist; the drift items'
 assist slots, records.VisualItem.assist_slots) for the car being driven:
-  - chance -> licenses.drop_bonus (combo / traffic / chase drops), exp -> items.play_bonus, both in %.
+  - the car's own assists (VehicleList "Car Assist", e.g. TOYOTA FT-86 a_mito_100 + a_00190 "Exp +100%", Porsche 918
+    a_00125 "Speed Up 6"): the client applies their driving kinds (Main.CarGradeAssist), the server kinds come from
+    here too (they were left out until 2026-10-20: user, "new cars bonus stats (experience +100%)").
+  - chance -> licenses.drop_bonus (combo / traffic / chase drops), exp and mito ("Mitto +100%", a_mito_100; not in
+    the 2008 list) -> items.play_bonus, all in %.
   - speedup -> own_bonus: AddSpeed of the 0x2f8 StatUpdate (login.stat_frames); it was sent as 0 before
     (session 27: MPH converts did nothing).
   - gage / saving -> records.Car.fuel_bonus / mileage_bonus of the current car (Player.apply_paints): the capacity and
@@ -35,7 +39,7 @@ from collections import defaultdict
 
 from .. import context
 
-SERVER_KINDS = ('saving', 'gage', 'chance', 'exp', 'speedup', 'partyspeedup', 'partycrashup')
+SERVER_KINDS = ('saving', 'gage', 'chance', 'exp', 'mito', 'speedup', 'partyspeedup', 'partycrashup')
 PASSIVE_CATEGORIES = (40, 41)        # drift items whose assist slots count in any state (client 0x72961f)
 
 _by_index = None
@@ -58,6 +62,16 @@ def car_assists(p):
     from .convert import assist_index, option_assist
     from .items import active
     t, rows, out = context.data, by_index(), []
+    for aid in t.vehicles.get(car.car_type, {}).get('Car Assist', '').split():     # the car's own ("-" = none)
+        a = rows.get(assist_index(aid))
+        if a:
+            out.append(a)
+    if getattr(car, 'rental', None):
+        from .rentals import SPECIAL_ASSISTS, gear_assists
+        for aid in [SPECIAL_ASSISTS[car.rental.special], *gear_assists(p, car)]:
+            a = rows.get(assist_index(aid))
+            if a:
+                out.append(a)
     for it in p.items:
         if it.car_id != car.car_id or (it.state & 0xffff) != 1 or it.item_id.startswith('dock_'):
             continue
@@ -92,7 +106,7 @@ def own_bonus(p):
 
 def party_bonus(session):
     """0x2f9 PartyEnChantUpdate for one member: the other members' partyspeedup / partycrashup (see the module text)."""
-    from .records import BONUS_2011
+    from .records import layout
     from .social import party_of
     speed = crash = 0.0
     party = party_of(session)
@@ -102,7 +116,8 @@ def party_bonus(session):
             continue
         got = totals(q)
         speed, crash = speed + got['partyspeedup'], crash + got['partycrashup']
-    return struct.pack('<ii', int(speed), int(crash)).ljust(BONUS_2011, b'\0')
+    # XiStrEnChantBonus: 2011 40 bytes, 2016 44 (0x2f9 handler takes 46 with the type; the 2011 size sent to 2016 was 42)
+    return struct.pack('<ii', int(speed), int(crash)).ljust(layout().bonus, b'\0')
 
 
 def send_party(members):

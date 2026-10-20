@@ -313,11 +313,13 @@ def sticky_state(p):
 
 
 async def check(session, p, notify=True):
-    """Gain every supported license whose conditions are all met -> the ids gained. Not in the tutorial gate: a new
-    character holding Rookie at login skipped Director Green's tutorial (user, 2026-10-15); it gets it in the city."""
+    """Gain every supported license whose conditions are all met -> the ids gained. Not in the tutorial (login.in_tutorial):
+    a new character holding Rookie at login skipped Director Green's tutorial (user, 2026-10-15), and with the apprentice
+    tutorial Rookie came during the training race (its 0x331 notice lost there: user, 2026-10-20); it gets it in the city
+    (start)."""
     st = state(p) or await load(p)
-    from .position import IN_CITY
-    if p.char.pos_state < IN_CITY:
+    from .login import in_tutorial
+    if in_tutorial(p):
         return []
     for name in sticky_state(p):
         st['gc'][name] = 1
@@ -371,6 +373,20 @@ async def on_login(session, p):
     await pay_monthly(session, p)
 
 
+async def start(session, p):
+    """The tutorial is over (position.my_city_position: the character leaves the tutorial gate): the license system starts
+    in this session. Login held its content flags back (login.TUTORIAL_FLAGS); they used to come only with the next login,
+    so after the apprentice tutorial, which goes on to the field without one, the licenses stayed off (user, 2026-10-20).
+    A second 0x1e works mid-session (rooms: the Real Match effect). Then the licenses gained, with their notice."""
+    from .login import game_setting
+    from .championship import speed_flags
+    send(session, game_setting(**speed_flags(session)))
+    await load(p)
+    await check(session, p)
+    send(session, info_frame(p), cond_frame(p), slots_frame(p))
+    await pay_monthly(session, p)
+
+
 @on(SVC, C2S, 0x32b)
 async def get_license_info(session, frame):
     p = session.state.get('player')
@@ -391,6 +407,8 @@ async def get_license_cond(session, frame):
         await load(p)
     await check(session, p)
     send(session, cond_frame(p))
+    from .rentals import expire
+    await expire(session, p)
     await pay_monthly(session, p)               # (0x32d comes every ~2 minutes: a reset day passing while online)
 
 
@@ -527,8 +545,11 @@ async def pay_monthly(session, p):
         return
     db, c = context.db, p.char
     from .position import DRIVER_DOME
+    from .login import in_tutorial
     if c.pos_state != DRIVER_DOME:              # paid in the Driver Dome only (user, 2026-10-15): not in the tutorial
         return                                  # gate, not in the city; the client reports the Dome with 0xa2 state 3
+    if in_tutorial(p):                          # nor in the Dome with the apprentice training car (session 32: Rookie's
+        return                                  # 3000 Mito during the training)
     period = pay_period()
     if 'paid' not in st:
         r = await db.row("SELECT POINT FROM SKID_PLAYMODE_TB WHERE SERVERID=%s AND CID=%s AND MODEID='LICPAY'",

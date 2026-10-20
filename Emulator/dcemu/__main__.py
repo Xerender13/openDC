@@ -1,6 +1,10 @@
 """Drift City 2011 US emulator (stage 1: a logging, rewriting proxy in front of the 2008 server).
 
-usage: python3 -m dcemu [-c emulator.ini] [-q]
+usage: python3 -m dcemu [-c emulator.ini] [-q] [--get SECTION.KEY ...]
+
+One emulator.ini serves both client builds: [client] version picks 2011 or 2016, and with 2016 every
+`section.key = value` of its [2016] section replaces that setting (ports, database, data, flags, ...).
+--get prints settings as the emulator resolves them (launch.sh reads the ports and the database this way).
 """
 import argparse
 import asyncio
@@ -28,6 +32,7 @@ def load_config(path):
                   'services': {k: ' '.join(map(str, v)) for k, v in SERVICES.items()}})
     if os.path.exists(path):
         cp.read(path, encoding='utf-8-sig')     # -sig: Windows Notepad may save a BOM
+    apply_2016(cp)
     # the database address from the environment wins (docker-compose.yml: the emulator container reaches the
     # database as db:1433, not 127.0.0.1:14330)
     for key in ('host', 'port', 'user', 'password', 'name'):
@@ -35,6 +40,20 @@ def load_config(path):
         if value:
             cp['database'][key] = value
     return cp
+
+
+def apply_2016(cp):
+    """[client] version = 2016: the [2016] section's `section.key = value` lines replace those settings
+    (the first dot splits, so `flags.Main.PasserBy = 1` is [flags] Main.PasserBy)."""
+    if cp['client'].get('version', '2011').strip() != '2016' or not cp.has_section('2016'):
+        return
+    for name, value in cp['2016'].items():
+        section, dot, key = name.partition('.')
+        if not dot or not key:
+            raise ValueError(f'emulator.ini [2016] {name}: expected section.key = value')
+        if not cp.has_section(section):
+            cp.add_section(section)
+        cp[section][key] = value
 
 
 def native_setup(cp):
@@ -48,10 +67,15 @@ def native_setup(cp):
     d, n = cp['database'], cp['native']
     from .native import version
     version.configure(cp['client'])
+    if version.is_2016() and not getattr(context, 'gotcha_season_set', False):
+        context.gotcha_season = 60          # the 2016 client's GotchaViewSeason (gotcha.py), unless [gotcha] season says
     data_root = cp['client']['data_2016'] if version.is_2016() else n['data']
     table_root = os.path.join(data_root, 'tables') if version.is_2016() else n['server_data']
     if version.is_2016() and not os.path.isfile(os.path.join(HERE, data_root, 'Init', 'VehicleList.xlt')):
         raise ValueError('2016 data missing: run python -m tools.prepare2016 before selecting version = 2016')
+    if not os.path.isfile(os.path.join(HERE, table_root, 'ItemClient.tdf')):    # not in git: copied from the client
+        raise ValueError(f'the client tables are missing in {table_root}: run python -m tools.client_setup '
+                         f'(-c <config> for another config than emulator.ini)')
     context.db = Database(d['host'], int(d['port']), d['user'], d['password'], d['name'], int(d['server_id']))
     context.data = Tables(os.path.join(HERE, data_root), os.path.join(HERE, table_root),
                           os.path.join(HERE, n['admin_list']))
@@ -72,9 +96,11 @@ def native_setup(cp):
         context.drink_mito = int(cp['items'].get('drink_mito', context.drink_mito))
         context.option_parts = cp['items'].get('option_parts', '0').strip() == '1'
         context.docking_parts = cp['items'].get('docking_parts', '1').strip() == '1'
+        context.random_base = cp['items'].get('random_base', '1').strip() == '1'
         context.rename_days = int(cp['items'].get('rename_days', context.rename_days) or 0)
         context.enhancer_plus = float(cp['items'].get('enhancer_plus', context.enhancer_plus) or 1)
         context.enhancer_deluxe = float(cp['items'].get('enhancer_deluxe', context.enhancer_deluxe) or 1)
+        context.ultra_odds = float(cp['items'].get('ultra_odds', context.ultra_odds) or 1)
     if cp.has_section('vshop'):
         from .native.game.vshop import row_changes
         context.vshop_hidden, changes = row_changes(cp['vshop'])
@@ -179,6 +205,7 @@ def native_setup(cp):
         g = cp['gotcha']
         context.gotcha_enabled = g.get('enabled', '1').strip() == '1'
         context.gotcha_season = int(g.get('season', context.gotcha_season))
+        context.gotcha_season_set = 'season' in g
         context.gotcha_mito_price = int(g.get('mito_price', '0') or 0)
         context.gotcha_coin_price = int(g.get('coin_price', '0') or 0)
     if cp.has_section('rush'):
@@ -212,6 +239,7 @@ def native_setup(cp):
     context.sections = {}
     if cp.has_section('battlezone'):
         context.practice_alone = cp['battlezone'].get('practice_alone', '1').strip() not in ('0', 'no', 'off')
+        context.battle_ai = cp['battlezone'].get('ai', '0').strip() not in ('0', 'no', 'off')
         context.realmatch = cp['battlezone'].get('realmatch', 'always').strip().lower()
         context.laptime_level_limit = cp['battlezone'].get('laptime_level_limit', '0').strip() == '1'
         context.realmatch_minutes = int(cp['battlezone'].get('realmatch_minutes', '60'))
@@ -273,7 +301,14 @@ def main():
     ap = argparse.ArgumentParser(prog='dcemu', description=__doc__.splitlines()[0])
     ap.add_argument('-c', '--config', default=os.path.join(HERE, 'emulator.ini'))
     ap.add_argument('-q', '--quiet', action='store_true', help='log to the file only')
+    ap.add_argument('--get', nargs='+', metavar='SECTION.KEY', help='print these settings and exit')
     a = ap.parse_args()
+    if a.get:
+        cp = load_config(a.config)
+        for name in a.get:
+            section, _, key = name.partition('.')
+            print(cp.get(section, key, fallback=''))
+        return
     try:
         asyncio.run(run(load_config(a.config), not a.quiet))
     except KeyboardInterrupt:

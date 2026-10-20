@@ -65,7 +65,15 @@ from .. import context, now, time_t
 from .login import SVC, error, send, sessions
 from .records import wstr
 
-TEAM_INFO = 384
+TEAM_INFO = 384                          # XiStrTeamInfo, 2011; 2016: team_info_size()
+
+
+def team_info_size():
+    """XiStrTeamInfo: 2011 384 bytes, 2016 664 (0x349 handler 0x5462e0 copies 0xa6 dwords; 0x34a sender 0x29a). The
+    2011 fields keep their offsets (the client's copy at char +0x1acc is read at the same relative places); 2016 adds
+    fields from +0x178 on (zeros here)."""
+    from ..version import is_2016
+    return 664 if is_2016() else TEAM_INFO
 MASTER, FIRST, MEMBER = 1, 2, 3
 CREATE_LEVEL, CREATE_FEE, MAX_MEMBERS = 20, 10000, 100
 CLOSE_DAYS, KICK_WAIT_HOURS = 7, 24
@@ -147,8 +155,8 @@ def crew_level(t):
 def info_bytes(t):
     """XiStrTeamInfo, 2011 (384 bytes)."""
     if not t:
-        return struct.pack('<qq', -1, -1) + bytes(TEAM_INFO - 16)
-    out = bytearray(TEAM_INFO)
+        return struct.pack('<qq', -1, -1) + bytes(team_info_size() - 16)
+    out = bytearray(team_info_size())
     struct.pack_into('<qq', out, 0, t['tid'], t['mark'])
     out[0x10:0x2a] = wstr(t['name'], 26)
     out[0x2a:0xa4] = wstr(t['desc'], 122)
@@ -209,7 +217,8 @@ def notify(tid, crew_name, kind, name='', rank=0, when=0, skip=None):
 def my_info_frame(session, p, act=0):
     c = p.char
     return Frame(0x349, struct.pack('<Iqi', act, c.cid, c.team_rank if c.team_id > 0 else -1)
-                 + info_bytes(session.state.get('crew')) + struct.pack('<H', session.state.get('visual_age', 1) & 0xffff))
+                 + info_bytes(session.state.get('crew')) + struct.pack('<H', session.state.get('visual_age', 1) & 0xffff)
+                 + bytes(8 if team_info_size() > TEAM_INFO else 0))  # 2016: two more u32 (@0x2aa / @0x2ae, unknown)
 
 
 async def refresh(session, p):
@@ -264,7 +273,8 @@ def member_entry(r):
     cid, name, rank, level, joined, car_type, color = r
     s = online_member(int(cid))
     from .social import place_of
-    car = struct.pack('<HHII', 0, _i(car_type), _i(color) or 0x01010102, 0x82cccccc)
+    from .rooms import car_attr_size, sized              # XiCarAttr 16 bytes in 2016 (0x358 entry 0x50, handler 0x547060)
+    car = sized(struct.pack('<HHII', 0, _i(car_type), _i(color) or 0x01010102, 0x82cccccc), car_attr_size())
     serial = s.state.get('serial', 0) if s else 0
     if s and s.state['player'].car:
         from .rooms import car_attr_of
@@ -399,9 +409,9 @@ async def set_team_mark(session, frame):
 async def create_team(session, frame):
     from .items import add_money
     p = session.state.get('player')
-    if not p or len(frame.payload) < TEAM_INFO:
+    if not p or len(frame.payload) < team_info_size():
         return
-    info = frame.payload[:TEAM_INFO]
+    info = frame.payload[:team_info_size()]
     mark, = struct.unpack_from('<q', info, 8)
     name = read_wstr(info, 0x10, 26).strip()
     desc = read_wstr(info, 0x2a, 122).strip()

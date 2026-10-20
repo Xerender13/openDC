@@ -1,6 +1,6 @@
 """The Auction House: parts and usable items, cars (emulator.ini [auction] cars) and drift items ([auction]
 drift_items). The rules are the 2008 server's (PacketParser::Cmd_Auction*, XiAuctionMgr, XiAuctionCarMgr,
-XiCsCharInfo::Auction*); the 2011 layouts are from the client's handlers.
+XiCsCharInfo::Auction*); layouts are from the 2011 and 2016 client handlers.
 
 Listings: SKID_AUCTION_TB (items), SKID_AUCTIONCAR_TB (cars), both the 2008 server's, and SKID_AUCTIONVS_TB
 (drift items; the 2008 server had no drift item auction, the table is made here on first use with the
@@ -56,11 +56,15 @@ XiStrAuctionClientUnit (62: Cid, name, RegNum, BuyNum, SellNum) before each.
 Type (the list filter): 0 = all; items 1-4 parts, 6-10 option parts, 11-14 docking parts, 5 general items; cars the grade; drift items
 VShopItem "Main" (type_fits). SortType 0-13 (2008 XiAuctionMgr m_SortFuncs): serial, level, name,
 price, count, seller name, seller's sales; even = descending.
+2016 drift header sorts 14/15 are listing days left; 16/17 are the drift item's remaining lifetime.
+Native 0x5f99c0..0x5f9b99 maps controls 1360031..37 to sorts; row renderer 0x5f7ab0 prints
+XiStrAuctionUnit +0x18 as days left and the item's Period * 86400 minus its age as remaining time.
 0x708 (u32 1 / 0, at login): the car auction open (client [mgr + 0x824]).
-The drift item auction is in the client's code (GlobalContent.xlt AuctionVSItem = 1), but the US UI layout
-(game.nui) has no drift item tab and no images for the header set that mode switches to (controls 1220030..38:
-the column titles go blank). Tried 2026-10-14 and reverted: the US client keeps AuctionVSItem = 0, so the drift
-item handlers here are unused unless the UI layout is extended.
+The 2011 US client keeps local AuctionVSItem disabled (its layout lacks the third tab/alternate headers).
+For 2016, tools.shop2016 lays dialog 1360000 out as the Origin client does (1360030..38 / 1360057..59) and
+enables AuctionVSItem;
+the server profile separately enables [auction] drift_items. Native 0x77c6a0 / 0x77c780 / 0x77e280
+confirm the same 156-byte public / 94-byte own drift records and 104-byte registration acknowledgement.
 """
 import asyncio
 import struct
@@ -69,6 +73,7 @@ from ...handlers import on
 from ...protocol import C2S
 from ...wire import Frame, read_wstr
 from .. import context, time_t
+from ..version import is_2016
 from .login import LIST_FULL, SVC, error, send, stat_frames
 from .records import Car, Item, name_bytes, wstr
 
@@ -211,6 +216,12 @@ class Listing:
     def count(self):
         return _i(self.f[4]) if self.kind is ITEMS else 1
 
+    def remaining(self):
+        """Drift item lifetime in seconds (permanent items sort above finite terms)."""
+        from .. import now
+        _, _, _, period, ctime, _ = self.drift()
+        return max(0, ctime + period * 86400 - now()) if period and ctime else float('inf')
+
     # --- records ---
     def unit(self, inven_idx=None):
         return struct.pack('<6Ii', self.serial, self.table_idx, self.inven_idx if inven_idx is None else inven_idx,
@@ -220,7 +231,9 @@ class Listing:
     def body(self, own=None):
         """The entry after the auction unit; own: the seller's own item / drift item record, if held."""
         if self.kind is ITEMS:
-            return (own or self.item()).encode()[8:0x50]
+            # the item unit: 2011 @8..@0x50 (72); 2016 76 with its new dword before TableIdx (0x245 / 0x24d entries
+            # 0x68 / 0xa6, 2011 0x64 / 0xa2: handlers 0x52f0e0 / 0x52f110)
+            return (own or self.item()).encode()[8:0x54 if is_2016() else 0x50]
         if self.kind is CARS:
             return self.car().unit()
         table_idx, inven, text, period, ctime, utime = self.drift()
@@ -314,6 +327,9 @@ SORT_KEYS = (lambda x: x.serial, lambda x: x.level(), lambda x: x.name().lower()
 def sort_list(found, sort_type):
     if 0 <= sort_type < 14:
         found.sort(key=SORT_KEYS[sort_type // 2], reverse=sort_type % 2 == 0)
+    elif is_2016() and sort_type in (14, 15, 16, 17) and all(x.kind is DRIFT for x in found):
+        key = (lambda x: days_left(x.elapsed)) if sort_type < 16 else (lambda x: x.remaining())
+        found.sort(key=key, reverse=sort_type % 2 == 0)
     return found
 
 
@@ -402,8 +418,16 @@ def register_lists(kind, my_type, list_type, search_type, search_size):
             text = read_wstr(frame.payload, 0x14, 0x100)
             item_text, seller_text = (text, '') if search_t in (0, 1, 3) else ('', text)
             lo, hi = struct.unpack_from('<II', frame.payload, 0x114)
-        found = sort_list(await public_list(kind, type_, lo, hi, item_text.strip(), seller_text.strip()), sort) \
-            if _kind_on(kind) else []
+        if kind is DRIFT and is_2016():
+            # 2016 boxes (the Origin layout): "User ID/Item Name" 1360021 and "Option Name" 1360059 (client
+            # 0x5f7188). Drift items carry no option the emulator knows of: the option text matches the name.
+            found = await public_list(kind, type_, lo, hi, seller_text.strip())
+            who = item_text.strip().lower()
+            found = sort_list([x for x in found if not who or who in x.name().lower() or who in (x.seller or '').lower()],
+                              sort) if _kind_on(kind) else []
+        else:
+            found = sort_list(await public_list(kind, type_, lo, hi, item_text.strip(), seller_text.strip()), sort) \
+                if _kind_on(kind) else []
         session.log.note(f'{kind.name} auction search {item_text!r} / {seller_text!r} type {type_}: {len(found)}')
         send(session, list_frame(kind.search_ack, found, offset, count))
 
@@ -496,9 +520,9 @@ async def auction_vs_on(session, frame):
     v = next((x for x in p.vsitems if x.inven_idx == inven), None)
     row = context.data.vshop.get(v.table_idx) if v else None
     why = None
-    if not v or v.table_idx != table_idx or not price:
+    if not v or v.table_idx != table_idx or not price or (is_2016() and count != 1):
         why = '20050'
-    elif v.state != 0 or not active(v):
+    elif v.state != 0 or not active(v) or (is_2016() and v.car_id):
         why = '20063'
     elif not row or row.get('UseHancoin') != '1':     # drift items bought with Mito (text 12146)
         why = 'You cannot register the Skid Items purchased with Mitto'
@@ -509,6 +533,10 @@ async def auction_vs_on(session, frame):
     db, c = context.db, p.char
     await ensure_tables()
     async with LOCK:
+        # Another request can have registered/equipped the item while this one
+        # awaited table setup or the auction lock. Never charge twice.
+        if is_2016() and (v not in p.vsitems or v.state != 0 or v.car_id or not active(v)):
+            return error(session, '20063')
         if fee > c.mito or not await add_money(c, -fee):
             return error(session, '20092')
         v.state = LOCKED
@@ -645,6 +673,11 @@ async def auction_vs_cancel(session, frame):
         return error(session, '20052') if p else None
     db = context.db
     async with LOCK:
+        if is_2016():
+            # A buyer may have claimed it after own_listing's database await.
+            _, x = await own_listing(session, DRIFT, frame)
+            if not x or x.state not in (ON_SALE, EXPIRED):
+                return error(session, '20052')
         await db.execute(DELETE_SQL.format(table=DRIFT.table), (db.server_id, x.serial))
         v = next((o for o in p.vsitems if o.inven_idx == x.inven_idx), None)
         if v:
@@ -693,6 +726,12 @@ async def complete(session, kind, frame):
         return None
     db = context.db
     async with LOCK:
+        if kind is DRIFT and is_2016():
+            # Two concurrent collect requests must not both credit the seller.
+            _, x = await own_listing(session, kind, frame)
+            if not x or x.state != SOLD:
+                error(session, '20054')
+                return None
         await db.execute(DELETE_SQL.format(table=kind.table), (db.server_id, x.serial))
         await add_money(p.char, x.price)
     session.log.note(f'auction {kind.name} complete {x.serial} ({x.item_id}): +{x.price}')

@@ -69,6 +69,7 @@ from ..wire import Frame, read_wstr
 from . import context, now, tick
 from .city_traffic import frames
 from .race import feed
+from .version import is_2016
 
 AREAS = 100
 UC_AREAS = range(100, 104)  # the Undercity (Moon Palace .. Oros, client 0x765950): one instance per party, no traffic
@@ -78,6 +79,25 @@ KEEPALIVE_SECONDS = 3
 AGENT_LOG_SECONDS = 60
 MOVE_SIZE, CARMOVE_SIZE = 0x62, 0x36   # 0x21d payload (2011); XiCarMove (2011)
 POS = 0x14                  # position in the 2011 XiCarMove
+# 2016 (user 2026-10-20: the other racer was drawn broken): XiCarMove 0x3a (its XiCarAttr @4 is 16 bytes; position
+# @0x18; copy 0x548450) and XiCarState 0x32 (0x21d builder 0x86516e: move @2, state @0x3c). Sizes with the type, from
+# the senders' allocations and the handlers' returned lengths: 0x21d 0x6e, 0x225 0x8e, 0x21f 0x76, 0x212 0x1da;
+# S>C 0x221 0x74 (handler 0x51d900), 0x23e / 0x226 0x3c, 0x224 0x42, 0x222 0x7c. The relays stay "as sent + 6
+# bytes", so only the walk and the slices change.
+CARMOVE_2016, POS_2016 = 0x3a, 0x18
+SIZES_2016 = {0x21d: 0x6e, 0x225: 0x8e, 0x226: 0x3c, 0x21f: 0x76, 0x212: 0x1da}
+
+
+def carmove_size():
+    return CARMOVE_2016 if is_2016() else CARMOVE_SIZE
+
+
+def pos():
+    return POS_2016 if is_2016() else POS
+
+
+def size_of(t):
+    return SIZES_2016[t] if is_2016() and t in SIZES_2016 else SIZES.get(t)
 
 # 2011 command sizes from the type, for walking frames that hold several commands
 SIZES = {0x236: 6, 0x237: 2, 0x23c: 0x22, 0x23f: 0xa,
@@ -127,7 +147,7 @@ class World:
         others = self.areas.get(car.area, {})
         others.pop(car.session.id, None)
         if car.move:
-            gone = Frame(0x226, car.move[:CARMOVE_SIZE])
+            gone = Frame(0x226, car.move[:carmove_size()])
             for o in others.values():
                 o.session.to_client(gone)
         if not others and car.area in self.maps:
@@ -238,26 +258,32 @@ def move(session, p):
     car = car_of(session)
     if not car or car.area is None:
         return
+    w = world_of(session)
     sort, huv = struct.unpack_from('<HH', p, 2)
-    if car.sort is None and not huv:
-        car.sort = sort
-    if huv or sort != car.sort:                 # an object this client drives (rush boss, escorts): relayed by its
-        if huv:                                 # position, under its HUV number (+4, from 0x45e; +2 is a local id
-            p = p[:2] + struct.pack('<H', huv) + p[4:]     # of the client's: 1357, 15876, 0, 50264, ...)
+    if w.pvp and huv:
+        # races: +4 is an AI racer's car id (its car attr word 0, 0x4001..; the players' cars 0), +2 the same for all
+        # of a driver's AIs (0x1b1): relayed as it is, kept by that id
+        sort, huv, ai = huv, 0, True
+    else:
+        ai = False
+        if car.sort is None and not huv:
+            car.sort = sort
+    if ai or huv or sort != car.sort:           # an object this client drives (rush boss, escorts, AI racers): relayed
+        if huv:                                 # by its position, under its HUV number (+4, from 0x45e; +2 is a local
+            p = p[:2] + struct.pack('<H', huv) + p[4:]     # id of the client's: 1357, 15876, 0, 50264, ...)
             sort = huv
         car.objects[sort] = p
-        w = world_of(session)
         others = [c for c in w.cars(car.area).values() if c is not car]
         out = Frame(0x221, p + bytes(6))
         record(car.area, 0x221, out.payload)
-        for o in (others if w.pvp else near(others, *struct.unpack_from('<ff', p, POS), MOVE_RANGE)):
+        for o in (others if w.pvp else near(others, *struct.unpack_from('<ff', p, pos()), MOVE_RANGE)):
             o.session.to_client(out)
         for o in w.observers.get(car.area, {}).values():
             if o is not car:
                 o.session.to_client(out)
         return
     car.move = p
-    car.pos = struct.unpack_from('<ff', p, POS)
+    car.pos = struct.unpack_from('<ff', p, pos())
     receivers = world_of(session).receivers(car)
     if car.area in recorders:
         record(car.area, 0x221, p + bytes(6))
@@ -280,7 +306,7 @@ def request_car(session, p):
         for c in w.cars(car.area if car and car.area is not None else watched).values():
             m = c.move if sort == c.sort else c.objects.get(sort)
             if c.serial == serial and m:
-                session.to_client(Frame(0x23e, m[:CARMOVE_SIZE]))
+                session.to_client(Frame(0x23e, m[:carmove_size()]))
                 break
 
 
@@ -475,12 +501,12 @@ IGNORED = {0x239, 0x07, 0x2ac}
 
 
 def dispatch(session, frame):
-    """Walk the commands of a frame by their 2011 sizes; stop at an unknown one."""
+    """Walk the commands of a frame by their sizes (2011, or 2016: size_of); stop at an unknown one."""
     data = struct.pack('<H', frame.type) + frame.payload
     o, n = 0, len(data)
     while o + 2 <= n:
         t = struct.unpack_from('<H', data, o)[0]
-        size = SIZES.get(t)
+        size = size_of(t)
         if t == 0x23b and o + 0x3c <= n:            # AreaChat: 0x3c + u16 characters @0x3a
             size = 0x3c + 2 * struct.unpack_from('<H', data, o + 0x3a)[0]
         if t == 0x23d and o + 4 <= n:               # RequestCar: 8 + 4 x u16 count @2

@@ -133,8 +133,14 @@ class ItemInfo:
     reward: str = ''         # UseItemClient column 3: its RewardGroup.xlt group (gift boxes, lucky bags, lotteries)
     name: str = ''           # ItemClient column 4 / UseItemClient column 2 (the shown name)
     extra: str = ''          # UseItemClient column 4 (Gotcha key parts: the RewardGroup of the parts it needs)
+    base_range: tuple = (0, 0)   # ItemClient columns 10 / 11: the random base bonus of a dropped part (items.roll_base)
     tradeable: bool = True   # ItemClient column 17 / UseItemClient column 15 (False: rental and hyper parts, coupons,
                              # ...; car keys are True: they go with the car in a car auction)
+
+
+# ItemClient column 15 / UseItemClient column 13, sold in the parts shop: 2011 'True'; the 2016 tables name the
+# shop floor instead ('1F': the rows 2011 had as True and more; 'B1F': the Neo items), the others 'False'.
+SHOP_MARKS = ('True', '1F', 'B1F')
 
 
 def _num(x, cast=int):
@@ -371,12 +377,12 @@ class Tables:
         if 0 <= table_idx < len(parts):
             r = parts[table_idx]
             return ItemInfo(table_idx, r[2], r[0], PART_TYPES.get(r[0], DOCK_TYPE if r[0].startswith('dock_') else OTHER_TYPE),
-                            _num(r[12]), _num(r[13]), r[15] == 'True', 1, r[6], _num(r[7]), req_grade=_num(r[8]), name=r[4],
-                            tradeable=len(r) > 17 and r[17] == 'True')
+                            _num(r[12]), _num(r[13]), r[15] in SHOP_MARKS, 1, r[6], _num(r[7]), req_grade=_num(r[8]), name=r[4],
+                            tradeable=len(r) > 17 and r[17] == 'True', base_range=(_num(r[10]), _num(r[11])))
         k = table_idx - len(parts)
         if 0 <= k < len(use):
             r = use[k]
-            return ItemInfo(table_idx, r[0], r[1], USE_TYPE, _num(r[7]), _num(r[8]), r[13] == 'True',
+            return ItemInfo(table_idx, r[0], r[1], USE_TYPE, _num(r[7]), _num(r[8]), r[13] in SHOP_MARKS,
                             _num(r[5]) or USE_STACK, value=_num(r[9]), time=_num(r[10]),
                             reward=r[3] if r[3] != 'n/a' else '', name=r[2], tradeable=len(r) > 15 and r[15] == 'True',
                             extra=r[4] if r[4] != 'n/a' else '')

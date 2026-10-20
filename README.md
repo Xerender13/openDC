@@ -48,6 +48,13 @@ Moving an existing setup (database, client) to another machine: [`Emulator/docs/
 To let other players join, put your address in their `DriftCityLauncher.ini` and in
 `Emulator/server_data/serverlist.txt`, and open TCP ports 11005-11051.
 
+## 2011 or 2016
+
+`Emulator/emulator.ini` `[client] version` says which client the server is for: `2016` (the default, experimental) or
+`2011` (the US and EU clients). With 2016 the `[2016]` section at the end of the file gives the server its own ports
+(111xx) and database, so a second copy of `Emulator/` set to 2011 can run next to it. The 2016 client goes in
+`DriftCity Dev Ed/` next to `Emulator/`.
+
 ## EU version
 
 The emulator recognises each client's nation and applies the EU rules only to EU clients (`emulator.ini` `[nation]`;

@@ -21,10 +21,12 @@ until "${sqlcmd[@]}" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -Q 'SELECT 1' >/
 done
 
 # This setup command intentionally rebuilds the game database from the checked-in schema.
-"${sqlcmd[@]}" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -Q "IF DB_ID(N'SKDBTW') IS NOT NULL BEGIN ALTER DATABASE [SKDBTW] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [SKDBTW]; END; CREATE DATABASE [SKDBTW];"
+# DB_NAME: emulator.ini [database] name (launch.sh passes it: SKDBTW for 2011, SKDB2016TEST for 2016)
+db=${DB_NAME:-SKDBTW}
+"${sqlcmd[@]}" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -Q "IF DB_ID(N'$db') IS NOT NULL BEGIN ALTER DATABASE [$db] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$db]; END; CREATE DATABASE [$db];"
 for script in /scripts/*.sql; do
   [[ "$script" == */setup-db.sh ]] && continue
   echo "Applying $(basename "$script")..."
-  "${sqlcmd[@]}" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -d SKDBTW -b -i "$script"
+  "${sqlcmd[@]}" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -d "$db" -b -i "$script"
 done
-echo "SKDBTW is ready."
+echo "$db is ready."

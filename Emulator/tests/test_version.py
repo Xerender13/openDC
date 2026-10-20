@@ -56,6 +56,21 @@ class VersionTest(unittest.TestCase):
         version.configure({})
         self.assertFalse(version.is_2016())
 
+    def test_2016_section_replaces_settings_only_for_2016(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'emulator.ini'
+            text = ('[client]\nversion = {}\n[services]\nauth = 11005 0 56\n[database]\nname = SKDBTW\n'
+                    '[2016]\nservices.auth = 11105 0 56\ndatabase.name = SKDB2016TEST\nflags.Main.PasserBy = 1\n')
+            path.write_text(text.format('2011'))
+            cp = load_config(str(path))
+            self.assertEqual((cp['services']['auth'], cp['database']['name']), ('11005 0 56', 'SKDBTW'))
+            self.assertFalse(cp.has_section('flags'))
+            path.write_text(text.format('2016'))
+            cp = load_config(str(path))
+            self.assertEqual((cp['services']['auth'], cp['database']['name']), ('11105 0 56', 'SKDB2016TEST'))
+            self.assertEqual(cp['flags']['main.passerby'], '1')
+            self.assertEqual(cp['services']['lobby'], '11011 12011 56')    # not named: the default stays
+
     def test_character_offsets_and_uint64_experience(self):
         c = character()
         old, new = c.encode(2011), c.encode(2016)
@@ -148,6 +163,17 @@ class VersionTest(unittest.TestCase):
             data = version.pack_flags(NEW_FLAGS)
             self.assertEqual((struct.unpack_from('<I', data, 8)[0] >> 19) & 3, 2)
 
+    def test_2016_turns_on_the_new_parts_shop_panels_only(self):
+        context.data = SimpleNamespace(contents={})
+        version.configure({'version': '2011'})
+        before = login.game_setting().payload
+        self.assertNotIn('Main.NewItemUpgradeUI', version.flag_table())
+        version.configure({'version': '2016'})
+        flags = login.game_setting().payload[8:]
+        self.assertEqual((struct.unpack_from('<I', flags, 0xc)[0] >> 28) & 1, 1)
+        version.configure({'version': '2011'})
+        self.assertEqual(login.game_setting().payload, before)
+
     def test_2016_advertises_level_100_without_changing_2011(self):
         context.data = SimpleNamespace(contents={})
         for year, off, shift, expected in ((2011, 0x4c, 15, 0), (2016, 0x50, 16, 100)):
@@ -212,7 +238,10 @@ class ClientTablesTest(unittest.TestCase):
             agt.write(str(root/'Data/Init.agt'), b'', [('Init\\VehicleList.xlt', b'archive')])
             (root/'Data/Init').mkdir()
             (root/'Data/Init/VehicleList.xlt').write_bytes(b'base loose')
-            self.assertEqual(Client(tmp).read('VehicleList.xlt'), b'base loose')
+            # as NiFile::NiFile: the archive first, a loose file only for what no archive has (tools/pack_client.py)
+            self.assertEqual(Client(tmp).read('VehicleList.xlt'), b'archive')
+            (root/'Data/Init/LevelServer.xlt').write_bytes(b'only loose')
+            self.assertEqual(Client(tmp).read('LevelServer.xlt'), b'only loose')
             (root/'Data_US/Init').mkdir(parents=True)
             (root/'Data_US/Init/VehicleList.xlt').write_bytes(b'US loose')
             self.assertEqual(Client(tmp).read('vehiclelist.XLT'), b'US loose')

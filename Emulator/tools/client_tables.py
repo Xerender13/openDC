@@ -37,8 +37,9 @@ class Client:
             for e in entries:
                 full = prefix + e[0]
                 self.files[full.lower()] = (os.path.relpath(path, root), raw, e)
-        # Dev Ed uses empty archive stubs plus loose Init / World/Data tables.
-        # Loose files override their archive entries; patch packs still take precedence.
+        # Dev Ed ships empty archive stubs plus loose Init / World/Data tables. As the engine (NiFile::NiFile asks the
+        # packs first, fopen only for what they lack: tools/pack_client.py), a loose file counts only when no archive
+        # has it; patch packs take precedence over both.
         for parts in (('Data', 'Init'), ('Data', 'World', 'Data'),
                       ('Data_US', 'Init'), ('Data_US', 'World', 'Data')):
             path = self._directory(*parts)
@@ -50,7 +51,7 @@ class Client:
                     if name.lower().endswith(('.xlt', '.tdf')):
                         relative = os.path.relpath(os.path.join(folder, name), root)
                         full = relative.replace(os.sep, '\\')
-                        self.files[full.lower()] = (relative, None, (full,))
+                        self.files.setdefault(full.lower(), (relative, None, (full,)))
         patch_dir = self._directory('Patch')
         if patch_dir:
             for name in sorted(os.listdir(patch_dir)):

@@ -44,6 +44,8 @@ async def select_car(session, frame):
     car = next((c for c in p.char.cars if c.car_id == car_id), None)
     if not car:
         return error(session, '20025')                  # NotFoundCar
+    if car.rental and car.rental.expired():
+        return error(session, 'This rental car has expired.')
     if car.on_auction:                                  # text 10573 (auction.py)
         return error(session, 'You cannot drive cars that are registered for auction.')
     p.char.cur_car = car_id
@@ -220,7 +222,7 @@ async def sell_car(session, frame):
     car_id, = struct.unpack_from('<I', frame.payload, 0x2a)
     t, c, db = context.data, p.char, context.db
     car = next((x for x in c.cars if x.car_id == car_id), None)
-    if not car or car_id == c.cur_car or car.on_auction or len(c.cars) < 2:
+    if not car or car.rental or car_id == c.cur_car or car.on_auction or len(c.cars) < 2:
         session.log.note(f'sell car {car_id}: refused (current, on auction, last or unknown)')
         return error(session, '20043')
     if any(i.car_id == car_id for i in p.items):

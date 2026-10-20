@@ -261,7 +261,7 @@ func anyClientPids() []int {
 			continue
 		}
 		first := strings.ToLower(string(bytes.SplitN(argv, []byte{0}, 2)[0]))
-		for _, exe := range []string{"driftcityus.exe", "driftcityeu.exe", "driftcity.exe"} {
+		for _, exe := range []string{"driftcityus.exe", "driftcityeu.exe", "driftcity.exe", "driftcity2016test.exe"} {
 			if strings.HasSuffix(first, exe) {
 				out = append(out, pid)
 				break
@@ -454,6 +454,13 @@ func launch(dir, ip string, cfg Config) error {
 	if _, _, e := syscall.RawSyscall6(syscall.SYS_PRCTL, prSetChildSubreaper, 1, 0, 0, 0, 0); e != 0 {
 		logf("warning: could not become a child subreaper; patching may fail")
 	}
+	var ws []write2016
+	if client2016 {
+		var err error
+		if ws, err = writes2016(dir, ip, cfg); err != nil {
+			return err
+		}
+	}
 	r, err := makeRunner(cfg)
 	if err != nil {
 		return err
@@ -504,6 +511,10 @@ func launch(dir, ip string, cfg Config) error {
 			if !old[pid] && !seen[pid] && descendant(pid) {
 				seen[pid] = true
 				logf("client pid %d", pid)
+				if client2016 {
+					logf("patched: %s", strings.Join(patch2016Poll(ws, procRead(pid), procWrite(pid)), ", "))
+					continue
+				}
 				logf("patched: %s", strings.Join(patch(pid, ip), ", "))
 				if p := patchesFor(cfg); p.icons || p.cargo || p.slot {
 					go keepPatches(pid, p, procRead(pid), procWrite(pid))

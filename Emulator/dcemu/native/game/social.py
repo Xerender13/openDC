@@ -407,6 +407,11 @@ async def game_char_info_ex(session, frame):
     if not p:
         return error(session, '20019')
     c = p.char
-    out = c.encode() + (p.car.encode() if p.car else bytes(49)) + p.stats().encode()
+    from .records import Car
+    from ..version import is_2016
+    empty_car = bytes(len(Car(0, 0, 0, 0, 0, 0, 0, 0).encode()))
+    out = c.encode() + (p.car.encode() if p.car else empty_car) + p.stats().encode()
     out += struct.pack('<I', s.state.get('serial', 0) if s else 0) + place_of(s)
-    send(session, Frame(0x297, out.ljust(462 - 2, b'\0')))
+    # 2011 462 bytes with the type (handler 0x515d80); 2016 0x1fd (0x529340: the 2016 char / car / stats records,
+    # then the same 24-byte tail @0x1e5)
+    send(session, Frame(0x297, out.ljust((0x1fd if is_2016() else 462) - 2, b'\0')))

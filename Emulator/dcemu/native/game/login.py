@@ -23,7 +23,7 @@ from ...handlers.game import FLAG_ALIASES, NEW_FLAGS
 from ...protocol import C2S
 from ...wire import Frame, read_wstr
 from .. import admin, context, now
-from ..version import flag_table, pack_flags
+from ..version import flag_table, is_2016, pack_flags
 from . import player
 from .records import enchant_bonus, wstr
 
@@ -96,10 +96,15 @@ async def check_in(session, frame):
 
 # In the tutorial gate (gate 0) the login is kept as it was before session 11: Director Green's tutorial messages stopped
 # after the license flags and frames came in (user, 2026-10-15; this morning's new character still had them). The license
-# system starts when the character reaches the city (licenses.on_login from position.my_city_position); its flags with
-# the next login.
+# system starts when the character reaches the city (licenses.start from position.my_city_position), its flags with it.
 TUTORIAL_FLAGS = {'Main_License': 0, 'Etc_NewLicenseSystem': 0, 'Main_LadderDisplay': 0, 'Etc_NewLicenseSystemnDay': 0}
 # (The missing tutorial messages turned out to be position.first_position's state, not these flags.)
+
+
+def serial_of(session):
+    """The player's serial (u16: XiCarMove, room seats, 0x221 / 0x425 ...): the session id. (Tested 2026-10-20 with 2016
+    serials from 0x1000: the phantom garage car in 2016 races stayed, so serial == car id was a coincidence.)"""
+    return session.state.setdefault('serial', session.id & 0xffff)
 
 
 def in_tutorial(p):
@@ -137,6 +142,10 @@ def content_flags(**overrides):
     if is_2016():
         # 2016 reads this cap literally: zero makes level 1 display as MAX.
         named['Etc.LevelLimit'] = max_level()
+        # the parts shop's Modify / Combine / Convert tabs: without it the 2016 client shows the old panels
+        # 1260000 / 1270000 / 1300000 / 1320000, which its game.nui ships empty (selector 0x68e890: flags +0xc
+        # bit 28; Modify also needs GlobalContent UseUpgradeChanceTime = 1, as shipped)
+        named['Main.NewItemUpgradeUI'] = 1
     named.update({k.replace('_', '.', 1): v for k, v in overrides.items()})
     return pack_flags(named)
 
@@ -195,11 +204,18 @@ async def load_char(session, frame):
     from .. import nation
     p.nation = nation.of(session)
     session.log.note(f'client nation {p.nation} ({nation.name(p.nation)})')
+    from . import rentals
+    await rentals.load(p)
+    await rentals.expire(session, p)
     from .auction import mark_cars, open_frame
     await mark_cars(p)
-    from .items import merge_stacks
+    from .items import complete_piece, merge_stacks
     if await merge_stacks(p):
         session.log.note('usable item stacks merged')
+    for it in list(p.items):                     # full piece stacks from before (2026-10-20) become their item
+        was = it.item_id
+        if await complete_piece(p, it):
+            session.log.note(f'pieces {was} full -> {it.item_id}')
     from .driftuse import convert_bundles
     await convert_bundles(session, p)
     from .quests import give_up_at_login        # a quest left started by a connection that never closed properly
@@ -223,6 +239,9 @@ async def load_char(session, frame):
     flags.update(speed_flags(session))          # the Touring classes' speed texts: mph for US clients
     send(session, Frame(0x1e, struct.pack('<ii', 0, 0) + content_flags(**flags)),
          Frame(0x32a, bytes(136)), Frame(0x7c, load_ack))
+    if is_2016():
+        send(session, rentals.list_frame(p))
+        session.state['rental_ready'] = True
     from .items import bonus_update
     send(session, bonus_update(p))
     for car in c.cars:                  # a timed V upgrade on a car: the grade it shows (vshop.after_change)
@@ -301,7 +320,7 @@ async def coupon_vars(session, frame):
 async def join_channel(session, frame):
     channel = read_wstr(frame.payload, 0, 20)
     p = session.state.get('player')
-    serial = session.state.setdefault('serial', session.id & 0xffff)
+    serial = serial_of(session)
     send(session, Frame(0x7e, frame.payload[:20].ljust(20, b'\0')
                         + wstr(p.char.name if p else '', 32)
                         + struct.pack('<HH', serial, 1)))
@@ -342,9 +361,13 @@ async def check_stat(session, frame):
 
 @on(SVC, C2S, 0xfa0)
 async def info_fa0(session, frame):
-    """2011 only (character name, u32) -> 0xfa1: an empty record (see handlers/game.py info_fa0)."""
-    out = bytearray(0x8b2 - 2)
-    struct.pack_into('<i', out, 0xaa - 2, -1)
+    """(character name, u32) -> 0xfa1: an empty record (see handlers/game.py info_fa0). 2011 0x8b2 bytes (handler
+    0x529720: two 0xa8 records @0xa / @0xb2, -1 @0xaa = none); 2016 0x9a6 (0x53f0f0: two 0xd0 records @0xa / @0xda,
+    -1 @0xd2, u32 flag @0x1aa, 0x7f8 bytes @0x1ae)."""
+    from ..version import is_2016
+    size, none_at = (0x9a6, 0xd2) if is_2016() else (0x8b2, 0xaa)
+    out = bytearray(size - 2)
+    struct.pack_into('<i', out, none_at - 2, -1)
     send(session, Frame(0xfa1, bytes(out)))
 
 

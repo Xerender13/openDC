@@ -94,9 +94,10 @@ from ...protocol import C2S
 from ...wire import Frame, read_wstr
 from .. import admin, context, now
 from .items import add_money, play_bonus
-from .login import SVC, error, sessions, send
+from .login import SVC, error, serial_of, sessions, send
 from .progress import add_exp, play_mode
 from .records import wstr
+from ..version import is_2016
 
 SEATS, OPEN, LOCKED = 32, 0, 0xffffffff
 WAIT, LOADING, RACING = 0, 1, 2
@@ -108,7 +109,37 @@ AREA_BASE = 900
 PRACTICE, PRACTICE_AREA_BASE = 100, 20000   # 0x1e7 type of a practice run; its area = base + serial
 MISSION_ROOM = 0x10000      # room type of a Mission Battle room (the client makes it itself, instant.py): a real race alone,
                             # its reward is the instant mission's (0x3e2), not the battle's
-USER_INFO, CAR_ATTR, PLAYER_INFO = 12, 12, 0xd8
+USER_INFO, CAR_ATTR, PLAYER_INFO = 12, 12, 0xd8     # 2011 sizes; 2016: user_info_size() / car_attr_size()
+
+
+# 2016 (client senders 0x84a44f 0x1cc, 0x1d4 / 0x1bc / 0x1bb / 0x1bd / 0x1d7; 0x1be handler 0x543040, member stride
+# 0x47): UserInfo and XiCarAttr are 16 bytes each (both + a trailing u32), so everything after them moves; PlayerInfo
+# stays 0xd8. A 2011 layout read from a 2016 client gave rooms map 128 / capacity 1 and member names 8 bytes short
+# ("nder" for Xerender; user 2026-10-20).
+def user_info_size():
+    return 16 if is_2016() else 12
+
+
+def car_attr_size():
+    return 16 if is_2016() else 12
+
+
+def sized(raw, size):
+    return bytes(raw).ljust(size, b'\0')[:size]
+
+
+# Join requests, payload offsets (type excluded): UserInfo, XiCarAttr, room, PlayerInfo (and the extras).
+JOIN = {2011: {0x1d4: (6, 0x12, 0x1e, 0x26), 0x1bc: (4, 0x10, 0x1c, 0x24), 0x1d7: (6, 0x12, 0x22, 0x2a)},
+        2016: {0x1d4: (6, 0x16, 0x26, 0x2e), 0x1bc: (4, 0x14, 0x24, 0x2c), 0x1d7: (6, 0x16, 0x2a, 0x32)}}
+SECURE_PASSWORD = {2011: 0xfc, 2016: 0x104}
+# 0x1bb / 0x1bd: UserInfo, PlayerInfo, XiCarAttr, filter, room (0x1bd)
+DIRECT = {2011: (8, 0x14, 0xec, 0xf8, 0xfc), 2016: (8, 0x18, 0xf0, 0x100, 0x104)}
+# 0x1cc: room type (u32, map u16, capacity u16, map flag u16), u32 x2, name, password, XiCarAttr
+CREATE = {2011: (0xc, 0x16, 0x1e, 0x5a, 0x96), 2016: (0x10, 0x1a, 0x22, 0x5e, 0x9a)}
+
+
+def year():
+    return 2016 if is_2016() else 2011
 
 rooms = {}                          # room id -> Room
 _ids = itertools.count(1)
@@ -117,9 +148,9 @@ _ids = itertools.count(1)
 class Member:
     def __init__(self, session, user_info, car_attr, player_info=None):
         self.session = session
-        self.serial = session.state.setdefault('serial', session.id & 0xffff)
-        self.user_info = bytes(user_info).ljust(USER_INFO, b'\0')[:USER_INFO]
-        self.car_attr = bytes(car_attr).ljust(CAR_ATTR, b'\0')[:CAR_ATTR]
+        self.serial = serial_of(session)
+        self.user_info = sized(user_info, user_info_size())
+        self.car_attr = sized(car_attr, car_attr_size())
         self.player_info = player_info
         self.ready = False
         self.loaded = False
@@ -153,30 +184,53 @@ class Member:
 
 
 class AiMember:
-    """An AI racer in a room (2011 client: a member whose serial is above 0xffff). It has no connection:
-    the room's messages are not sent to it, it is always ready, nobody waits for it."""
+    """An AI racer in a room (a member whose serial is above 0xffff). It has no connection: the room's messages
+    are not sent to it, it is always ready, nobody waits for it. One player's client drives it: the AI joins
+    as serial key << 16; right after the race's load one 0x271 with all the room's AIs names their driver and the clients make
+    each serial key << 16 | driver (both clients: 2011 0x77b1c0, 2016 0x7d91f0, below). The clients look an AI up by
+    key << 16 only, and each 0x271 first empties the client's list of AIs it drives (vfunc 0x1dc = 0x7d6020): one
+    0x271 per AI left only the last one driven (user, 2026-10-20). At the next start each AI leaves and joins again
+    unassigned (Room.reset_ais) for the next 0x271."""
     session = None
     player = None
     loaded, end = True, None
 
-    def __init__(self, key, row, car_type):
+    def __init__(self, key, row, car_type, driver):
         self.key, self.row = key, row
-        self.serial = key << 16 | key  # the client makes it (0x271 arg1 << 16) | arg2
+        self.driver = driver & 0xffff
+        self.assigned = False       # its 0x271 was sent (a race is on)
         self.ai_idx, self.name, self.level = row
-        self.user_info = struct.pack('<HHHHI', 0, self.level, 0, 0, 0)
+        self.user_info = sized(struct.pack('<HHHHI', 0, self.level, 0, 0, 0), user_info_size())
         self.car_type, self.color = car_type, 0x08000002
-        self.car_attr = struct.pack('<HHII', 0, car_type, self.color, 0x82cccccc)
+        # the clients key a car by (car attr word 0) << 16 | serial low word (2016 0x558e40, from 0x7d93c9) and find a
+        # member's car by its serial (0x7d5f80 -> 0x556c10): word 0 = the key makes the car key the AI's serial.
+        # With 0 every AI was the driver's own car (user, 2026-10-20: one AI car, the driver's name, not moving);
+        # with 0x4000 + key the race found no AI car for its member: the AIs never ranked ahead (Pos 1/4)
+        self.car_attr = sized(struct.pack('<HHII', key, car_type, self.color, 0x82cccccc), car_attr_size())
         self.ready = True
         self.age = 1
 
+    @property
+    def serial(self):
+        return self.key << 16 | self.driver if self.assigned else self.key << 16
+
     def unit(self):
-        return (struct.pack('<IH', self.serial, self.age) + self.user_info + struct.pack('<?', True)
-                + self.car_attr + wstr(self.name, 32))
+        return (struct.pack('<IH', self.serial, self.age) + self.user_info + struct.pack('<?', True) + self.car_attr
+                + wstr(self.name, 32))
+
+    def joined_frame(self, room):
+        """0x1d4 as for a player."""
+        return Frame(0x1d4, struct.pack('<IH', self.serial, self.age) + self.user_info + self.car_attr
+                     + struct.pack('<II', room.id, room.life_id) + self.info() + room.seat_bytes()
+                     + struct.pack('<I', room.type))
 
     def entry(self):
-        """0x271 record, 6 u32 = the room dialog's add-AI (0x77b1c0) arguments: key (serial = key << 16 |
-        arg2), arg2, arg3 (not read there), car type (-> member car attr +2), colour, second colour."""
-        return struct.pack('<6I', self.key, self.key, self.ai_idx, self.car_type, self.color, 0x82cccccc)
+        """0x271 record, 6 u32 = Cmd_RoomAiCarAssign (2016 name; 2011 handler 0x52c420 -> room vfunc 0x1d4 =
+        0x77b1c0, 2016 0x542270 -> vfunc 0x1e0 = 0x7d91f0): key (the member whose serial is key << 16),
+        driver (the low word of its new serial; the client whose own serial ([net+0x3d414] 2011 /
+        [net+0x3d41c] 2016) it is drives the AI: 2016 0x7d9632 -> 0x7d9800 / 0x456220), AICarParam Idx
+        (its name from the client's table), car type (-> member car attr +2), colour, second colour."""
+        return struct.pack('<6I', self.key, self.driver, self.ai_idx, self.car_type, self.color, 0x82cccccc)
 
     def info(self):
         b = bytearray(PLAYER_INFO)
@@ -235,8 +289,12 @@ def pick_ai(level, taken):
     # AICarParam lists traffic and HUV models too (ids 20001.. are traffic cars: user saw them); only
     # player cars, else a dealership car
     vl = context.data.vehicles
-    cars = [c for c in r[3] if vl.get(c, {}).get('Desc') == 'PlayerCar'] or \
-        [k for k, v in vl.items() if v.get('Desc') == 'PlayerCar' and v.get('Sellable') == '1']
+    # only cars the client has (VehicleList "Support" = 1): the 2016 client crashed loading car 49, BMW 760Li, Support 0
+    # ("GetVehicleInfo - wrong id: 49", "carmodel fail"; user, 2026-10-20)
+    def usable(v):
+        return v.get('Desc') == 'PlayerCar' and v.get('Support', '1') == '1'
+    cars = [c for c in r[3] if usable(vl.get(c, {}))] or \
+        [k for k, v in vl.items() if usable(v) and v.get('Sellable') == '1']
     return (r[0], r[1], r[2]), random.choice(cars)
 
 
@@ -316,6 +374,42 @@ class Room:
     def state_frame(self):
         return Frame(0x1be, self.head() + wstr(self.name, 80) + self.seat_bytes() + struct.pack('<I', len(self.members))
                      + b''.join(m.unit() for m in self.members))
+
+    @property
+    def ais(self):
+        return [m for m in self.members if not m.session]
+
+    def ai_by_car(self, car_key):
+        """The AI racer of a car key from its driver's client (0x1ed / 0x1eb: car attr word 0 << 16 | driver serial)."""
+        return next((a for a in self.ais if struct.unpack_from('<H', a.car_attr)[0] == car_key >> 16), None)
+
+    def set_ai_serials(self, change):
+        """Apply change(ai) to each AI racer and keep the seats on their serials."""
+        for ai in self.ais:
+            old = ai.serial
+            change(ai)
+            self.seats = [ai.serial if v == old else v for v in self.seats]
+
+    def assign_ais(self):
+        """Right after the load (0x1e7): one 0x271 with all the AIs, driven by the master's client."""
+        if not self.ais:
+            return
+        def assign(ai):
+            ai.driver, ai.assigned = self.master & 0xffff, True
+        self.set_ai_serials(assign)
+        self.cast(Frame(0x271, struct.pack('<I', len(self.ais)) + b''.join(a.entry() for a in self.ais)))
+
+    def reset_ais(self):
+        """At the next start (before the 0x1e7): each AI of the last race leaves and joins again under key << 16 (the
+        clients keep the assigned serials and find an AI by key << 16 only)."""
+        for ai in self.ais:
+            if not ai.assigned:
+                continue
+            self.cast(Frame(0x1d5, struct.pack('<I', ai.serial) + self.seat_bytes() + struct.pack('<I', self.type)))
+            old = ai.serial
+            ai.assigned = False
+            self.seats = [ai.serial if v == old else v for v in self.seats]
+            self.cast(ai.joined_frame(self), ready_frame(ai))
 
     def list_entry(self):
         return (struct.pack('<IHHIHHhIHHHH', self.id, self.map_flag & 0xffff, 0, self.created & 0xffffffff, self.map_id,
@@ -417,13 +511,54 @@ def gm_realmatch(args):
         _rm_override = ('at', int(t + float(args[1]) * 60) + 1)   # whole second, after now: the 'N minutes' notice is sent
     elif what == 'auto':
         _rm_override = None
+    elif what == 'car':
+        return gm_realmatch_car(args[1:])
     elif what != 'status':
-        return 'realmatch open | close | in MINUTES | auto | status'
+        return 'realmatch open | close | in MINUTES | auto | status | car [NAME [V1-V9]]'
     is_open, at = real_match_times(t)
     shown = time.strftime('%a %H:%M:%S', time.localtime(at - (now() - int(t)))) if at else 'none'
     source = {None: f'emulator.ini ({context.realmatch})', 'closed': 'GM: closed', 'open': 'GM: open',
               'at': 'GM: countdown'}[_rm_override and _rm_override[0]]
     return f'Real Match {"open" if is_open else "closed"} ({source}); {"opened" if is_open else "next opening"}: {shown}'
+
+
+def gm_realmatch_car(args):
+    """realmatch car [NAME [V1-V9]]: the car everyone drives in Real Match (context.realmatch_car; until the
+    emulator restarts, then emulator.ini realmatch_car). NAME as gmcar finds it (shown name, model, file name or
+    Unique Id); the grade V9 when not given. Players in the battle zone get the new car at once: their section
+    again (0x1b9: the 2016 client's Real Match car), and waiting Real Match rooms' members drive it."""
+    from .misc import find_cars
+    t = context.data
+    if not args:
+        car_type, grade = context.realmatch_car or REAL_MATCH_CAR
+        v = t.vehicles.get(car_type, {})
+        return f'Real Match car: {v.get("UI Name", "?")} ({v.get("Car Name", "?")}, type {car_type}) V{grade}'
+    grade = 9
+    if len(args) > 1 and args[-1].lower().lstrip('v').isdigit():
+        grade, args = int(args[-1].lower().lstrip('v')), args[:-1]
+    found = find_cars(' '.join(args))
+    if not found or not 1 <= grade <= 9:
+        return 'realmatch car NAME [V1-V9]: no such car' if not found else 'grade V1-V9'
+    if len(found) > 1:
+        return 'more than one car: ' + ', '.join(f'{v.get("UI Name")} ({u})' for u, v in found[:8])
+    car_type, v = found[0]
+    if (car_type, grade) not in t.upgrade:
+        return f'{v.get("UI Name")} has no V{grade}'
+    context.realmatch_car = (car_type, grade)
+    info = real_match_info()
+    for s in list(sessions.values()):
+        obs = s.state.get('room_observer')
+        if obs and s.state.get('room') is None:
+            send(s, section_frame(s, s.state.get('pvp_channel', obs.get('channel', 0))))
+    for room in list(rooms.values()):
+        if not is_real_match(room.type) or room.state != WAIT:
+            continue
+        for m in room.members:
+            if getattr(m, 'session', None):
+                send(m.session, info)
+                enter_real_match(m.session, m)
+        room.cast(room.state_frame())
+    return f'Real Match car: {v.get("UI Name")} ({v.get("Car Name")}, type {car_type}) V{grade}'
 
 
 def real_match_times(t=None):
@@ -505,7 +640,8 @@ def real_match_info():
         if idx is None or not stat:
             continue
         equip[stat[0]] += stat[1]
-        parts.append(struct.pack('<I', idx) + struct.pack('<ii2I2Iii I', 1, 0, 0, 0, 0, 0, 0, 0, 0) + bytes(36))
+        parts.append(struct.pack('<I', idx) + struct.pack('<ii2I2Iii I', 1, 0, 0, 0, 0, 0, 0, 0, 0) + bytes(36)
+                     + bytes(4 if is_2016() else 0))   # 2016 entries 0x50 (client 0x541290; 2011 0x4c)
     stats.equip = tuple(equip)
     return Frame(0x1c7, stats.encode() + enchant_bonus() + enchant_bonus() + bytes(56)
                  + struct.pack('<I', len(parts)) + b''.join(parts))
@@ -529,7 +665,7 @@ def real_match_car(p):
 def car_attr_of(car):
     """XiCarAttr, 2011 (12 bytes; as the client sends it in 0x1cc / 0x1d4 and in its moves): u16 0, u16
     car type, u32 colour, u32 second colour (the glass: the tint, or the default 0x82cccccc)."""
-    return struct.pack('<HHII', 0, car.car_type, car.shown_color(), car.tint or 0x82cccccc)
+    return sized(struct.pack('<HHII', 0, car.car_type, car.shown_color(), car.tint or 0x82cccccc), car_attr_size())
 
 
 def drive(session, car):
@@ -622,7 +758,13 @@ def section_frame(session, channel, room_filter=3, page=0):
     session.state['pvp_channel'] = channel
     rm_open, rm_time = real_match_times()
     from .championship import section_tail     # @0x1a 0, @0x1e the GT Championship round, @0x22 its end time
-    return Frame(0x1b9, struct.pack('<iIIIII', 1, channel, room_filter, page, int(rm_open), rm_time) + section_tail())
+    tail = section_tail()
+    if is_2016() and rm_open and context.realmatch_car:
+        # 2016 (handler 0x53fb00, branch 0x53fefe while @0x12 != 0): @0x1a is the Real Match car type
+        # ([root +0x168] vcall 0x18 -> +0xa0), read by the Real Match car window for its car-name model
+        # (0x57d960: VehicleList old file name); 0 left that box empty (user 2026-10-20). 2011 reads it as a flag.
+        tail = struct.pack('<I', context.realmatch_car[0]) + tail[4:]
+    return Frame(0x1b9, struct.pack('<iIIIII', 1, channel, room_filter, page, int(rm_open), rm_time) + tail)
 
 
 @on(SVC, C2S, 0x1ba)
@@ -682,18 +824,19 @@ def car_allowed(session, channel, room_type=0):
 @on(SVC, C2S, 0x1cc)
 async def room_create(session, frame):
     p = frame.payload
-    if not session.state.get('player') or len(p) < 0x96:
+    if not session.state.get('player') or len(p) < CREATE[year()][4]:
         return
-    room_type, map_id, capacity, map_flag = struct.unpack_from('<IHHH', p, 0xc)
-    extra = struct.unpack_from('<II', p, 0x16)
+    at, extra_at, name_at, password_at, car_at = CREATE[year()]
+    room_type, map_id, capacity, map_flag = struct.unpack_from('<IHHH', p, at)
+    extra = struct.unpack_from('<II', p, extra_at)
     if not car_allowed(session, session.state.get('pvp_channel', 0), room_type):
         return
     leave(session)
-    name, password = read_wstr(p, 0x1e, 60), read_wstr(p, 0x5a, 60)
+    name, password = read_wstr(p, name_at, 60), read_wstr(p, password_at, 60)
     if is_real_match(room_type) and not real_match_times()[0]:
         return admin.message(session, REAL_MATCH_CLOSED)
     room = Room(session.state.get('pvp_channel', 0), room_type, map_id, map_flag, capacity, name, password)
-    m = Member(session, p[0:USER_INFO], p[0x96:0x96 + CAR_ATTR])
+    m = Member(session, p[0:user_info_size()], p[car_at:car_at + car_attr_size()])
     rooms[room.id] = room
     room.members.append(m)
     room.seats[0] = room.master = m.serial
@@ -727,7 +870,7 @@ async def room_modify(session, frame):
     for i, v in enumerate(asked):
         cur = room.seats[i] if i < len(room.seats) else LOCKED
         if v == AI_SEAT and cur == OPEN and i < capacity and room.state == WAIT \
-                and context.extra_flags.get('BattleZone.FrontAi'):    # AI off: no AI seats at all
+                and context.battle_ai:          # emulator.ini [battlezone] ai = 0: no AI seats at all
             add_ai(room, i, m)
         elif v == AI_SEAT and 0xffff < cur != LOCKED and room.state == WAIT:
             remove_ai(room, cur)                # the AI button on an AI's seat takes it out
@@ -750,24 +893,19 @@ AI_SEAT = 0xffff                    # 0x26d from the master with the AI button o
 
 
 def add_ai(room, seat, master):
-    """BattleZone.FrontAi on: the master clicked a seat with "AI Vehicles Activated" -> an AI member
-    (serial > 0xffff, which the client's 0x1d4 handler and room dialog treat as AI) joins: 0x1d4 as for a
-    player, then 0x271 (u32 n, n x 6 u32: the AI's key = serial >> 16, AICarParam Idx, 0, level, 0, 0;
-    handler 0x52c420 -> room dialog vfunc 0x1d4 = 0x77b1c0) *(the 0x271 fields after the key are a guess)*."""
+    """emulator.ini [battlezone] ai = 1: the master clicked a seat with "AI Vehicles Activated" -> an AI member joins:
+    0x1d4 as for a player under serial key << 16; its driver is named at the go (Room.assign_ais)."""
     p = master.player
     picked = pick_ai(p.char.level if p else 1, {m.ai_idx for m in room.members if not m.session})
     if not picked:
         return
     room.ai_keys += 1
-    ai = AiMember(room.ai_keys, *picked)
+    ai = AiMember(room.ai_keys, *picked, master.serial)
     room.seats[seat] = ai.serial
     room.members.append(ai)
     master.session.log.note(f'room {room.id}: AI {ai.name!r} (AICarParam {ai.ai_idx}, level {ai.level}, '
-                            f'car {struct.unpack_from("<H", ai.car_attr, 2)[0]}) in seat {seat}')
-    room.cast(Frame(0x1d4, struct.pack('<IH', ai.serial, ai.age) + ai.user_info + ai.car_attr
-                    + struct.pack('<II', room.id, room.life_id) + ai.info() + room.seat_bytes()
-                    + struct.pack('<I', room.type)),
-              Frame(0x271, struct.pack('<I', 1) + ai.entry()))
+                            f'car {ai.car_type}, serial {ai.serial:#x}) in seat {seat}')
+    room.cast(ai.joined_frame(room))
     lists_changed(room.channel)
 
 
@@ -785,7 +923,8 @@ def remove_ai(room, serial):
 async def ai_move(session, frame):
     """0x21f (2011, 0x6c bytes both ways; sent by 0x53a13d for the AI cars the client simulates; handler
     0x50c930 takes it when @0x68 is its area and the serial @2 is not its own): passed on to the others in
-    the room *(guess: who drives the AI cars in a race is not confirmed)*."""
+    the room. 2016: 0x21f is the peer-to-peer move over UDP (0x847760, to peers with a port), so it is not the AI
+    cars' moves; their driver is named in 0x271 (AiMember.entry)."""
     room = room_of(session)
     if room:
         room.cast(Frame(0x21f, frame.payload), skip=room.member(session))
@@ -884,10 +1023,6 @@ def join(session, room, user_info, car_attr, player_info, password=None):
     session.state['room'] = room.id
     session.log.note(f'{m.name!r} (serial {m.serial}) joins room {room.id}, seat {seat}')
     info = [real_match_info()] if is_real_match(room.type) else []
-    ais = [a for a in room.members if not a.session]
-    if ais:
-        info.append(Frame(0x271, struct.pack('<I', len(ais)) + b''.join(
-            a.entry() for a in ais)))
     if session.state.get('pvp_channel') != room.channel:
         # joined from another section's lobby (an invitation): the client kept its own section's rules (speed
         # limit, EXP tier) for the room (user, 2026-10-16), so it is moved to the room's section first
@@ -901,36 +1036,38 @@ def join(session, room, user_info, car_attr, player_info, password=None):
     lists_changed(room.channel)
 
 
+def join_request(session, p, msg, password_at=None):
+    ui, ca, room_at, pi = JOIN[year()][msg]
+    if len(p) < max(pi + PLAYER_INFO, (password_at or 0) + 60):
+        return
+    room_id, = struct.unpack_from('<I', p, room_at)
+    join(session, rooms.get(room_id), p[ui:ui + user_info_size()], p[ca:ca + car_attr_size()], p[pi:pi + PLAYER_INFO],
+         read_wstr(p, password_at, 60) if password_at else None)
+
+
 @on(SVC, C2S, 0x1d4)
 async def room_join(session, frame):
-    p = frame.payload
-    if len(p) < 0x26 + PLAYER_INFO:
-        return
-    room_id, = struct.unpack_from('<I', p, 0x1e)
-    room = rooms.get(room_id)
-    join(session, room, p[6:0x12], p[0x12:0x1e], p[0x26:0x26 + PLAYER_INFO], None)
+    join_request(session, frame.payload, 0x1d4)
 
 
 @on(SVC, C2S, 0x1bc)
 async def room_secure_join(session, frame):
-    p = frame.payload
-    if len(p) < 0xfc + 60:
-        return
-    room_id, = struct.unpack_from('<I', p, 0x1c)
-    join(session, rooms.get(room_id), p[4:0x10], p[0x10:0x1c], p[0x24:0x24 + PLAYER_INFO], read_wstr(p, 0xfc, 60))
+    join_request(session, frame.payload, 0x1bc, SECURE_PASSWORD[year()])
 
 
 def direct_join(session, p, room):
-    join(session, room, p[8:0x14], p[0xec:0xf8], p[0x14:0x14 + PLAYER_INFO], None)
+    ui, pi, ca = DIRECT[year()][:3]
+    join(session, room, p[ui:ui + user_info_size()], p[ca:ca + car_attr_size()], p[pi:pi + PLAYER_INFO], None)
 
 
 @on(SVC, C2S, 0x1bb)
 async def room_direct_join(session, frame):
     p = frame.payload
-    if len(p) < 0xfc:
+    filter_at = DIRECT[year()][3]
+    if len(p) < filter_at + 4:
         return
     channel, = struct.unpack_from('<I', p)
-    if struct.unpack_from('<I', p, 0xf8)[0] == LAP_FILTER:     # the Lap Time button
+    if struct.unpack_from('<I', p, filter_at)[0] == LAP_FILTER:     # the Lap Time button
         from .laptime import enter
         return enter(session, p)
     from .championship import CLASSES
@@ -947,9 +1084,10 @@ async def room_direct_join(session, frame):
 @on(SVC, C2S, 0x1bd)
 async def room_id_direct_join(session, frame):
     p = frame.payload
-    if len(p) < 0x100:
+    room_at = DIRECT[year()][4]
+    if len(p) < room_at + 4:
         return
-    room = rooms.get(struct.unpack_from('<I', p, 0xfc)[0])
+    room = rooms.get(struct.unpack_from('<I', p, room_at)[0])
     if room is not None and getattr(room, 'lap', None) is not None:
         # a friend's Lap Time arena (social.place_of kind 6): the player's own grade's arena, as the Lap Time button
         from .laptime import enter
@@ -959,11 +1097,7 @@ async def room_id_direct_join(session, frame):
 
 @on(SVC, C2S, 0x1d7)
 async def channel_room_join(session, frame):
-    p = frame.payload
-    if len(p) < 0x2a + PLAYER_INFO:
-        return
-    room_id, = struct.unpack_from('<I', p, 0x22)
-    join(session, rooms.get(room_id), p[6:0x12], p[0x12:0x1e], p[0x2a:0x2a + PLAYER_INFO], None)
+    join_request(session, frame.payload, 0x1d7)
 
 
 def leave(session, banished=False):
@@ -1131,7 +1265,12 @@ async def start_request(session, frame):
     for o in room.members:
         o.loaded, o.end = False, None
     session.log.note(f'room {room.id}: loading map {room.map_id} in area {room.area}, {len(room.members)} racers')
+    room.reset_ais()                    # AIs of an earlier race: unassigned again for the 0x271 below
     room.cast(Frame(0x1e7, struct.pack('<iiiifii', 0, room.map_id, map_flag, room.area, 0.0, start_time, -1)))
+    # the AIs' drivers right after the load starts. Before the 0x1e7 (the cars made in the room, no track yet) they
+    # never appeared; at the go or after the 0x1e7 with FrontAi 1 they appeared when the countdown ended (their grid
+    # slot was seat - 24); with FrontAi 0 the slot is the seat (user, 2026-10-20)
+    room.assign_ais()
     room.cancel_timer()
     room.timer = asyncio.ensure_future(after(room, LOAD_TIMEOUT, LOADING))
     lists_changed(room.channel)
@@ -1153,7 +1292,7 @@ def practice(session, p):
     if enabled() and training_car(session.state['player'].car) and map_id == 11 and map_flag == 0:
         session.log.note('apprentice local race: preserving client lesson setup (no practice reply)')
         return
-    area = PRACTICE_AREA_BASE + session.state.setdefault('serial', session.id & 0xffff)
+    area = PRACTICE_AREA_BASE + serial_of(session)
     session.log.note(f'practice run without a room: map {map_id}, area {area}')
     send(session, Frame(0x1e7, struct.pack('<iiiifii', PRACTICE, map_id, map_flag, area, 0.0, start_time, -1)))
 
@@ -1188,7 +1327,7 @@ def invitees(channel, me):
         level_ok = not nation.rule(s, 'battle_levels') or rule and rule[4] <= p.char.level <= rule[5]
         if rule and not (level_ok and rule[1] <= grade <= rule[2]):
             continue
-        out.append((obs['channel'] != channel, s.state.setdefault('serial', s.id & 0xffff), p.char.name,
+        out.append((obs['channel'] != channel, serial_of(s), p.char.name,
                     p.char.level, grade))
     return [r[1:] for r in sorted(out, key=lambda r: r[0])][:INVITEE_MAX]
 
@@ -1214,7 +1353,7 @@ async def room_invite(session, frame):
     target = next((s for s in sessions.values() if s.state.get('serial') == target_serial and s.state.get('player')), None)
     if target is None:
         return error(session, '20155')
-    me = session.state.setdefault('serial', session.id & 0xffff)
+    me = serial_of(session)
     name = p.char.name.encode('utf-16-le')[:40].ljust(42, b'\0')
     out = (struct.pack('<II', me, room.id) + data[8:12] + struct.pack('<Iq', room.life_id, p.char.cid) + name
            + data[0x42:])
@@ -1339,7 +1478,7 @@ async def switch_to_player(session, frame):
     if not room:
         return error(session, '20189')
     unwatch(session)
-    join(session, room, frame.payload[:USER_INFO], b'', None, room.password)
+    join(session, room, frame.payload[:user_info_size()], b'', None, room.password)
 
 
 @on(SVC, C2S, 0x1e8)
@@ -1378,7 +1517,7 @@ async def progress(room):
     if room.state == LOADING:
         room.cancel_timer()
         room.state = RACING
-        room.waiting = set(room.racers)
+        room.waiting = set(room.racers) | {a.serial for a in room.ais}    # the AIs' ends come from their driver
         room.refresh_observers()
         room.cast(Frame(0x1ea, struct.pack('<ii', getattr(room, 'start_time', 0), COUNTDOWN_MS) + bytes(32)))
     elif room.state == RACING:
@@ -1447,17 +1586,24 @@ async def gate(session, frame):
     if not room or room.state != RACING or len(frame.payload) < 20:
         return
     m = room.member(session)
-    _, index, _, _, col_point = struct.unpack_from('<Iiiff', frame.payload)
+    who, index, _, _, col_point = struct.unpack_from('<Iiiff', frame.payload)
     passed = room.gates.setdefault(index, [])
+    ai = room.ai_by_car(who) if m and who != m.serial else None
+    if ai:          # an AI its client drives (car key): it takes a place at the gate, no reward
+        if ai.serial not in passed:
+            passed.append(ai.serial)
+            room.cast(Frame(0x1ee, struct.pack('<Ii', who, 0)))
+        return
     if m.serial in passed or m.serial not in room.racers:
         return
     passed.append(m.serial)
-    reward = gate_reward(len(room.racers), len(passed), col_point == CLEAN_GATE, team_gates(room.type, len(room.racers)))
+    field = len(room.racers) + len(room.ais)         # the AIs count for the places (user, 2026-10-20: "8 of 1")
+    reward = gate_reward(field, len(passed), col_point == CLEAN_GATE, team_gates(room.type, field))
     if forced_reward is not None:               # GM command gmgate N (to find out what each number is)
         reward = forced_reward
     if room.type & MISSION_ROOM:                # no gates in a Mission Battle (user, 2026-10-17)
         reward = 0
-    session.log.note(f'gate {index}: position {len(passed)} of {len(room.racers)}, reward {reward}')
+    session.log.note(f'gate {index}: position {len(passed)} of {field}, reward {reward}')
     room.cast(Frame(0x1ee, struct.pack('<Ii', m.serial, reward)))
 
 
@@ -1468,7 +1614,11 @@ async def race_end(session, frame):
     if not room or room.state != RACING or len(p) < 0x4a:
         return
     m = room.member(session)
-    if m.end or m.serial not in room.racers:
+    who = struct.unpack_from('<I', p)[0]
+    ai = room.ai_by_car(who) if m and who != m.serial else None
+    if ai:          # an AI its client drives: its end (and finishing place) goes to the room, not to the driver
+        m = ai
+    if m.end or (not ai and m.serial not in room.racers):
         return
     _, end_type, end_time, record, _ = struct.unpack_from('<IiifI', p)
     rank = 0
@@ -1477,7 +1627,8 @@ async def race_end(session, frame):
         rank = room.rank
     m.end = (end_type, end_time, record, rank)
     session.log.note(f'room {room.id}: {m.name!r} ends (type {end_type}, record {record:.2f}, rank {rank})')
-    frames = [Frame(0x1eb, struct.pack('<IiifI', m.serial, end_type, end_time, record, rank) + p[0x14:0x4a])]
+    frames = [Frame(0x1eb, struct.pack('<IiifI', who if ai else m.serial, end_type, end_time, record, rank)
+                    + p[0x14:0x4a])]
     if end_type == FINISHED and room.first_end is None:
         room.first_end = end_time
         finish_ms = getattr(room, 'finish_ms', FINISH_MS)     # channel battle races: 10 s (channels.py)
@@ -1510,10 +1661,23 @@ async def battle_exp_item(session, p, exp):
 
 async def result(room):
     racers = [m for m in room.members if m.serial in room.racers and m.player]
+    # the AI racers are in the result too (user, 2026-10-20: they were missing) and count for the places and the
+    # field size of the rewards; they get nothing
+    racers += [m for m in room.ais if room.racers]
     n = len(racers)
     entries = []
     team_points = [0, 0]
     for m in sorted(racers, key=lambda m: m.end[3] if m.end and m.end[3] else n + 1):
+        if not m.session:
+            end_type, _, record, rank = m.end or (RETIRED, 0, 0.0, 0)
+            if end_type != FINISHED or not rank:
+                end_type, rank = RETIRED, n
+            point = team_point(min(rank, 32), n) if team_room(room.type) and end_type == FINISHED else 0
+            if point and m.serial in room.seats:
+                team_points[room.seats.index(m.serial) & 1] += point
+            entries.append(pack_exp('<iIIQIfHH3III', end_type, m.serial, 0, 0, 0, record, rank, m.level, 0, 0, 0,
+                                    point, 0) + bytes(8))
+            continue
         p = m.player
         c = p.char
         end_type, _, record, rank = m.end or (RETIRED, 0, 0.0, 0)
@@ -1554,13 +1718,15 @@ async def result(room):
     room.state = WAIT
     room.waiting.clear()
     for m in room.members:
-        m.ready = m.serial == room.master
+        m.ready = m.serial == room.master or not m.session     # AIs are always ready (a second race was refused 20182)
     if team_room(room.type) and room.members:
         room.members[0].session.log.note(f'room {room.id}: team points {team_points}')
     result_frame = Frame(0x1ec, struct.pack('<iIIfii', 1, *team_points, 0.0, room.first_end or 0, len(entries))
                          + b''.join(entries))
     host = room.by_serial(room.master)
-    room.cast(room.master_frame(), result_frame, *([ready_frame(host)] if host else []))
+    # the AIs stay as they are until the next start (Room.reset_ais there): leaving right after the result took them
+    # out of the result screen (user, 2026-10-20)
+    room.cast(room.master_frame(), result_frame, *([ready_frame(host)] if host else []), *map(ready_frame, room.ais))
     for s in room.observers:                    # BS_OBSRoom::SetResult
         send(s, result_frame)
     lists_changed(room.channel)

@@ -66,6 +66,21 @@ class ApprenticeTest(unittest.TestCase):
         asyncio.run(apprentice.complete(self.s, Frame(0x5d2, struct.pack('<4I', 0, 123, 29, 2))))
         context.db.row.assert_awaited_once()
 
+    def test_2016_completion_ends_the_tutorial_in_the_driver_dome(self):
+        version.configure({'version': '2016'})
+        context.db.execute = AsyncMock()
+        from dcemu.native.game import licenses
+        with patch.object(items, 'link_keys', AsyncMock(return_value=[])), \
+                patch.object(login, 'stat_frames', return_value=()), \
+                patch.object(licenses, 'start', AsyncMock()) as start:
+            asyncio.run(apprentice.complete(self.s, Frame(0x5d2, struct.pack('<4I', 0, 123, 29, 2))))
+        c = self.p.char
+        self.assertEqual((c.cur_car, c.pos_state, c.city), (43, 3, 1))     # Driver Dome, saved
+        context.db.execute.assert_awaited()
+        start.assert_awaited_once()
+        self.p.car = c.cars[0]
+        self.assertFalse(login.in_tutorial(self.p))                       # a relogin is not the gate tutorial
+
     def test_invalid_and_replayed_completion_do_not_change_character(self):
         for payload in (bytes(15), struct.pack('<4I', 0, 123, 999, 2), struct.pack('<4I', 1, 123, 29, 2)):
             asyncio.run(apprentice.complete(self.s, Frame(0x5d2, payload)))

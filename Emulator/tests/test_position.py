@@ -76,10 +76,10 @@ class PositionTest(unittest.TestCase):
     def test_leaving_the_tutorial_goes_to_station_1(self):
         p = Player(char(1))
         s = Session(p)
-        # The license login has its own DB reads; this test covers position and saving.
-        with patch('dcemu.native.game.licenses.on_login', new_callable=AsyncMock) as license_login:
+        # The license start has its own DB reads; this test covers position and saving.
+        with patch('dcemu.native.game.licenses.start', new_callable=AsyncMock) as license_start:
             f = self.run_handler(position.my_city_position, s, struct.pack('<iB', 0, 1))
-        license_login.assert_awaited_once_with(s, p)
+        license_start.assert_awaited_once_with(s, p)
         city, channel, x, y, z, w, state = ack(f)
         self.assertEqual((city, channel, state), (1, 0, 2))
         self.assertAlmostEqual(x, -3379.0, 2)
@@ -107,3 +107,49 @@ def pytest_round(v):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+@unittest.skipUnless(os.path.exists('server_data/tables/Icon_Moonpalace_Client.tdf'), 'needs server_data/tables (tools.sync_data)')
+class TutorialLicenseTest(unittest.TestCase):
+    """Licenses wait for the end of the tutorial, then start in the same session (user, 2026-10-20)."""
+    @classmethod
+    def setUpClass(cls):
+        context.data = Tables('server_data', 'server_data/tables')
+
+    def setUp(self):
+        context.db = DB()
+        from dcemu.native.game import apprentice
+        from dcemu.native.game.records import Car
+        self.p = Player(char(position.DRIVER_DOME, city=0))
+        self.p.car = Car(42, apprentice.TRAINING_TYPE, 2, 1, 0, 100, 0, apprentice.TRAINING_SLOT)
+        self.p.items, self.p.quests = [], []
+        self.p.lic = dict(gc={}, held={}, slots=[0, 0, 0], version=1, conds_version=1, camo_until=0)
+
+    def test_no_license_and_no_reward_with_the_training_car(self):
+        from dcemu.native.game import licenses
+        s = Session(self.p)
+        self.assertEqual(asyncio.run(licenses.check(s, self.p)), [])
+        asyncio.run(licenses.pay_monthly(s, self.p))
+        self.assertEqual((self.p.lic['held'], s.sent, context.db.calls), ({}, [], []))
+
+    def test_start_switches_the_license_flags_on_then_gains_rookie(self):
+        from dcemu.native import version
+        from dcemu.native.game import licenses, login
+        self.p.car = None
+        self.p.char.pos_state = position.IN_CITY
+        try:
+            for year, size in (('2011', 0x62), ('2016', 0x6a)):     # the apprentice tutorial runs on both clients
+                with self.subTest(year):
+                    version.configure({'version': year})
+                    self.p.lic['held'] = {}
+                    s = Session(self.p)
+                    with patch.object(licenses, 'load', new_callable=AsyncMock), \
+                            patch.object(licenses, '_add', new_callable=AsyncMock):
+                        asyncio.run(licenses.start(s, self.p))
+                    types = [f.type for f in s.sent]
+                    self.assertEqual(len(s.sent[0].payload) + 2, size)
+                    self.assertNotEqual(s.sent[0].payload, login.game_setting(**login.TUTORIAL_FLAGS).payload)
+                    self.assertIn(licenses.ROOKIE, self.p.lic['held'])
+                    self.assertEqual(types[:3], [0x1e, 0x331, 0x32c])  # the flags, the notice, the lists and slots
+        finally:
+            version.configure({})

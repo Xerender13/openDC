@@ -60,11 +60,12 @@ WHITE_STEP = 5                      # guide: white points go up per 5 base point
 # part grade -> (lowest, highest white points (wiki "Docking Part Base Range"), best white per base point:
 # H 0.7 from the guide (average base 34 -> best 21; base 45 -> 31 = the wiki's top); N and S guessed so that
 # the best parts reach the wiki's top)
-WHITE = {'N': (0, 19, 1.0), 'S': (12, 27, 0.9), 'H': (18, 31, 0.7)}
+WHITE = {'N': (0, 19, 1.0), 'S': (12, 27, 0.9), 'H': (18, 31, 0.7),
+         'U': (24, 40, 0.6)}         # 2016 Ultra (OU, Ultra Seed Parts): not measured, a guess above Hyper
 # letters a grade can get: Normal A-H, Super A-J (the client's tables), Hyper A-L (the user's video "Drift City
 # Remastered Dockings Guide"; the wiki saw up to K); odds: the video's curve, A about 25 %, each next one
 # about 3/4 of the one before (LETTER_DECAY; a Seed PLUS: a slower decay, guessed)
-MAX_LETTERS = {'N': 8, 'S': 10, 'H': 12}
+MAX_LETTERS = {'N': 8, 'S': 10, 'H': 12, 'U': 15}      # U: the 2016 table's dock_*_U001 .. U015
 LETTER_DECAY = {False: 0.75, True: 0.8}
 PURPLE_SPREAD = 5                   # guide: +0 parts 0..5, +12 parts 12..17
 UPGRADE_MAX_LEVEL = 70              # guide: "This mechanism is possible till level 70."

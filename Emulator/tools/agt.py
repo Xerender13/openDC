@@ -7,39 +7,45 @@ KEY = bytes([0x01,0x05,0x06,0x02,0x04,0x03,0x07,0x08,0x01,0x05,0x06,0x0F,0x04,0x
  0xCF,0xA5,0x06,0x02,0x04,0x0F,0x07,0x18,0xE1,0x15,0x36,0x18,0x60,0x13,0x1A,0x19,
  0x11,0x15,0x16,0x10,0x12,0x13,0x17,0x38,0xF1,0x25])
 
-def xor_range(raw, start, end):
+# The Origin client (Skid Rush) packs use the same key with byte 16 0x6c (docs/ORIGIN_CLIENT_RESEARCH.md).
+ORIGIN_KEY = KEY[:16] + b'\x6c' + KEY[17:]
+
+def xor_range(raw, start, end, key=KEY):
     """Decode raw[start:end] (everything after the 32-byte header is XORed with KEY by
     absolute position)."""
     lo = max(start, 32)
     if lo >= end:
         return bytes(raw[start:end])
-    k = len(KEY); n = end - lo
-    ks = (KEY[lo % k:] + KEY * (n // k + 2))[:n]
+    k = len(key); n = end - lo
+    ks = (key[lo % k:] + key * (n // k + 2))[:n]
     body = (int.from_bytes(raw[lo:end], 'little') ^ int.from_bytes(ks, 'little')).to_bytes(n, 'little')
     return bytes(raw[start:lo]) + body
 
 def xor(buf):
     return bytearray(xor_range(buf, 0, len(buf)))
 
-def index(path):
-    """Entries of a pack without unpacking them: (raw bytes, [(name, offset, chunks, size)])."""
+def index(path, key=KEY):
+    """Entries of a pack without unpacking them: (raw bytes, [(name, offset, chunks, size)]).
+    A wrong key gives nonsense lengths: they are checked before anything is read with them."""
     raw = open(path, 'rb').read()
     assert raw[:8] == b'NayaPack', 'not a NayaPack file'
     n, = struct.unpack_from('<i', raw, 16)
     end = 32
     entries, pos = [], 32
     for _ in range(n):
-        hp, cc, dlen, plen = struct.unpack_from('<4i', xor_range(raw, pos, pos + 16)); pos += 16
-        name = xor_range(raw, pos, pos + plen).decode('latin-1'); pos += plen
+        hp, cc, dlen, plen = struct.unpack_from('<4i', xor_range(raw, pos, pos + 16, key)); pos += 16
+        if not (0 < plen < 1024 and 32 <= hp < len(raw) and 0 <= cc <= len(raw) and 0 <= dlen < 1 << 30):
+            raise ValueError(f'{path}: bad entry header (wrong key?)')
+        name = xor_range(raw, pos, pos + plen, key).decode('latin-1'); pos += plen
         entries.append((name, hp, cc, dlen))
     return raw, entries
 
-def extract(raw, entry):
+def extract(raw, entry, key=KEY):
     """Unpack one entry returned by index()."""
     name, hp, cc, dlen = entry
-    lens = struct.unpack_from(f'<{cc}H', xor_range(raw, hp, hp + 2 * cc))
+    lens = struct.unpack_from(f'<{cc}H', xor_range(raw, hp, hp + 2 * cc, key))
     p = hp + 2 * cc
-    blob = xor_range(raw, p, p + sum(lens))
+    blob = xor_range(raw, p, p + sum(lens), key)
     data, q = bytearray(), 0
     for L in lens:
         # chunk = 78 9c + deflate + adler; newer packs (GoonCity) end some files with
@@ -48,9 +54,9 @@ def extract(raw, entry):
         q += L
     return bytes(data[:dlen])
 
-def read(path):
-    raw, entries = index(path)
-    return raw[:32], [(e[0], extract(raw, e)) for e in entries]
+def read(path, key=KEY):
+    raw, entries = index(path, key)
+    return raw[:32], [(e[0], extract(raw, e, key)) for e in entries]
 
 def write(path, header, files, chunk=16384):
     ent = 32 + sum(16 + len(n.encode('latin-1')) for n, _ in files)

@@ -15,6 +15,16 @@ Rewards: RewardGroup.xlt rw_gacha_{car|parts}_{mito|cash}_{season:02} (e.g. rw_g
     A-D or key parts; seasons 3 and 4 have no groups: rw_gacha_item_mito / _cash then), rolled as gift boxes
     (driftuse.roll / give). The car parts (i_n_gacha_A.., i_n_*_k_v5) are for combining into the car (not native).
 emulator.ini [gotcha]: enabled, season (the newest season offered), prices.
+2016 client (its GlobalContent): GotchaViewSeason 60 (season groups up to rw_gacha_*_62; Etc.GotchaSeason is 6 bits
+    wide there), Gacha_Price_PartsMito 25000, and GachaUpdate2015 = 1: the window's car price (0x6bf872 / 0x6bf940)
+    is then GachaUpdate2015Cash 300 / GachaUpdate2015Mito 50000 for every season instead of GotchaSeason*%02d.
+    That car machine has no season: the client sends season 0 (seen 2026-10-20; refused before, "Failed to use
+    item"). RewardGroup rw_cash_gacha_2015 / rw_mito_gacha_2015 are its capsules (G Coin / Mito): seven slot cars
+    (Dominator, Hykan, Prometheus, GRAVITY, PLUCK, Honour, Pandora: an ST or BT V1 car gift box) or 10 Capsule Points
+    (i_n_gacha_point). The parts machine keeps its seasons.
+    The 2016 prize window: NotifyEvent type 23 passes u32 @0xa with the item (0x5304ec -> 0x6c2590): the count; 0
+    there showed no reward icon (user, 2026-10-20). Not done: the Battle Zone "OB Gacha" (BattleZone.ObserveGacha, Etc.EventFreeOBGacha;
+    0x834 / 0x836 / 0x837 -> 0x835 ObsGachaInit .. 0x83a ObsGachaResult).
 """
 import struct
 
@@ -27,16 +37,25 @@ from .login import SVC, error, send
 # GlobalContent.xlt GotchaSeasonCash01..16 (US client); Mito 10000 for every season and the parts machines
 SEASON_COIN = (300, 300, 300, 300, 290, 490, 390, 190, 540, 300, 300, 300, 300, 300, 300, 300)
 PARTS_COIN, MITO_PRICE = 300, 10000
+UPDATE_2015_COIN, UPDATE_2015_MITO, PARTS_MITO_2016 = 300, 50000, 25000     # 2016 GlobalContent (see above)
+GACHA_2015 = {True: 'rw_cash_gacha_2015', False: 'rw_mito_gacha_2015'}     # G Coin / Mito
 COIN_TAKE_SQL = """SET NOCOUNT ON;
 UPDATE SKID_UNALISCOIN_TB SET COIN=COIN-%s, LASTACTION='GCH', LASTCNAME=%s, LASTDATE=GETDATE() WHERE MEMBERID=%s AND COIN>=%s;
 SELECT @@ROWCOUNT, (SELECT COIN FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s)"""
 
 
 def price(coin, machine, season):
+    from ..version import is_2016
     if not coin:
-        return context.gotcha_mito_price or MITO_PRICE
+        if context.gotcha_mito_price:
+            return context.gotcha_mito_price
+        if is_2016():
+            return PARTS_MITO_2016 if machine == 1 else UPDATE_2015_MITO
+        return MITO_PRICE
     if context.gotcha_coin_price:
         return context.gotcha_coin_price
+    if is_2016() and machine != 1:
+        return UPDATE_2015_COIN
     if machine == 1:
         return PARTS_COIN
     return SEASON_COIN[season - 1] if 1 <= season <= len(SEASON_COIN) else SEASON_COIN[0]
@@ -44,6 +63,9 @@ def price(coin, machine, season):
 
 def group_for(coin, machine, season):
     from .driftuse import groups
+    from ..version import is_2016
+    if is_2016() and machine != 1 and GACHA_2015[bool(coin)] in groups():
+        return GACHA_2015[bool(coin)]
     money = 'cash' if coin else 'mito'
     g = f"rw_gacha_{'parts' if machine == 1 else 'car'}_{money}_{season:02}"
     return g if g in groups() else f'rw_gacha_item_{money}'
@@ -60,7 +82,9 @@ async def gotcha(session, frame):
     coin = currency == 1
     session.log.note(f'gotcha: {"G Coin" if coin else "Mito"}, machine {"parts" if machine else "car"}, season {season}, '
                      f'client price {asked}')
-    if not context.gotcha_enabled or not 1 <= season <= max(context.gotcha_season, 1):
+    from ..version import is_2016
+    lowest = 0 if is_2016() and machine != 1 else 1     # the 2016 car machine sends season 0 (GachaUpdate2015)
+    if not context.gotcha_enabled or not lowest <= season <= max(context.gotcha_season, 1):
         return error(session, '20036')
     cost, group = price(coin, machine, season), group_for(coin, machine, season)
     db, c = context.db, p.char
@@ -136,10 +160,11 @@ def prize_event(won):
     """The prize window ("Congratulations!", [ui + 0x324], filled by 0x670b70): 0x89 NotifyEvent type 23 (u32 item
     TableIdx @6) or type 24 (u32 drift item id @6, u32 @0xe: the days) (client 0x51c40f / 0x51c447). Without it the
     window opened empty (user screenshot, 2026-10-14)."""
+    from ..version import is_2016
     t = context.data
     for kind, item, period, count, *_ in won:
         if kind == 'NormalItem' and item in t.item_index:
-            return Frame(0x89, struct.pack('<IIII', 23, t.item_index[item], 0, 0))
+            return Frame(0x89, struct.pack('<IIII', 23, t.item_index[item], max(count, 1) if is_2016() else 0, 0))
         if kind == 'SkidItem' and item in t.visual_index:
             return Frame(0x89, struct.pack('<IIII', 24, t.visual_index[item], 0, period))
     return None

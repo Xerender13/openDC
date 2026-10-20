@@ -16,7 +16,7 @@ from dcemu.wire import Frame, FrameReader, write_wstr
 from tools.probe_login import login_2011
 
 PORTS = (11005, 11011, 11021, 11031, 11041)
-TEST_PORTS = (11105, 11111, 11121, 11131, 11141)
+TEST_PORTS = (11205, 11211, 11221, 11231, 11241)
 NAME_BYTES = 0x2a
 
 

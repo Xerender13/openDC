@@ -31,6 +31,8 @@ var (
 	procGetExitCodeProcess       = kernel32.NewProc("GetExitCodeProcess")
 	procGetTickCount             = kernel32.NewProc("GetTickCount")
 	procCloseHandle              = kernel32.NewProc("CloseHandle")
+	procResumeThread             = kernel32.NewProc("ResumeThread")
+	procVirtualProtectEx         = kernel32.NewProc("VirtualProtectEx")
 	procCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
 	procProcess32FirstW          = kernel32.NewProc("Process32FirstW")
 	procProcess32NextW           = kernel32.NewProc("Process32NextW")
@@ -47,6 +49,8 @@ const (
 	keyWow6432       = 0x0200
 	keySetValue      = 0x0002
 	regDword         = 4
+	createSuspended  = 0x4
+	pageRWX          = 0x40
 )
 
 type startupInfo struct {
@@ -101,6 +105,14 @@ func readMem(h syscall.Handle, addr uint32, n int) []byte {
 }
 
 func writeMem(h syscall.Handle, addr uint32, b []byte) bool {
+	if client2016 { // the 2016 writes go into the code and the read-only data: make the page writable for them
+		var old uint32
+		if r, _, _ := procVirtualProtectEx.Call(uintptr(h), uintptr(addr), uintptr(len(b)), pageRWX,
+			uintptr(unsafe.Pointer(&old))); r != 0 {
+			defer procVirtualProtectEx.Call(uintptr(h), uintptr(addr), uintptr(len(b)), uintptr(old),
+				uintptr(unsafe.Pointer(&old)))
+		}
+	}
 	var got uintptr
 	r, _, _ := procWriteProcessMemory.Call(uintptr(h), uintptr(addr), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&got)))
 	return r != 0
@@ -186,6 +198,13 @@ func launch(dir, ip string, cfg Config) error {
 	setOptions(dir, windowed, cfg.get("client.main_ui_type", "1"))
 	logf("display: %s", map[bool]string{true: "windowed", false: "fullscreen"}[windowed])
 	setWindowed(windowed)
+	var ws []write2016
+	if client2016 {
+		var err error
+		if ws, err = writes2016(dir, ip, cfg); err != nil {
+			return err
+		}
+	}
 	old := clientPids()
 	tok := token(tickCount(), clientEU)
 	logf("token %s", tok)
@@ -194,15 +213,28 @@ func launch(dir, ip string, cfg Config) error {
 	var si startupInfo
 	si.Cb = uint32(unsafe.Sizeof(si))
 	var pi processInfo
-	r, _, e := procCreateProcessW.Call(0, uintptr(unsafe.Pointer(cmdline)), 0, 0, 0, 0, 0,
+	flags := uintptr(0)
+	if client2016 { // not packed: written before its first instruction
+		flags = createSuspended
+	}
+	r, _, e := procCreateProcessW.Call(0, uintptr(unsafe.Pointer(cmdline)), 0, 0, 0, flags, 0,
 		uintptr(unsafe.Pointer(wdir)), uintptr(unsafe.Pointer(&si)), uintptr(unsafe.Pointer(&pi)))
 	if r == 0 {
 		return fmt.Errorf("starting %s: %v", clientExe, e)
 	}
-	closeHandle(pi.Thread)
 	seen := map[uint32]bool{pi.ProcessID: true}
 	logf("client pid %d", pi.ProcessID)
-	logf("patched: %s", strings.Join(patch(pi.Process, ip), ", "))
+	if client2016 {
+		done, _ := apply2016(ws, winRead(pi.Process), winWrite(pi.Process))
+		if done == nil {
+			done = []string{"FAILED: the image was not readable"}
+		}
+		procResumeThread.Call(uintptr(pi.Thread))
+		logf("patched: %s", strings.Join(done, ", "))
+	} else {
+		logf("patched: %s", strings.Join(patch(pi.Process, ip), ", "))
+	}
+	closeHandle(pi.Thread)
 	patches := patchesFor(cfg)
 	icons := patches.icons || patches.cargo || patches.slot
 	if icons {
@@ -228,7 +260,11 @@ func launch(dir, ip string, cfg Config) error {
 				continue
 			}
 			logf("client pid %d", pid)
-			logf("patched: %s", strings.Join(patch(syscall.Handle(h), ip), ", "))
+			if client2016 {
+				logf("patched: %s", strings.Join(patch2016Poll(ws, winRead(syscall.Handle(h)), winWrite(syscall.Handle(h))), ", "))
+			} else {
+				logf("patched: %s", strings.Join(patch(syscall.Handle(h), ip), ", "))
+			}
 			if icons {
 				go func(pid uint32, h syscall.Handle) {
 					keepPatches(int(pid), patches, winRead(h), winWrite(h))

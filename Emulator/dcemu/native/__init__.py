@@ -80,6 +80,7 @@ class Context:
     sections = {}            # battle zone: PvP channel id -> (name, lowest car grade, highest, exp multiplier)
     sections_eu = {}         # the same for EU players (emulator.ini eu.section.<channel>), where set
     practice_alone = True    # battle zone: a room with one member starts a practice run, not a race
+    battle_ai = False        # battle zone: the room master can seat AI racers (emulator.ini [battlezone] ai)
     realmatch = 'always'     # Real Match open hours: always, schedule (realmatchtable.txt) or off
     realmatch_minutes = 60   # schedule: how long each opening lasts
     realmatch_car = (50, 9)  # the car everyone drives in a Real Match: car type, grade; None = own cars
@@ -91,9 +92,11 @@ class Context:
     drink_mito = 50          # MITO drink: % more Mito from play (item text: 50%)
     option_parts = False     # option parts can be equipped (Main.OptionItem; the official 2011 server: off)
     docking_parts = True     # docking parts: combining and docking (Main.DockingItem)
+    random_base = True       # parts from drops / rewards get a random base bonus (Perfect Base: items.roll_base)
     mita500 = dict(enabled=False, bottles=10, regen_sec=300, buff_sec=1800, fee=500, lucky_rate=10)   # [mita500]
     enhancer_plus = 1.5      # [items] enhancer_plus: x success % with a Mittron Enhancer PLUS (gauge fill 2)
     enhancer_deluxe = 2.0    # [items] enhancer_deluxe: x success % with a DELUXE (gauge fill 4)
+    ultra_odds = 1.0         # [items] ultra_odds: x the Hyper success % for 2016 Ultra parts (the odds table has no U)
     vshop_hidden = frozenset()   # [vshop] hidden: drift shop rows (VShopItem UniqueId) not sold (tools/shop_hide.py)
     rename_days = 60         # [items] rename_days: days before a renamed character can be renamed again (kit text: 60)
     auto_register = True     # [auth] auto_register: logging in with an unknown ID creates that account
