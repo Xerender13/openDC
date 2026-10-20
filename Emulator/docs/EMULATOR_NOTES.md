@@ -51,6 +51,41 @@ before the port check. `launch.ps1` asks in PowerShell (`Choose-Version`), write
 (`client_setup --version`) and re-reads the ini (`Read-Config`). Script-tested: `--version`, `--choose` through a
 pty, test_version.test_first_launch_version_choice_rewrites_only_that_line; 154 tests pass. launch.ps1 not run.
 
+**EU tire icons (user, same day):** the user's 2026-10-19 tire-icon fix (`port2016 tires`: game.nui dialog 2650000 +
+uitex pieces, already in Client US) applied to Client EU with `python -m tools.port2016 eu tires`: 34 controls and 34
+pieces added; EU dialog 2650000 now has the same 83 GTire_Ply controls as the US one; uitex.agt header bytes 20-31
+kept. The tool reads the 2016 tex\*.ntx loose: they were extracted from `DriftCity Dev Ed/Data_US/gameui/uitex.agt`
+into a temporary `DriftCity Dev Ed (loose)` (with lowercase b-f.ntx links: dev_piece looks up '%x.ntx'), deleted
+afterwards. Backups before the change: client_backup/game_Data_EU_eng.nui.before_tires,
+uitex_Data_EU_eng.agt.before_tires. **Not yet confirmed in game** (EU tire shop icons / buying a ported tire).
+The 2011 US and EU zips were rebuilt after it.
+
+**Open: 2011 US client crash on creating a Pro 6X room (user, same day; log Emulator 2011/logs/20261020-205754,
+21:00:12):** 0x1cc type 0x40080 (Pro 6X, the first 6X room ever in the logs), capacity 16 -> room created, 0x26e frame
+(0x26e + 0x1be + 0x1cd) and 0x1d0 sent; the client answered 0x2d1 + 0x1ba and died. Client US/DriftCityUS.exe.npd
+(21:00:14): `$CA 0x008146F0` = the return address after `call [eax+4]` in the exe's message dispatch loop 0x8146c0
+(queue item esi: +0x10 data, +0x18 size; dispatcher [ebx+0x48]): the crash is inside a message handler. The client ran
+with the decomp proxy version.dll (drift_re.log: 1339/1339 replaced, incl. Cmd_RoomState / Cmd_RoomCreateAck /
+Cmd_RoomMaster). The server frames have the same layout as the working Pro 4X / 16X rooms of 10-17 / 10-19 (only the
+tier bit differs); GlobalContent has all 6X rows (levels 31-1000, V1-7, speed 320). game.nui battle zone dialogs are
+intact after the tire-icon change. Next: the same room with the client started without the proxy
+(./launch.sh client, outside Steam), and a Pro 4X room with the proxy, to split proxy / client / server. No code changed.
+**Resolved (user, same day): "All good now, I guess it was from version.dll"** - the room works without the decomp
+proxy; the crash is the proxy's (one of its replaced room handlers with a Pro 6X room), not the emulator or the client
+files. Nothing changed in the emulator. The user then asked to take the proxy out: Client US/version.dll and its backups are in
+client_backup/decomp_proxy/ (the client running at that moment still had it loaded; from the next start it runs
+without it).
+
+**AI racers on the 2011 client (user, same day: "It's all good, but the AI drivers appear only after the countdown";
+log Emulator 2011/logs/20261020-205754, room 2, 21:06:03):** the server sent 0x1e7 and 0x271 in one bundle (the 2016
+order the user confirmed in round 8). The 2011 grid placement (race vfunc 0x4c = 0x776540; skips members with serial low
+word 0 at 0x776580, like 2016's 0x7d42b0) runs before the 0x271, and the 2011 0x271 handler 0x77b1c0 puts the cars on
+the grid itself (0x7749d0 at 0x77b42b / 0x77b45d), which needs the track: the 2011 client loads it over the next
+seconds (0x1e8 10..95%, then 0x232 RaceJoin, 0x1e9). **Fix (rooms.py, 2011 only):** the 0x271 goes when every member has
+loaded, right before the 0x1ea (progress); 2016 unchanged (after the 0x1e7). Test AiLoadTest; 157 tests pass. Copied to
+Emulator 2011/ and its server restarted (pid 56072). **User-confirmed: "All good now"** (AIs on the grid during
+the countdown).
+
 **Client zips** in `Drift City Project/Releases/` (next to the repository folder): `openDC Client US 2011.zip`, `openDC Client EU 2011.zip`, `openDC Client US
 2016.zip` (folders Client US / Client EU / DriftCity Dev Ed), without logs, dumps, `version.dll*` (the decomp
 proxy and its backups), `DriftCity2016Test.exe`, pc_spec.txt, play_record.r0, goption.ini.orig.

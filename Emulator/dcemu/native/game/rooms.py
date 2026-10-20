@@ -391,7 +391,8 @@ class Room:
             self.seats = [ai.serial if v == old else v for v in self.seats]
 
     def assign_ais(self):
-        """Right after the load (0x1e7): one 0x271 with all the AIs, driven by the master's client."""
+        """One 0x271 with all the AIs, driven by the master's client: 2016 right after the load (0x1e7), 2011 when every
+        member has loaded, just before the go (0x1ea; see start_request)."""
         if not self.ais:
             return
         def assign(ai):
@@ -1269,8 +1270,11 @@ async def start_request(session, frame):
     room.cast(Frame(0x1e7, struct.pack('<iiiifii', 0, room.map_id, map_flag, room.area, 0.0, start_time, -1)))
     # the AIs' drivers right after the load starts. Before the 0x1e7 (the cars made in the room, no track yet) they
     # never appeared; at the go or after the 0x1e7 with FrontAi 1 they appeared when the countdown ended (their grid
-    # slot was seat - 24); with FrontAi 0 the slot is the seat (user, 2026-10-20)
-    room.assign_ais()
+    # slot was seat - 24); with FrontAi 0 the slot is the seat (user, 2026-10-20). The 2011 client: at the go (progress),
+    # its 0x271 handler 0x77b1c0 puts the cars on the grid itself (0x7749d0 at 0x77b42b / 0x77b45d) and loads the track
+    # only over the next 0x1e8s: right after the 0x1e7 the AIs appeared only when the countdown ended (user, 2026-10-20)
+    if year() == 2016:
+        room.assign_ais()
     room.cancel_timer()
     room.timer = asyncio.ensure_future(after(room, LOAD_TIMEOUT, LOADING))
     lists_changed(room.channel)
@@ -1519,6 +1523,8 @@ async def progress(room):
         room.state = RACING
         room.waiting = set(room.racers) | {a.serial for a in room.ais}    # the AIs' ends come from their driver
         room.refresh_observers()
+        if year() != 2016:
+            room.assign_ais()           # 2011: the track is loaded now (start_request)
         room.cast(Frame(0x1ea, struct.pack('<ii', getattr(room, 'start_time', 0), COUNTDOWN_MS) + bytes(32)))
     elif room.state == RACING:
         room.cancel_timer()

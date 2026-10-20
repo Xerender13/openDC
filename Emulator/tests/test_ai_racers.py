@@ -1,4 +1,4 @@
-"""AI racers in battle zone rooms: an AI joins as key << 16, one 0x271 at the go names the master as the driver of all
+"""AI racers in battle zone rooms: an AI joins as key << 16, one 0x271 names the master as the driver of all (2016 after the 0x1e7, 2011 just before the go)
 (both clients: 2011 0x77b1c0, 2016 0x7d91f0), after the race they join again unassigned."""
 import struct
 import unittest
@@ -68,6 +68,27 @@ class AiRacersTest(unittest.TestCase):
         self.assertEqual([struct.unpack_from('<I', p)[0] for p in self.frames(3, 0x1d5)], [a.key << 16 | 3, b.key << 16 | 3])
         self.assertEqual([struct.unpack_from('<I', p)[0] for p in self.frames(3, 0x1d4)], [a.key << 16, b.key << 16])
         self.assertEqual(self.room.seats[1:3], [a.key << 16, b.key << 16])
+
+
+class AiLoadTest(AiRacersTest):
+    def test_2011_names_the_driver_when_all_have_loaded(self):
+        """2011: the 0x271 places the cars on the loaded track (0x77b1c0 -> 0x7749d0), so it goes just before the go;
+        2016 sends it right after the 0x1e7 (start_request), not again here."""
+        import asyncio
+        from dcemu.wire import Frame
+        rooms.add_ai(self.room, 1, self.host)
+        rooms.rooms[self.room.id] = self.room
+        self.addCleanup(rooms.rooms.pop, self.room.id, None)
+        self.host.session.state['room'] = self.room.id
+        for year, want in ((2011, [0x271, 0x1ea]), (2016, [0x1ea])):
+            with self.subTest(year=year):
+                version.configure({'version': str(year)})
+                self.room.reset_ais()
+                self.room.state, self.room.racers, self.room.waiting = rooms.LOADING, [3], {3}
+                self.sent.clear()
+                asyncio.run(rooms.load_complete(self.host.session, Frame(0x1e9, struct.pack('<ii', 0, 100))))
+                self.assertEqual([f.type for f in self.sent[3] if f.type in (0x271, 0x1ea)], want)
+                self.room.cancel_timer()
 
 
 class AiRaceTest(AiRacersTest):
