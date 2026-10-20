@@ -13,9 +13,13 @@ lobby / game / area / battle-area services, the original SQL Server database tab
 2011/2016 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
 the rest itself.
 
-[Link to the US client download](https://drive.google.com/file/d/1DuUoUYBxbkfMKcHAjyUvPmea_wrZgnDZ/view?usp=sharing)
+## Client Download
 
-[Link to the EU client download](https://drive.google.com/file/d/1QSaa8d2JHu0G0rhkvw-OHDHI9N-DrGhe/view?usp=sharing)
+[2011 US client download](https://drive.google.com/file/d/1b1gunQsMlY8gVCuRYVOMm-qadabdkHSl/view?usp=sharing)
+
+[2011 EU client download](https://drive.google.com/file/d/1nKmGfs0GkWrEal7li6IPAp_mHSW5Eosy/view?usp=sharing)
+
+[2016 US client download](https://drive.google.com/file/d/16wcIO2xvY--fMb0Gyi787U1cZMwFFUM-/view?usp=sharing)
 
 | Folder | What |
 |---|---|
