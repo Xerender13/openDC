@@ -229,6 +229,8 @@ def reward_exp(row, level):
 # 0x2048 / 0x204a, a track from its list. That room races as a normal one-racer race (rooms.start_request), and the
 # client reports the mission (0x3eb: points / count / time) and then sends 0x3e2 with the TableIdx; the reward is the
 # row's column 14 formula (mission_battle_exp). No gates in a Mission Battle (user): rooms.MISSION_ROOM.
+# The 2016 client starts it the same way but ends it with 0x3eb + 0x3b8 (GlobalContent MissionBattleAdv), never 0x3e2:
+# missionarena.py pays it through pay() below.
 MISSION_TYPES = ('Mission_Battle1', 'Mission_Battle2', 'Mission_Battle3')
 
 
@@ -377,6 +379,16 @@ async def instant_complete(session, frame):
     m = current(session, idx)
     if not m:
         return error(session, '20020')
+    exp, money = await pay(session, p, idx, m)
+    c = p.char
+    send(session, Frame(0x3e5, pack_exp('<III3IHH3I', idx, exp, money, c.exp, c.exp_next, c.exp_base, c.level, 0,
+                                           0, 0, 0)))
+    send(session, Frame(0x3e3, struct.pack('<I', idx)))     # after 0x3e5: see INSTANT_ORDER
+
+
+async def pay(session, p, idx, m):
+    """The reward of the running instant mission m (row idx), paid and sent (stats): -> (exp, money). From 0x3e2, and
+    for a Mission Battle on the 2016 client from its 0x3b8 (missionarena.py)."""
     row, c = context.data.instants[idx], p.char
     session.state.pop('instant', None)
     exp, money = reward_exp(row, c.level), _n(row, 13)
@@ -398,9 +410,7 @@ async def instant_complete(session, frame):
     session.log.note(f'instant complete {idx}: {exp} exp, {money} mito ({len(m["places"])} places)')
     for f in stat_frames(p):
         send(session, f)
-    send(session, Frame(0x3e5, pack_exp('<III3IHH3I', idx, exp, money, c.exp, c.exp_next, c.exp_base, c.level, 0,
-                                           0, 0, 0)))
-    send(session, Frame(0x3e3, struct.pack('<I', idx)))     # after 0x3e5: see INSTANT_ORDER
+    return exp, money
 
 
 @on(SVC, C2S, 0x3e7)

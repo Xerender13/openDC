@@ -109,6 +109,13 @@ AREA_BASE = 900
 PRACTICE, PRACTICE_AREA_BASE = 100, 20000   # 0x1e7 type of a practice run; its area = base + serial
 MISSION_ROOM = 0x10000      # room type of a Mission Battle room (the client makes it itself, instant.py): a real race alone,
                             # its reward is the instant mission's (0x3e2), not the battle's
+ARENA_SECTION = 13          # 2016: battle zone section "Mission Battle Arena" (missionarena.py; client 0x67dffe)
+
+
+def mission_room(room):
+    """A Mission Battle room: the item one (MISSION_ROOM) or, on 2016, any room of the arena section. Its start is a
+    practice run, it has no gates and pays as its mission, not as a battle."""
+    return bool(room.type & MISSION_ROOM) or (is_2016() and room.channel == ARENA_SECTION)
 USER_INFO, CAR_ATTR, PLAYER_INFO = 12, 12, 0xd8     # 2011 sizes; 2016: user_info_size() / car_attr_size()
 
 
@@ -1099,6 +1106,9 @@ def join(session, room, user_info, car_attr, player_info, password=None):
             obs['channel'] = room.channel
         info.insert(0, section_frame(session, room.channel))
     send(session, room.master_frame(), *info, room.state_frame())
+    if mission_room(room):
+        from .missionarena import on_join          # the arena room's mode / difficulty for the joiner's window
+        on_join(session, room)
     room.watch_start()
     lists_changed(room.channel)
 
@@ -1299,18 +1309,25 @@ async def start_request(session, frame):
         # the client says "The map does not support AI Battle" but sends the start anyway; started, it
         # raced with 7 strange cars (user, 2026-10-13)
         return admin.message(session, 'This track does not support AI racers: choose a track with the AI icon.')
-    if room.type & MISSION_ROOM:
+    if mission_room(room):
         # a Mission Battle runs as a practice run (0x1e7 type 100): the client's race object then marks it practice
         # (0x7727c7: +0x126 = 1), which its Rechallenge (0x7824f0 -> race vfunc 0xcc 0x77bd20: a local restart only for
         # practice) needs, and it has no gates (user: gates showed and Rechallenge did nothing in a normal race). The
         # mission ends and pays through the client's 0x3eb / 0x3e2 (instant.py), not the race result. The client sends
-        # the start twice at once: the second is ignored.
+        # the start twice at once: the second is ignored. 2016 arena rooms: the master's client sends this start only
+        # after the server's 0x3b7 (missionarena.py), with the mission's track; 2016 ends both kinds with 0x3eb / 0x3b8.
+        flag = room.map_flag
+        if not room.type & MISSION_ROOM:
+            from .missionarena import start_flag
+            flag = start_flag(session, room)
+            if flag is None:
+                return
         now_ = asyncio.get_running_loop().time()
         if now_ - getattr(room, 'mission_start', -10.0) < 2.0:
             return
         room.mission_start = now_
         session.log.note(f'room {room.id}: Mission Battle on map {room.map_id} in area {room.area} (practice run)')
-        return room.cast(Frame(0x1e7, struct.pack('<iiiifii', PRACTICE, room.map_id, room.map_flag, room.area, 0.0,
+        return room.cast(Frame(0x1e7, struct.pack('<iiiifii', PRACTICE, room.map_id, flag, room.area, 0.0,
                                                 start_time, -1)))
     if len(room.members) == 1 and context.practice_alone and not getattr(room, 'real_alone', False):
         # BS_Room::StartLoad's practice path (Contents.ini BattleZone.PracticeMode): one member -> 0x1e7 type
@@ -1673,7 +1690,7 @@ async def gate(session, frame):
     reward = gate_reward(field, len(passed), col_point == CLEAN_GATE, team_gates(room.type, field))
     if forced_reward is not None:               # GM command gmgate N (to find out what each number is)
         reward = forced_reward
-    if room.type & MISSION_ROOM:                # no gates in a Mission Battle (user, 2026-10-17)
+    if mission_room(room):                      # no gates in a Mission Battle (user, 2026-10-17)
         reward = 0
     session.log.note(f'gate {index}: position {len(passed)} of {field}, reward {reward}')
     room.cast(Frame(0x1ee, struct.pack('<Ii', m.serial, reward)))
@@ -1768,7 +1785,7 @@ async def result(room):
             if bonus != (0, 0):
                 exp, money = exp + bonus[0] * laps, money + bonus[1] * laps
                 m.session.log.note(f'complete bonus: {laps} laps x {bonus} (EXP, Mito), {len(room.racers)} players')
-        if room.type & MISSION_ROOM:            # a Mission Battle pays as its instant mission (instant.py)
+        if mission_room(room):                  # a Mission Battle pays as its instant mission (instant.py)
             exp = money = 0
         exp += await battle_exp_item(m.session, p, exp)
         if exp:
@@ -1776,7 +1793,7 @@ async def result(room):
         if money:
             await add_money(c, money)
         # licenses: a battle played (team or individual room) and a race on a track of that city
-        if not room.type & MISSION_ROOM:
+        if not mission_room(room):
             await count_many(m.session, ['BattleTeam' if team_room(room.type) else 'BattlePersonal']
                              + ([f'BattleTrack{CITY_SUFFIX[city][0]}'] if city in CITY_SUFFIX else []))
         if n > 1:

@@ -8,6 +8,82 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 40 (2026-10-29): 2011 -> 2016 check against the client build timeline
+
+**User:** "useful information for improving the porting of 2011 client version to 2016: https://timeline.slide.town/".
+
+**The source:** a page ("Drift City client builds", generated 2026-10-28) that embeds a JSON list of 58 client builds
+(2007-2026, all regions). Each build has its handler names (recv / sent), console commands, archives, struct sizes
+(CharInfo, CarInfo, XrWorld, XiGameClient), a base build and the diff from it, including **every handler size check
+that changed** (`[name, in|out, old, new]`, sizes with the type, without the length). Our two clients are exactly two
+of the builds (PE dates): **2011-10-27 US 0.29c "Neo City (US)"** (Client US and Client EU) and **2016-02-16 US 0.77a
+QA build** (DriftCity Dev Ed). The base chain between them: 2012-03-02 0.31f (Neo HUS enemies, honor ranking),
+2012-03-30 0.32b (WhisperDeny), 2012-07-09 0.34b (UpgradeItemSafe), 2012-08-07 0.35b (NeoChapterBonusMission),
+2015-06-17 0.69a (DCGP, crew research / events, World Laptime, Mission Battle messages, RentCarItem, AssistTransfer;
+CharInfo 0x127 -> 0x141, CarInfo 0x31 -> 0x32), then 2015-12-01 / 2016-01-27 / 2016-02-16 with no protocol change
+(the QA build only adds 10 requests and its cheat commands). Its struct sizes match ours (version.LAYOUTS).
+
+**Tool:** `tools/re2016/timeline_audit.py` (downloads the page, or `--data` a saved copy) prints the net S>C size
+change of every message between the two builds, with the type from handlers_2016.json, and checks it against the
+newest 2016 log that has the type; then the S>C messages new since 2011 that the emulator never builds.
+
+**Result:** of the 81 S>C size changes, everything the 2016 server has sent matches, apart from logs that predate
+a fix (auction, crew info, 0x1ab: their 2016 branches are in the code now) and bundles logged under their first type
+(0x191 + 0x1a5, game 0x1e, 0x1d4 + 0x1e5: `login.bundle`). The EXP +12 changes (0x10b, 0x146, 0x3e5, 0x52c, 0x7d1,
+0xc26, 0x410, 0xb8 entries, 0x1ec entries) all go through `records.pack_exp`. **One bug found and fixed:** the Major
+channel stake entries 0x38d / 0x391 / 0x392 (XiCBattleItemInfo) are 0x8c in 2016 (timeline: 0x88*n + 0xe ->
+0x8c*n + 0xe), but `channels.Stake` cut the item record at 0x48 for both builds: now 0x4c for 2016 (the 2016 item
+record's new dword, as auction.body does). 2011 unchanged. Test tests/test_cbattle_stakes.py; 170 tests pass. Only
+script-tested; the 2016 server was not running (nothing restarted). **Not yet confirmed in game.**
+
+**Not built for 2016 (new since 2011, no handler or sender in the emulator):** ~~Mission Battle 0x3b7 / 0x3b9-0x3bd~~
+(done later this session: "Mission Battle for 2016" below), DCGP 0x776-0x778, World Laptime 0x3c0 / 0xf51-0xf5e,
+crew events / research 0xce7 / 0xce9, crew apply 0x36e, Neo HUS combat 0xef3 / 0xf4e / 0xf50 / 0xfc0, Neo repair
+0x4c5, NeoChapterBonusMission 0xef6, honor ranking 0xfaf / 0xfb1 / 0xfb2, WhisperDeny 0xfb3, offline char info
+0x29f, PvpCollisionDamage 0xfbe, Valentine chocolate 0xfba, GMEventRush 0xfc3. Also changed in size but never built:
+0x22b (#555), 0xaa DormantEvent 6 -> 94, 0x1c5 StatEnchantRes 154 -> 166, 0x1d3 RoomNotifyChange 236 -> 240, 0x1f9
+TradeItemOnAck 132 -> 136, 0x241 ReplaceCarAck 68 -> 72, 0x69 RentCarAck, 0x5d5 GetCarAck, 0x6af AuctionCarBuyAck
+(+1, the car record), rank pages 0xfa3 / 0xfa5 (0xb4 -> 0xc4 per entry). The timeline gives names and sizes only,
+not field layouts: each still needs the 2016 handler read (tools/re2016). C>S: the timeline has no type numbers
+for most requests, so it was not checked that way (the emulator reads what the client sends; session 38 did rooms
+and moves).
+
+### Mission Battle for 2016 (same session; user: "yes, start on Mission Battle for 2016")
+
+**Found (2016 exe, DriftCity Dev Ed):** the 2016 client has two Mission Battle routes. (1) The 2011 item route
+(Line Ball / Mecha Watch / Exodus Quake item -> 0x3df -> 0x3e0 -> 0x3e1; its handler 0x534100 calls the mission
+manager 0x7e1750, which sends 0x1b8 section 5 and creates the 0x1cc type 0x10000 room, as 2011). (2) New: the
+**Mission Battle Arena**, battle zone section 13 (client 0x67dffe names section 13 with text 12704; 7-10 GT
+Championship, 11 Newbie, 12 Pro). Its room window (0x1be handler copies the section into window +0x1624) has Select
+Mode / Select Difficulty (texts 12737-12742, ranks 12733-12736), and its Start sends 0x3b6 instead of the normal start.
+**What changed for both:** GlobalContent **MissionBattleAdv** (1 in the US column; game +0x199, read at 0x442c71, race
+vfunc 0x68) makes the end dispatcher 0x7e0fd0 always take 0x7df590: 0x3eb then **0x3b8** on success, **0x3ba** on
+failure; 0x3e2 is never sent. So on 2016 the item route's mission (which we had for 2011) never paid. Layouts, client
+addresses, the tables (Init/LineBall.xlt, MechaWatch.xlt, ExodusQuake.xlt: one row per difficulty, only "low"
+Support 1) and the mission tracks (PVPTrackInfo MissionBattle bit 8 - mode: Line Ball 11, Mecha Watch 1, Exodus Quake
+75, the same tracks the 2011 client chose in our logs): the docstring of the new `dcemu/native/game/missionarena.py`.
+S>C 0x3ba is not a failure echo: it shows 20111 "Your inventory is full..." (never sent).
+
+**Done:**
+- Item route on 2016: 0x3b8 with the instant TableIdx -> `instant.pay` (the 0x3e2 reward, factored out of
+  instant_complete) -> 0x3b9 (40 bytes: Mito, EXP, u64 EXP counters, level) + 0x3e3 (frees the instant mission:
+  2016 handler 0x527160 -> 0x7df430). 0x3ba: logged, no answer.
+- Arena (2016 only, rooms of section 13: `rooms.mission_room`, which now replaces the four MISSION_ROOM checks: practice
+  run start, no gates, no battle reward, no battle licenses): 0x3bb master's mode / difficulty -> the other members
+  (1-based) and to joiners; 0x3b6 -> checks (Support, Req_Level, Req_CarGrade, members ready) -> 0x3bc (a shared random
+  state) + 0x3b7 (mode, difficulty, track, ClearTime, goals) to all; the master's client then sends 0x1e6 with that
+  track -> the practice-run start (map flag 0x204a on track 11, else 0x2048, as the item route's rooms); 0x3b8 -> the
+  row's RewardExp / RewardMito (+RewardMore% within ClearMoreTime, Mecha Watch also within ClearMore_Crash: *our rule*)
+  -> 0x3b9; 0x3bd relayed to the other members.
+- Tests tests/test_missionarena.py (7, stub sessions, the 2016 tables); **177 tests pass**. 2011 unchanged
+  (mission_room is only MISSION_ROOM there; the 0x3e2 frames are the same).
+
+**Not tried in game** (both servers were stopped; nothing restarted). Unknowns: Line Ball's goal in the arena (we
+send the item route's 130 points) and its 0x3b7 @0x14 (+0x68; 0); 0x3b7 @0xe; 0x3b9 @2; whether several members see
+each other in the practice-run start (one area for the room); what room type the client sends for an arena room;
+the original server's reward rules. To try: 2016 client, Battle Zone > Mission Battle Arena, create a room, pick
+Line Ball / Sec rank (the only open difficulty), Start; and a Line Ball item in the battle zone (the item route).
+
 ## Session 39 (2026-10-20): one emulator.ini for both builds, a local 2011 copy, client zips
 
 **User:** one emulator.ini for both versions with a section for the 2016 settings (no switching on the fly); a second

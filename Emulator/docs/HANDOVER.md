@@ -4,6 +4,20 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
+## Session 40 (2026-10-29): timeline check
+
+The client build timeline (https://timeline.slide.town/) lists every handler size change between our 2011 (0.29c,
+2011-10-27) and 2016 (0.77a, 2016-02-16) clients. `tools/re2016/timeline_audit.py` checks it against the code and the
+2016 logs: all sent messages agree; one fix (crew-battle stake entries 0x8c in 2016, `channels.Stake`), not yet
+confirmed in game. The list of 2016 messages the emulator never builds (Mission Battle 0x3b7-0x3bd, DCGP, World
+Laptime, crew research, Neo HUS, honor ranking, ...) is in EMULATOR_NOTES session 40: use it as the 2016 to-do list.
+
+**Mission Battle on 2016 (same session, `game/missionarena.py`), not yet tried in game:** the item missions now pay on
+2016 (the client ends them with 0x3b8, not 0x3e2: GlobalContent MissionBattleAdv), and the Mission Battle Arena
+(battle zone section 13: mode / difficulty in the room window, 0x3bb / 0x3b6 / 0x3b7 / 0x3bc / 0x3bd) is implemented.
+First test: 2016 client, Battle Zone > Mission Battle Arena > a room > Line Ball, Sec rank > Start. Unknowns and our
+rules: EMULATOR_NOTES session 40 "Mission Battle for 2016".
+
 ## Current state: 2026-10-20 (session 39) — resume here
 
 **One `emulator.ini` for both builds** (EMULATOR_NOTES session 39): `[client] version = 2016` in `Emulator/`, its

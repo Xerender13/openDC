@@ -1401,10 +1401,12 @@ class Stake:
         self.gid, self.inven_idx, self.item_id = it.gid, it.inven_idx, it.item_id
         from .mail import item_text
         self.text = item_text(it, 1)
-        self.unit = it.encode()[:0x48]
+        from ..version import is_2016
+        self.unit = it.encode()[:0x4c if is_2016() else 0x48]
 
     def entry(self):
-        """XiCBattleItemInfo as 0x38d / 0x391 / 0x392 carry it (0x88): wchar[32] item id, the item unit (0x48)."""
+        """XiCBattleItemInfo as 0x38d / 0x391 / 0x392 carry it (2011 0x88, 2016 0x8c): wchar[32] item id, the item
+        unit (2011 0x48; 2016 0x4c, the item record's new dword as in the auction entries)."""
         return wstr(self.item_id, 64) + self.unit
 
 
