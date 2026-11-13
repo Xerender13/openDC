@@ -64,7 +64,10 @@ refused, 20199), and the crew grade letter and ranking showed 0. **Nothing was t
   effect at their next login. Ours.
 - **Ranking:** `rankings()` numbers the server's open crews, writes `SKID_TEAM_TB.TEAMRANKING` and is recomputed at most
   every 60 s; `team()` puts the value in the record. **Ours: ordered by TEAMPOINT** — the original server's key is
-  unknown.
+  unknown. **Bug found in game the same day:** the ordering SELECT was also called `RANK_SQL`, which the member-rank
+  UPDATE further down the module overwrote — `rankings()` then ran the 4-parameter UPDATE with 1 parameter, PostgreSQL
+  refused it (08P01) and every `team()` call after a crew was created raised, so the 2016 client created the crew but
+  got no 0x34b. Renamed to `RANK_ORDER_SQL`; `test_ranking_statements_are_distinct` guards it.
 - **Grade letter:** `XiStrTeamInfo`'s u32 at +0xeb is 24 bits of rank with the grade in the top byte (+0xef), which is
   why nothing reads +0xef alone (a pass over both exes for `movzx reg, byte [reg+0xef]` finds none). `info_bytes` now
   packs `rank | rank_tier(rank) << 24`; `rank_tier` gives 1-3 S, 4-10 A, 11-20 B, else 0. **The S/A/B = 3/2/1 encoding

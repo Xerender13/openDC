@@ -150,6 +150,14 @@ class CrewRankingTest(unittest.TestCase):
         self.assertEqual(table, {11: 1, 22: 2})
         db.execute.assert_any_await(crews.RANK_SET_SQL, (2, 100, 22))
 
+    def test_ranking_statements_are_distinct(self):
+        """RANK_SQL is the member-rank UPDATE (4 parameters). The ordering SELECT needs its own name: an earlier
+        run defined both as RANK_SQL, the UPDATE won and rankings() passed it 1 parameter (a 2016 crew create
+        crashed on the server's own error)."""
+        self.assertTrue(crews.RANK_ORDER_SQL.lstrip().upper().startswith('SELECT'))
+        self.assertEqual(crews.RANK_ORDER_SQL.count('%s'), 1)
+        self.assertNotEqual(crews.RANK_ORDER_SQL, crews.RANK_SQL)
+
 
 class AcceptancePage2016Test(unittest.TestCase):
     """The crew Acceptance page: 0x357 act 0x3f4 asks, 0x358 act 0x3f4 answers, 0x36f accepts / refuses."""

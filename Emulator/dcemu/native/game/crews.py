@@ -90,7 +90,7 @@ PAGE = 20
 ACT_LIST = 0x3f2
 ACCEPT_ACT = 0x3f4                       # 0x357 act of the 2016 Acceptance page (crew window sub-view 2)
 APPLY_DAYS = 7                           # text 12730: a join request is kept 7 days
-RANK_SQL = "SELECT TID FROM SKID_TEAM_TB WHERE SERVERID=%s AND TEAMSTATE='A' ORDER BY TEAMPOINT DESC, TID"
+RANK_ORDER_SQL = "SELECT TID FROM SKID_TEAM_TB WHERE SERVERID=%s AND TEAMSTATE='A' ORDER BY TEAMPOINT DESC, TID"
 RANK_SET_SQL = "UPDATE SKID_TEAM_TB SET TEAMRANKING=%s WHERE SERVERID=%s AND TID=%s"
 RANK_TTL = 60                            # seconds between two recomputations of TEAMRANKING
 _rank_cache = (0, {})
@@ -194,7 +194,7 @@ async def rankings():
     if table and now() - when < RANK_TTL:
         return table
     db = context.db
-    rows = await db.rows(RANK_SQL, (db.server_id,))
+    rows = await db.rows(RANK_ORDER_SQL, (db.server_id,))
     table = {}
     for i, r in enumerate(rows, 1):
         tid = int(r[0])
