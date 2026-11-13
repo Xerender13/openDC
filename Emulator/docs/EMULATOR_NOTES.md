@@ -8,6 +8,31 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 44 (2026-11-13): 2016 client cars re-ported from the newer Skid Rush build
+
+**User:** "restore the backup vehicles.agt in 2016 client and port the cars from <SkidRush> client to the 2016 client,
+using the tools made for the previous car port from Origin Client (same skid rush client)". **Nothing tried in game.**
+
+**The pack key.** `~/Drift City Origin/Client` (the 2025 build, session 41's source) keeps byte 16 of the 90-byte
+NayaPack key at 0x6c (`agt.ORIGIN_KEY`); `../SkidRush/client` (the newer build) uses the standard 0x31 (`agt.KEY`).
+Recovered from the pack itself: decode with the Origin key and the only wrong bytes are at positions ≡ 16 (mod 90),
+all off by 0x31^0x6c = 0x5d; with `agt.KEY` all 12 packs (4 base + patch.000-010) index cleanly. `portorigin` gained
+`--key auto|origin|standard` (default auto: Origin key, then standard; a wrong key raises in `agt.index`), and
+`Origin` now remembers the key per pack.
+
+**Restore.** `python -m tools.portorigin reset` put the pre-port originals back (vehicles.agt 402,931,883 bytes,
+Init.agt, World/data.agt, game.nui, uitex.agt) and rewrote server_data_2016's tables from them. The exe patch and the
+engine sounds stay (reset says so; `carlimit2016 remove` undoes the alone).
+
+**Port (`--origin ../SkidRush/client --key auto`):**
+- 243 player cars the 2016 VehicleList lacked (Unique Ids 89-683; **234 above the old 449 limit**; the 2025 build had
+  197), 2187 VehicleUpgrade rows, 57 tires, 245 aero items (219 shop rows), 243 car keys, 2112 vehicle files
+  (757 MB; 100 already present), 484 engine sounds, 937 picture pieces over the four dialogs, 92 new sounds copied.
+- `Data/vehicles.agt`: 5608 kept + 2112 added = 7720 entries, 703,379,747 bytes.
+- Ours, as the tool does: Car Assist "-" where the 2016 Assist_Client lacks the name (27), car 89's empty grades filled
+  by the Sum rule, 9 aero items re-numbered 23000-23008, pc_0080s.nif has no model.
+- After: VehicleList has 607 player cars, Unique Id 1-683 (was 364, max 449). Tests: 240 pass.
+
 ## Session 43 (2026-11-13): crew Acceptance page (2016), crew grade letter / ranking
 
 **User:** "Continue the crew work. It's the 2016 client request." From session 42's open list: the Acceptance page

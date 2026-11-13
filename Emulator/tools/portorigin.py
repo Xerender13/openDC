@@ -1,9 +1,12 @@
 """Player cars of the Origin client (the latest Skid Rush build) added to the 2016 client (DriftCity Dev Ed).
 
 User, 2026-11-13: "port all of the Origin client cars to the 2016 client". The Origin client (default
-~/Drift City Origin/Client; read only, its packs use agt.ORIGIN_KEY) has 197 player cars whose Unique Id the 2016
+~/Drift City Origin/Client; read only, its packs use agt.ORIGIN_KEY, key byte 16 = 0x6c) has 197 player cars whose Unique Id the 2016
 VehicleList lacks (89, 352, 443-637). Same Gamebryo 20.0.0.4 models; its tables have the 2016 columns, apart from the
 differences handled below. Ids above 449 need the raised car limit (tools/carlimit2016.py, applied by `apply`).
+
+A newer Skid Rush build (../SkidRush/client) ships the same layout but packs with the standard key (byte 16 = 0x31):
+pass `--origin ../SkidRush/client --key standard` (or leave --key auto, which tries both).
 
 python -m tools.portorigin dry [FOLDER]     build everything, write the tables into FOLDER, change nothing
 python -m tools.portorigin apply            write the client packs, the exe patch and server_data_2016
@@ -57,10 +60,15 @@ BASE_PACKS = [('Data/vehicles.agt', 'data\\'), ('Data/Init.agt', 'data\\'), ('Da
 
 
 class Origin:
-    """The Origin client's files as it reads them: the base packs, then Patch/patch.000-010 (a later patch wins)."""
+    """The Origin client's files as it reads them: the base packs, then Patch/patch.000-010 (a later patch wins).
 
-    def __init__(self, root):
-        self.root, self.raw, self.files = root, {}, {}
+    The packs' key differs between builds: the 2025 Origin client changes key byte 16 to 0x6c (agt.ORIGIN_KEY),
+    the newer Skid Rush build (../SkidRush/client) keeps the standard 0x31 (agt.KEY). `key` picks one, or None
+    tries ORIGIN first and falls back to KEY (a wrong key raises in agt.index)."""
+
+    def __init__(self, root, key=None):
+        self.root, self.raw, self.files, self.keys = root, {}, {}, {}
+        self.key = key
         for rel, prefix in BASE_PACKS:
             self._add(os.path.join(root, *rel.split('/')), prefix)
         for i in range(100):
@@ -69,14 +77,20 @@ class Origin:
                 self._add(path, '')
 
     def _add(self, path, prefix):
-        raw, ents = agt.index(path, agt.ORIGIN_KEY)
-        self.raw[path] = raw
-        for e in ents:
-            self.files[(prefix + e[0]).lower()] = (path, e, prefix + e[0])
+        for k in ([self.key] if self.key else [agt.ORIGIN_KEY, agt.KEY]):
+            try:
+                raw, ents = agt.index(path, k)
+            except ValueError:
+                continue
+            self.raw[path], self.keys[path] = raw, k
+            for e in ents:
+                self.files[(prefix + e[0]).lower()] = (path, e, prefix + e[0])
+            return
+        raise ValueError(f'{path}: neither the Origin nor the standard pack key fits')
 
     def read(self, name):
         path, e, _ = self.files[name.lower()]
-        return agt.extract(self.raw[path], e, agt.ORIGIN_KEY)
+        return agt.extract(self.raw[path], e, self.keys[path])
 
     def xlt(self, name):
         return xlt_lines(self.read('data\\init\\%s.xlt' % name))
@@ -521,11 +535,14 @@ def main():
     ap.add_argument('--origin', default=ORIGIN)
     ap.add_argument('--client', default=CLIENT)
     ap.add_argument('--sellable', choices=('keep', 'gotcha'), default='keep')
+    ap.add_argument('--key', choices=('auto', 'origin', 'standard'), default='auto',
+                    help='pack key: auto tries the Origin one (byte 16 = 0x6c) then the standard 0x31')
     a = ap.parse_args()
     ORIGIN, CLIENT = a.origin, a.client
     if a.action == 'reset':
         return reset()
-    b = build(Origin(ORIGIN), a.sellable)
+    b = build(Origin(ORIGIN, None if a.key == 'auto' else ('origin' if a.key == 'origin' else 'standard')),
+              a.sellable)
     for line in b['report']:
         print('  note:', line)
     if a.action == 'dry':

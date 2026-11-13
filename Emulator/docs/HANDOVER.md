@@ -4,7 +4,17 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 43 (2026-11-13): crew Acceptance page (2016), crew grade / ranking — resume here
+## Session 44 (2026-11-13): 2016 cars re-ported from the newer Skid Rush build — resume here
+
+Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
+- The newer Skid Rush build's packs use the **standard** NayaPack key (byte 16 = 0x31); the 2025 Origin client keeps
+  0x6c. `tools/portorigin.py` gained `--key auto|origin|standard`.
+- `portorigin reset` restored the pre-port 2016 packs; then `apply --origin ../SkidRush/client` added **243 player
+  cars** (Unique Ids 89-683, 234 above 449) with 2112 vehicle files. First test: start the 2016 client, check the
+  dealership list, buy one, garage picture, drive it, its aero sets.
+- server_data_2016's tables were rewritten (they are in git); the client packs are not.
+
+## Session 43 (2026-11-13): crew Acceptance page (2016), crew grade / ranking
 
 Details: EMULATOR_NOTES session 43. **Nothing was tried in game.** 240 tests pass.
 - The Acceptance page **is** pinned down: it asks with **0x357 act 0x3f4** and is answered by 0x358 act 0x3f4 (the same
