@@ -52,6 +52,8 @@ Messages (2011 sizes; offsets with the type):
     asked (10814), 2 cancelled (10815), 3 deleted (10816), 4 joined (10817), 5 left (10818), 6 kicked (10819), 7 new master
     (10820), 8 promoted (10838 / 10839 by rank), 9 deletion countdown (10821 / 10822), 10 renamed (11305), 11 logged on
     (11413), 12 logged off (12214).
+0x36e JoinTeamApplyAck (2016 only): to the applicant once 0x367 went to the master: wchar[13] crew name @2 + the bind
+    @0x1c (0x5e bytes; client 0x546720 prints 10163 "You have requested to join %s Crew." with the name).
 Crew chat: 0x92 room "team" -> 0x93 to the crew's members in the game (session.chat).
 """
 import asyncio
@@ -538,6 +540,10 @@ async def apply(session, t, raw_bind):
             + struct.pack('<i', c.level))
     session.log.note(f'crew apply to {t["name"]!r}: sent to the master')
     send(online_member(t['master']), Frame(0x367, bind))
+    from ..version import is_2016
+    if is_2016():           # 0x36e JoinTeamApplyAck (2016 only; handler 0x546720, 0x5e bytes): wchar[13] crew name @2,
+        send(session, Frame(0x36e, wstr(t['name'], 26) + bind))   # the bind @0x1c; text 10163 "You have requested
+                                                                   # to join %s Crew." with the name
 
 
 @on(SVC, C2S, 0x367)

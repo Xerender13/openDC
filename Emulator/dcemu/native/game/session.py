@@ -186,6 +186,25 @@ async def whisper(session, frame):
     session.log.note(f'whisper to {name!r}')
 
 
+
+@on(SVC, C2S, 0xfb3)
+async def whisper_deny(session, frame):
+    """0xfb3 WhisperDeny (2016 client only; since build 0.32b). A client whose option WhisperDeny is on ([0x9d5c90],
+    goption.ini) does not print a whisper it receives: its Cmd_Whisper 0x521870 calls the sender 0x847000 instead,
+    which sends 0xfb3 with the whisperer's name (wchar[20] @0, 4 unused bytes; 0x2e with the type). The server passes
+    0xfb3 to that player with the refusing player's name in the same place: handler 0x521830 prints text 12525 with
+    it (and returns 0x2e)."""
+    from .misc import online
+    p = session.state.get('player')
+    if not p or len(frame.payload) < WHISPER_NAME:
+        return
+    name = frame.payload[:WHISPER_NAME].decode('utf-16-le', 'replace').split('\0')[0]
+    target = online(name)
+    if target and target is not session:
+        send(target, Frame(0xfb3, wstr(p.char.name, WHISPER_NAME) + bytes(4)))
+    session.log.note(f'whisper from {name!r} refused (WhisperDeny)')
+
+
 CAR_SAVE_SQL = ("UPDATE SKID_CAR_TB SET LASTDATE=GetDate(), MITRON=%s, KM=%s, FUELCONSUME=FUELCONSUME+%s"
                 " WHERE SERVERID=%s AND CID=%s AND CARID=%s")
 

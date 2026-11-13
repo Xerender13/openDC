@@ -5,7 +5,8 @@ python -m tools.client2016 launch
 
 Writes DriftCity2016Test.exe alongside the original (which is never edited).
 The auth socket port changes from 11005 to 11105; all subsequent service ports
-come from the test server list. Guided tutorial mode also changes one comparison
+come from the test server list. A DriftCity.exe with the raised car limit (tools/carlimit2016.py) keeps it.
+Guided tutorial mode also changes one comparison
 byte to enter the native apprentice race without waiting for the Tutorial button. The 2011 launcher must not patch this build.
 Linux launch uses Proton and a separate prefix, copied from the working 2011
 prefix on first use. The test server must already be running.
@@ -30,6 +31,9 @@ PORT_DATA = 0x5bb174
 
 
 def patch_image(data, guided=False):
+    from . import carlimit2016
+    if carlimit2016.applied(data):          # the car limit patch (tools/carlimit2016.py) is kept
+        return carlimit2016.apply(patch_image(carlimit2016.strip(data), guided))
     if hashlib.sha256(data).hexdigest() != IMAGE_SHA256:
         raise ValueError('Unsupported Dev Ed executable; original SHA-256 does not match')
     out = bytearray(data)
@@ -54,7 +58,10 @@ def prepare(client):
     if not backup.exists():
         shutil.copy2(original, backup)
     destination = client / 'DriftCity2016Test.exe'
-    if destination.exists() and destination.read_bytes() not in (data, patched, patch_image(data), patch_image(data, guided=True)):
+    from . import carlimit2016
+    plain = carlimit2016.strip(data)
+    known = [plain, patch_image(plain), patch_image(plain, guided=True)]
+    if destination.exists() and destination.read_bytes() not in known + [carlimit2016.apply(k) for k in known]:
         raise ValueError(f'{destination} has other modifications; refusing to overwrite it')
     temporary = destination.with_suffix('.exe.tmp')
     temporary.write_bytes(patched)

@@ -141,6 +141,7 @@ class Context:
                                  (10, 1): (500000, '', 1), (10, 2): (250000, '', 1), (10, 3): (100000, '', 1)})
     gotcha_enabled = True    # emulator.ini [gotcha] enabled: the Gotcha machine (main menu button)
     gotcha_season = 13       # [gotcha] season: the newest season offered (Etc.GotchaSeason; client GotchaViewSeason 13)
+    gotcha_car_slots = {}    # [gotcha] car_slot_N (2016 only): {slot: (G Coin car type, Mito car type)} (gotcha.py)
     gotcha_mito_price = 0    # [gotcha] mito_price / coin_price: 0 = the client's prices (gotcha.py)
     gotcha_coin_price = 0
     extra_flags = {}         # emulator.ini [flags]: content flags by 2011 name, sent at login

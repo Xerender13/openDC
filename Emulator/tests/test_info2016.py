@@ -64,3 +64,86 @@ class VisualItem2016Test(unittest.TestCase):
             for year, size in ((2011, 0x74), (2016, 0x78)):      # 0x4b1 handlers: 0x74 / 0x78 per record
                 version.configure({'version': str(year)})
                 self.assertEqual(len(VisualItem(1, 'x', 1, 0, 0, '', 0, 0, 0, 5).encode()), size)
+
+
+class WhisperDeny2016Test(unittest.TestCase):
+    def test_refusal_goes_to_the_whisperer_with_the_refusing_name(self):
+        """C>S 0xfb3 (client 0x847000: wchar[20] the whisperer, 4 bytes) -> S>C 0xfb3 to the whisperer (handler
+        0x521830: the name at @2, 0x2e bytes with the type)."""
+        from dcemu.native.game import session as game_session
+        me = SimpleNamespace(state={'player': SimpleNamespace(char=SimpleNamespace(name='Refuser'))}, log=Mock())
+        other = SimpleNamespace(state={'player': SimpleNamespace(char=SimpleNamespace(name='Talker'))}, log=Mock())
+        sent = []
+        body = 'Talker'.encode('utf-16-le').ljust(40, b'\0') + bytes(4)
+        with patch('dcemu.native.game.misc.online', side_effect=lambda n: other if n == 'Talker' else None), \
+                patch.object(game_session, 'send', side_effect=lambda s, f: sent.append((s, f))):
+            asyncio.run(game_session.whisper_deny(me, Frame(0xfb3, body)))
+            asyncio.run(game_session.whisper_deny(me, Frame(0xfb3, 'Nobody'.encode('utf-16-le').ljust(44, b'\0'))))
+            asyncio.run(game_session.whisper_deny(me, Frame(0xfb3, b'short')))
+        self.assertEqual(len(sent), 1)
+        self.assertIs(sent[0][0], other)
+        self.assertEqual(sent[0][1].type, 0xfb3)
+        self.assertEqual(len(sent[0][1].payload) + 2, 0x2e)
+        self.assertEqual(sent[0][1].payload[:40].decode('utf-16-le').rstrip('\0'), 'Refuser')
+
+
+class CrewApply2016Test(unittest.TestCase):
+    def tearDown(self):
+        version.configure({'version': '2011'})
+
+    def run_apply(self, year):
+        version.configure({'version': str(year)})
+        c = SimpleNamespace(cid=7, name='Applicant', level=30)
+        me = SimpleNamespace(state={'player': SimpleNamespace(char=c), 'serial': 5}, log=Mock())
+        master = object()
+        t = {'tid': 100001, 'name': 'Drifters', 'master': 1}
+        sent = []
+        with patch.object(crews, 'apply_checks', AsyncMock(return_value=None)), \
+                patch.object(crews, 'online_member', return_value=master), \
+                patch.object(crews, 'send', side_effect=lambda s, f: sent.append((s, f))):
+            asyncio.run(crews.apply(me, t, b''))
+        return me, master, sent
+
+    def test_2016_applicant_gets_0x36e(self):
+        """0x36e (client 0x546720, 0x5e bytes with the type): wchar[13] crew name @2, the 66-byte bind @0x1c."""
+        me, master, sent = self.run_apply(2016)
+        self.assertEqual([(s, f.type) for s, f in sent], [(master, 0x367), (me, 0x36e)])
+        ack = sent[1][1].payload
+        self.assertEqual(len(ack) + 2, 0x5e)
+        self.assertEqual(ack[:26].decode('utf-16-le').rstrip('\0'), 'Drifters')
+        self.assertEqual(ack[26:], sent[0][1].payload)
+
+    def test_2011_unchanged(self):
+        me, master, sent = self.run_apply(2011)
+        self.assertEqual([(s, f.type) for s, f in sent], [(master, 0x367)])
+
+
+class OfflineCharInfo2016Test(unittest.TestCase):
+    def tearDown(self):
+        version.configure({'version': '2011'})
+
+    def test_by_name_and_by_cid(self):
+        """0x29e (name @2 wchar[21], i64 cid @0x2c, u32 mode @0x34) -> 0x29f: XiCharInfo 0x141 @2, the mode @0x143."""
+        version.configure({'version': '2016'})
+        c = character()
+        p = SimpleNamespace(char=c)
+        sent = []
+        db = SimpleNamespace(server_id=1, row=AsyncMock(return_value=(c.name,)))
+        saved = context.__dict__.get('db')
+        context.db = db
+        try:
+            with patch.object(misc, 'online', return_value=None), \
+                    patch.object(misc.player, 'load', AsyncMock(return_value=p)) as load, \
+                    patch.object(misc, 'send', side_effect=lambda s, f: sent.append(f)):
+                body = c.name.encode('utf-16-le').ljust(0x2a, b'\0') + struct.pack('<qI', 0, 2)
+                asyncio.run(misc.game_char_info_offline(SimpleNamespace(), Frame(0x29e, body)))
+                body = bytes(0x2a) + struct.pack('<qI', 1234, 3)
+                asyncio.run(misc.game_char_info_offline(SimpleNamespace(), Frame(0x29e, body)))
+        finally:
+            context.db = saved
+        self.assertEqual([f.type for f in sent], [0x29f, 0x29f])
+        for f, mode in zip(sent, (2, 3)):
+            self.assertEqual(len(f.payload) + 2, 0x147)
+            self.assertEqual(struct.unpack_from('<I', f.payload, 0x141)[0], mode)
+        self.assertEqual(load.await_args_list[1].args[0], c.name)
+        self.assertEqual(db.row.await_args.args[1], (1, 1234))

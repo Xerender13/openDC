@@ -8,6 +8,127 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 41 (2026-11-13): delegation rules, 2016 car limit 450 -> 2000, Origin cars in the 2016 client, Gotcha car slots, WhisperDeny
+
+**User:** "Continue the emulator project, but write delegation rules from Honkai impact 3rd project for Deepseek.
+1) Increase the client car limit to 2000 cars if possible and port all of the Origin client cars (latest Skid Rush
+client) to the 2016 client. 2) Continue implementing 2016 features." Later: "make a configuration option for gotcha
+car slots (being able to choose which gotcha car to put there)", "valid only for 2016 client".
+**Nothing here was tried in game:** the emulator, the database and the clients were all stopped during the session
+(nothing restarted, nothing to restart). 183 tests pass.
+
+**Delegation:** `../CLAUDE.md` "Automatic OpenCode GO delegation" (the Honkai Impact 3rd project's rules, adapted) and
+`../AGENTS.md` (the worker's rules). Used: worker 1 wrote `tools/reorigin/cars_inventory.py` (Origin pack inventory and
+table comparison; its numbers were checked against the port tool's own: 197 player cars, Ids 89-637); worker 2 read
+2016 handlers (see "Worker report" below).
+
+### The 2016 client's car limit (tools/carlimit2016.py, tools/p20_cars.s)
+
+**Found:** as in 2011, the only limit is the VisualItem record: one byte per car Unique Id at +0x7c of a 0x248-byte
+record, the float (tire size) at +0x240, so Ids 0-449. LoadVisualItemList 0x8b6570 has a 450-entry column map on the
+stack and writes `record + 0x7c + Id` unchecked. The manager (0x7c68a0-0x7c76e8: cache getter 0x7c68a0 with 450 x 59
+default parts at +0x770, grow 0x7c68e0, IsCompatible 0x7c6c80, FindDefaultPart 0x7c6d00, IsCompatible(carId, uid)
+0x7c73c0) and four other places (0x63b06c, 0x6cd060, 0x6d1529, 0x6e3296) compare the Id with 0x1c2. Exactly 8
+instructions in the exe read `byte [reg + reg + 0x7c]`. VehicleList / VehicleUpgrade / VehicleDisplay are maps
+(GetVehicleInfo 0x4d6c.. "wrong id" only when the key is missing): no Id limit. 0xadb300 (450 dwords) is an unrelated
+function table.
+**Why not the 2011 patch (a bigger record):** the 2016 client copies records by value (`mov ecx, 0x92; rep movs` at
+0x4c76c8 / 0x4c76f8 / 0x4c772f into an object at +0xe0; 0x248 is also the size of other structs), so a bigger record
+would need every copy found.
+**Patch:** the record keeps its size. New section `.p20` (VA 0xaf9000, 0x490 bytes in the file, 3.2 MB zero-filled):
+the loader (2048 car columns, Id bound), `ext` = one bit per (VisualItem row, Id 450-1999), 200 bytes per row, 16384
+rows; record +0x23e (u16, never read before: Ids 450 / 451 failed every check) = row number + 1, so any copy of a
+record finds its bits. The 8 readers jump to small routines that ask `ext_fit` for Ids >= 450; their Id checks are
+2000 now; the default part cache stays (450 Ids), its getter calls FindDefaultPart for the others. The sites and
+bytes: `carlimit2016.PATCHES`. `apply` changes DriftCity.exe in place (the launcher starts that file; first original
+in client_backup/2016/DriftCity.exe.orig), `remove` gives the exact original back; `client2016.patch_image` keeps
+the patch in DriftCity2016Test.exe. The launcher's is2016 check only looks at the port / tutorial bytes.
+**Checked:** every patched site disassembled from the patched file; no jump lands inside a patched range; and the
+patched image run in unicorn (scratch script, not in the repository): the loader with stubbed table readers (8
+rows, Ids 1-5000: bytes for Ids < 450, bits above, row numbers, nothing written past the record), then IsCompatible,
+IsCompatible(carId, uid), the shop check, both object checks (18560 cases), FindDefaultPart / the cache getter and
+the pair function, against a Python model. tests/test_client2016.py checks the round trip and that P20_CODE is what
+p20_cars.s assembles to. **Not checked: the real client starting with it.**
+
+### Origin cars (tools/portorigin.py)
+
+Origin client: `~/Drift City Origin/Client` (read only; packs with agt.ORIGIN_KEY; Data/*.agt then Patch/patch.000-010,
+later wins). 197 player cars the 2016 VehicleList lacks: Unique Ids 89, 352, 443-637 (188 above 449). Same
+Gamebryo 20.0.0.4 files; block types beyond the 2016 cars' are engine ones (NiDitherProperty, NiPSys*).
+Differences handled (details in the tool's docstring):
+- VehicleList: same 79 columns. Car Assist names the 2016 Assist_Client lacks (car_field_mito_big / _huge / _medium,
+  car_field_partsdrop_huge, car_huv_boosthit_huge: 6 cars) -> "-"; Req Level -> 1; "Moonpalace Motors" ->
+  "MoonPalace Motors". Sellable stays Origin's 1: **the dealership sells all 197** (`--sellable gotcha` makes them
+  50 / GOTCHA instead).
+- VehicleUpgrade: Origin has the 2016 stat scale for these cars but its own economy (every car 1000 .. 900000, Sell
+  1 %, Req Level by grade), so Price / Sell / CloseSell / UpgradeMito / Efficiency / Capacity / Req Level are the 2016
+  Dominator BT's (car 442) per grade. 15 cars are empty below some grade in Origin (89, 488, 501, 513, 525, 598,
+  604, 632: V9 only; 461, 464, 491, 554, 566, 586, 629): filled from the lowest filled grade by the "Sum" column.
+  *Both are our rules.*
+- VisualItem: Origin has an extra column 7 "Trade" (dropped). Row 2 is the Unique Id there too. Origin marks older
+  cars' aero sets as fitting newer cars behind the right one (pc_0079s_01 fits Survivor BT); since the client takes
+  the first fitting aero row as the car's body, the new cars' fits are cleared in the rows before Origin's own first
+  one (3 cells). Checked: every new car's body equals Origin's. 201 aero items added; 9 whose Origin Unique Id is
+  another item in 2016 (21732 = i_d_d_prometheus_01 ...) got Ids 23000-23008 (VisualItem and VShopItem).
+- VShopItem: by column name ($ Price0D = $Price 0D ...), category names from a 2016 row of the same numbers.
+- 43 tires, 197 keys (UseItemClient; pc_0080s's made from the Dominator BT key), 1713 files (619 MB) into
+  Data/vehicles.agt (now 642 MB), 392 engine sounds, pictures: game.nui 1990000 (key icons, 196), 2840000 (167),
+  2850000 / 2860000 (197 each) from the Origin dialogs 2000000 / 2850000 / 2860000 / 2870000, 757 picture pieces.
+  Not ported: aero set icons (their Origin dialog was not looked for), the 2 new HUVs (10083 / 10084).
+Applied 2026-11-13; originals in client_backup/2016/origin (`portorigin reset`). server_data_2016 Init tables and
+tables/UseItemClient.tdf written; the server's Tables load them (919 vehicles, 5049 upgrade rows, 2405 visuals).
+**Not tried in game:** client start, dealership, garage, driving a new car. If the client fails at loading, suspect
+this first: `python -m tools.portorigin reset` and `python -m tools.carlimit2016 remove` give the old client back.
+The 2016 client zip in ../Releases was not rebuilt.
+
+### Gotcha car slots (2016 only; gotcha.py, tools/gotcha_slots.py)
+
+The 2016 car machine's window shows seven cars: client 0x6c0d32-0x6c0e03 walks 7 rows (0x300 bytes each) of
+rw_cash_gacha_2015 and rw_mito_gacha_2015 in its own RewardGroup.xlt and takes atoi(row +0x1b4) = Reward_Description
+(440 Dominator, 432 HYKAN, 429 Prometheus, 425 GRAVITY, 421 PLUCK, 417 Honour, 414 Pandora); Group_Description is the
+slot's text. `emulator.ini [gotcha] car_slot_1..7 = car [, car for Mito]` (Unique Id or UI name; read only for 2016):
+`gotcha.roll_cars` gives that car's key item (give() makes the car, V1) when the roll lands on the slot, with the
+slot's own chance; `python -m tools.gotcha_slots apply` writes the client's rows (car Id, a text from the car's V9
+row) and server_data_2016's copy, `reset` restores them. Test test_items2016.test_gotcha_2016_car_slots. The prize
+window gets the key's icon (0x89 type 23). **Not tried in game.** All slots are empty (= the client's cars) now.
+
+### Crew apply answer 0x36e and offline character info 0x29e / 0x29f (2016)
+
+- **0x36e JoinTeamApplyAck** (crews.apply, 2016 only): handler 0x546720, 0x5e bytes = wchar[13] crew name @2 + the
+  66-byte bind @0x1c (the 0x366 request's layout); prints 10163 "You have requested to join %s Crew." with the name.
+  Sent to the applicant once 0x367 went to the master. Test CrewApply2016Test (2011 unchanged).
+- **0x29e GameCharInfoOffLine -> 0x29f** (misc.game_char_info_offline, 2016 only): request (sender 0x8472d0, 0x38):
+  wchar[21] name @2 (StringCchCopyW 0x43ddd0, 0x15 chars), i64 cid @0x2c, u32 mode @0x34; a list sends name + mode 2
+  (0x67a65b), a record sends cid + mode 3 (0x67a748). Answer (handler 0x52f200, 0x147): the 2016 XiCharInfo (0x141)
+  @2 + the mode @0x143; mode 2 / 3 open the info window 0xe with an empty car, mode 1 only stores the cid. Found by
+  name or by cid (SKID_CHARACTER_TB), online or not; none -> 20019. Test OfflineCharInfo2016Test.
+  The mode / cid order rests on the worker's reading of the call sites (adjacent cid halves); **not tried in game**.
+
+### Worker report: still open 2016 messages (worker 2; checked parts marked)
+
+Report: scratchpad only (not kept). Proven by me as well: 0xfb3, 0x36e, 0x29e / 0x29f (above). The worker called
+the names "c-strings": wrong, the copy helper 0x43ddd0 is StringCchCopyW (wide). Its other findings, **not built**:
+- Honor ranking (on the game connection, registration 0x5537b0, not the ranking port): C>S 0xfae (14: 3 u32, page
+  first) -> 0xfaf (u32 page @2, total @6, n @0xa, u32 tag 0x00ff0000 @0xe (else dropped), n x 0xc4 entries @0x12);
+  C>S 0xfb0 (52: u32, u32, wchar name @0xa) -> 0xfb1 (@2, @6, @0xa unread, total @0xe, n @0x12, tag 0x00ff0001 @0x16,
+  entries @0x1a); 0xfb2 RankError (u32: 0 12217, 1 12220, 2 12218, 4 12219; 3 clears the list). The 0xc4 entry
+  layout is unknown (0x6b2340 / 0x6b1030): needed before building.
+- 0x4c4 RepairNeoParts (u32 id @2; from the confirm dialog of text 12320) -> 0x4c5 (u32 id @2, u32 result @6: 1 sets
+  the record's first dword to -1 and shows a line; the record is in the store 0x77f780 -> 0x771150 (map at +0x68)).
+  Not built: the emulator does not keep Neo part durability, and which id (kit or part) is unproven.
+- 0xef5 (10: u32, u32 from a u8) -> 0xef6 NeoChapterBonusMission (u32, u32 unread, u32 value @0xa shown "n / 10",
+  text 12699). Neo chapters are not in the emulator.
+- 0xfb9 (257: target name) -> 0xfba ValentainChocolateReward (0x72: a name / key string @2). What it looks up unknown.
+- 0xfbe PvpCollisionDamage (mine): f32 damage @2 (6 bytes); applied only with char flag 0x20 at +0x2a4 and game mode
+  8; prints a line with the value. Its C>S 0xfbd (sender 0x85f1a0) body was not read. Not built.
+
+### WhisperDeny 0xfb3 (2016; session.whisper_deny)
+
+A client with the option WhisperDeny on ([0x9d5c90]) does not print a whisper: Cmd_Whisper 0x521870 calls 0x847000,
+which sends C>S 0xfb3 (wchar[20] the whisperer @0, 4 bytes; 0x2e with the type). The server sends S>C 0xfb3 with the
+refusing player's name to the whisperer (handler 0x521830: text 12525 with the name, size 0x2e). Test
+tests/test_info2016.WhisperDeny2016Test. **Not tried in game.**
+
 ## Session 40 (2026-10-29): 2011 -> 2016 check against the client build timeline
 
 **User:** "useful information for improving the porting of 2011 client version to 2016: https://timeline.slide.town/".

@@ -217,6 +217,9 @@ def native_setup(cp):
         context.gotcha_season_set = 'season' in g
         context.gotcha_mito_price = int(g.get('mito_price', '0') or 0)
         context.gotcha_coin_price = int(g.get('coin_price', '0') or 0)
+        if version.is_2016():                       # the 2016 window's seven car slots (gotcha.py, tools/gotcha_slots.py)
+            from .native.game.gotcha import parse_slots
+            context.gotcha_car_slots = parse_slots(dict(g), context.data.vehicles)
     if cp.has_section('rush'):
         rs = cp['rush']
         on = lambda k, d: rs.get(k, d).strip() not in ('0', 'no', 'off')

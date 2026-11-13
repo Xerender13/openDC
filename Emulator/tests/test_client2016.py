@@ -3,6 +3,7 @@ from pathlib import Path
 import struct
 import unittest
 
+from tools import carlimit2016
 from tools.client2016 import IMAGE_SHA256, PORT_DATA, PORT_STORE, ROOT, patch_image
 
 
@@ -13,7 +14,7 @@ class ClientPatch(unittest.TestCase):
 
     @unittest.skipUnless((ROOT/'DriftCity Dev Ed/DriftCity.exe').exists(), 'requires Dev Ed client')
     def test_only_socket_port_changes(self):
-        original = (ROOT/'DriftCity Dev Ed/DriftCity.exe').read_bytes()
+        original = carlimit2016.strip((ROOT/'DriftCity Dev Ed/DriftCity.exe').read_bytes())
         import hashlib
         self.assertEqual(hashlib.sha256(original).hexdigest(), IMAGE_SHA256)
         patched = patch_image(original)
@@ -29,7 +30,7 @@ class ClientPatch(unittest.TestCase):
     @unittest.skipUnless((ROOT/'DriftCity Dev Ed/DriftCity.exe').exists(), 'requires Dev Ed client')
     def test_guided_start_changes_only_the_lobby_comparison(self):
         from tools.tutorial_flow import START_BRANCH, patch_start_branch
-        original = (ROOT/'DriftCity Dev Ed/DriftCity.exe').read_bytes()
+        original = carlimit2016.strip((ROOT/'DriftCity Dev Ed/DriftCity.exe').read_bytes())
         ports = patch_image(original)
         guided = patch_image(original, guided=True)
         off, expected = START_BRANCH[2016]
@@ -41,3 +42,31 @@ class ClientPatch(unittest.TestCase):
         bad[off] = 0
         with self.assertRaisesRegex(ValueError, 'unsupported'):
             patch_start_branch(bad, 2016, 1)
+
+    @unittest.skipUnless((ROOT/'DriftCity Dev Ed/DriftCity.exe').exists(), 'requires Dev Ed client')
+    def test_car_limit_patch_round_trip(self):
+        """tools/carlimit2016.py: only the listed sites and the new section change, strip() gives the original back,
+        the section bytes are tools/p20_cars.s, and client2016 keeps the patch."""
+        original = carlimit2016.strip((ROOT/'DriftCity Dev Ed/DriftCity.exe').read_bytes())
+        import hashlib
+        self.assertEqual(hashlib.sha256(original).hexdigest(), IMAGE_SHA256)
+        patched = carlimit2016.apply(original)
+        self.assertTrue(carlimit2016.applied(patched) and not carlimit2016.applied(original))
+        self.assertEqual(carlimit2016.strip(patched), original)
+        self.assertEqual(carlimit2016.apply(patched), patched)
+        allowed = set()
+        for va, old, new in carlimit2016.PATCHES:
+            allowed |= set(range(va-0x401000+0x400, va-0x401000+0x400+len(old)//2))
+        changed = {i for i, (a, b) in enumerate(zip(original, patched)) if a != b}
+        self.assertTrue(changed - allowed <= set(range(0x100, 0x400)))          # + the PE header fields
+        self.assertEqual(patched[len(original):len(original)+len(carlimit2016.P20_CODE)], carlimit2016.P20_CODE)
+        built = carlimit2016.build_code()
+        if built is not None:
+            self.assertEqual(built, carlimit2016.P20_CODE)
+        both = patch_image(patched)
+        self.assertTrue(carlimit2016.applied(both))
+        self.assertEqual(carlimit2016.strip(both), patch_image(original))
+        bad = bytearray(original)
+        bad[0x7c68a8-0x401000+0x400] ^= 1
+        with self.assertRaisesRegex(ValueError, 'unexpected bytes'):
+            carlimit2016.apply(bytes(bad))

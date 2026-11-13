@@ -14,7 +14,7 @@ PartsMito (parts); the client checks the money / G Coin itself before it asks.
 Rewards: RewardGroup.xlt rw_gacha_{car|parts}_{mito|cash}_{season:02} (e.g. rw_gacha_car_mito_09: Winner car parts
     A-D or key parts; seasons 3 and 4 have no groups: rw_gacha_item_mito / _cash then), rolled as gift boxes
     (driftuse.roll / give). The car parts (i_n_gacha_A.., i_n_*_k_v5) are for combining into the car (not native).
-emulator.ini [gotcha]: enabled, season (the newest season offered), prices.
+emulator.ini [gotcha]: enabled, season (the newest season offered), prices, car_slot_N (2016).
 2016 client (its GlobalContent): GotchaViewSeason 60 (season groups up to rw_gacha_*_62; Etc.GotchaSeason is 6 bits
     wide there), Gacha_Price_PartsMito 25000, and GachaUpdate2015 = 1: the window's car price (0x6bf872 / 0x6bf940)
     is then GachaUpdate2015Cash 300 / GachaUpdate2015Mito 50000 for every season instead of GotchaSeason*%02d.
@@ -23,9 +23,19 @@ emulator.ini [gotcha]: enabled, season (the newest season offered), prices.
     (Dominator, Hykan, Prometheus, GRAVITY, PLUCK, Honour, Pandora: an ST or BT V1 car gift box) or 10 Capsule Points
     (i_n_gacha_point). The parts machine keeps its seasons.
     The 2016 prize window: NotifyEvent type 23 passes u32 @0xa with the item (0x5304ec -> 0x6c2590): the count; 0
-    there showed no reward icon (user, 2026-10-20). Not done: the Battle Zone "OB Gacha" (BattleZone.ObserveGacha, Etc.EventFreeOBGacha;
+    there showed no reward icon (user, 2026-10-20).
+    Car slots (user, 2026-11-13: "a configuration option for gotcha car slots", 2016 only): the window shows seven
+    cars, one per row of rw_cash_gacha_2015 / rw_mito_gacha_2015 in the CLIENT's RewardGroup.xlt: the loop at
+    0x6c0d32-0x6c0e03 walks 7 rows of 0x300 bytes and takes atoi(row +0x1b4), the row's Reward_Description (440
+    Dominator ...), for both groups; Group_Description is the slot's text. emulator.ini [gotcha] car_slot_1..7 =
+    car [, car for Mito] (a Unique Id or UI name) replaces a slot: the server then gives that car (its key item: give()
+    makes the car, V1) when the roll lands on the slot's group rw_{cash|mito}_gacha_slot_0N, with the slot's own
+    chance; tools/gotcha_slots.py writes the client's rows (and the server's copy) so the window shows it.
+    Not done: the Battle Zone "OB Gacha" (BattleZone.ObserveGacha, Etc.EventFreeOBGacha;
     0x834 / 0x836 / 0x837 -> 0x835 ObsGachaInit .. 0x83a ObsGachaResult).
 """
+import random
+import re
 import struct
 
 from ...handlers import on
@@ -59,6 +69,62 @@ def price(coin, machine, season):
     if machine == 1:
         return PARTS_COIN
     return SEASON_COIN[season - 1] if 1 <= season <= len(SEASON_COIN) else SEASON_COIN[0]
+
+
+def parse_slots(values, vehicles):
+    """emulator.ini [gotcha] car_slot_N = car [, car for Mito] -> {N: (G Coin car type, Mito car type)}.
+    A car is a VehicleList Unique Id or UI name (case ignored); raises ValueError for an unknown one."""
+    names = {str(v.get('UI Name', '')).strip().lower(): uid for uid, v in vehicles.items()
+             if str(v.get('Vehicle', '0')).strip() == '0'}
+    out = {}
+    for key, value in values.items():
+        m = re.fullmatch(r'car_slot_([1-7])', key.strip().lower())
+        if not m or not value.strip():
+            continue
+        cars = []
+        for part in value.split(','):
+            part = part.strip()
+            uid = int(part) if part.isdigit() else names.get(part.lower())
+            if uid not in vehicles:
+                raise ValueError(f'[gotcha] {key} = {value!r}: no player car {part!r} in VehicleList')
+            cars.append(uid)
+        if len(cars) > 2:
+            raise ValueError(f'[gotcha] {key}: one car, or two (G Coin, Mito)')
+        out[int(m.group(1))] = (cars[0], cars[-1])
+    return out
+
+
+_keys = None
+
+
+def car_key(car_type):
+    """The key item id of a car type (UseItemClient kind car, value = the Unique Id), or None."""
+    global _keys
+    if _keys is None:
+        t = context.data
+        _keys = {}
+        for item_id, idx in t.item_index.items():
+            info = t.item_info(idx)
+            if info and info.kind == 'car':
+                _keys.setdefault(int(info.value), item_id)
+    return _keys.get(car_type)
+
+
+def roll_cars(group, coin):
+    """The 2016 car machine's roll with [gotcha] car_slot_N: as driftuse.roll, but a configured slot gives its car."""
+    from .driftuse import groups, roll
+    slots = context.gotcha_car_slots
+    rows = [r for r in groups().get(group, []) if r[4] > 0]
+    if not slots or not rows or any(r[4] >= 100 for r in rows):
+        return roll(group)
+    kind, item, period, count, _, etc = random.choices(rows, weights=[r[4] for r in rows])[0]
+    m = re.fullmatch(r'rw_(?:cash|mito)_gacha_slot_(\d+)', item)
+    key = car_key(slots[int(m.group(1))][0 if coin else 1]) if m and int(m.group(1)) in slots else None
+    if key:
+        return [('NormalItem', key, 0, 1, 1)]
+    if kind == 'RewardGroup':
+        return [w for _ in range(max(count, 1)) for w in roll(item, 1)]
+    return [(kind, item, period, count, etc)]
 
 
 def group_for(coin, machine, season):
@@ -95,7 +161,7 @@ async def gotcha(session, frame):
         balance = int(r[1] or 0)
     elif cost > c.mito or not await add_money(c, -cost):
         return error(session, '20092')                  # Insufficient funds
-    won = roll(group)
+    won = roll_cars(group, coin) if is_2016() and group in GACHA_2015.values() else roll(group)
     gains = Gains()
     await give(session, p, won, gains)
     session.log.note(f'gotcha {group} for {cost} {"G Coin" if coin else "Mito"}: {won}')

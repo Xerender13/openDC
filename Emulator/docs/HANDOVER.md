@@ -4,6 +4,20 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
+## Session 41 (2026-11-13): car limit 2000, Origin cars in 2016, Gotcha car slots — resume here
+
+Details: EMULATOR_NOTES session 41. **Nothing was tried in game** (emulator, database and clients were stopped all
+session). 183 tests pass. Nothing committed.
+- Delegation to OpenCode DeepSeek: `../CLAUDE.md` + `../AGENTS.md`.
+- 2016 client: car Unique Ids up to 1999 (`tools/carlimit2016.py`, section .p20 in DriftCity.exe) and 197 Origin
+  player cars (`tools/portorigin.py`; the dealership sells them). **First test:** start the 2016 client; if it fails
+  while loading, `python -m tools.portorigin reset` + `python -m tools.carlimit2016 remove`. Then: dealership list,
+  buy one (e.g. Survivor, Id 635), garage picture, drive it, its aero sets in the shop.
+- `[gotcha] car_slot_1..7` (2016 only) + `python -m tools.gotcha_slots apply`.
+- 2016 messages: WhisperDeny 0xfb3, crew apply answer 0x36e, offline character info 0x29e -> 0x29f. Still open
+  (layouts in EMULATOR_NOTES session 41): honor ranking, Neo repair, NeoChapter bonus, Valentine, PvP collision.
+- The 2016 zip in ../Releases is older than these client changes.
+
 ## Session 40 (2026-10-29): timeline check
 
 The client build timeline (https://timeline.slide.town/) lists every handler size change between our 2011 (0.29c,

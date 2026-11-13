@@ -68,6 +68,39 @@ Logs: `logs/<date>-<time>.msgs.txt` (2016: `logs/2016/`) has every message both 
 - Scripted-client tests run on a second emulator on ports 112xx (`tools/test_ports.ini`), never on the live one.
   Otherwise call the handlers directly with stub sessions (see `tests/`).
 
+## Automatic OpenCode GO delegation (set by the user, 2026-11-13)
+
+The user authorizes automatic delegation of as much project work as practical to the installed OpenCode terminal
+using OpenCode GO DeepSeek 4.1 Flash 1017 (the same arrangement as the Honkai Impact 3rd project). CLI model
+identifier: `opencode-go/deepseek-v4.1-flash`. No per-task confirmation is needed. The lead assistant stays
+responsible for the result, integration and technical verification.
+
+- For substantive tasks, delegate most suitable inspection, implementation, refactoring, documentation, test
+  authoring, log analysis and review work. Break it into bounded assignments with a clear expected output, file
+  ownership, evidence requirements and the check to run. Keep coordination, hard unresolved decisions, final review
+  and delivery with the lead.
+- Run from the project root with the installed executable:
+  `opencode run --model opencode-go/deepseek-v4.1-flash 'Specific task'` (`~/.opencode/bin/opencode`).
+  Always pass the model explicitly: the global OpenCode default may select another provider. `--file path` attaches
+  a file, `--format json` gives structured output. Check `run --help` if needed.
+- Every delegated prompt says it is a delegated task, forbids further delegation, points at `AGENTS.md` (the
+  worker's rules) and states whether the worker may edit named files or must only return findings / a patch.
+- Delegate substantial implementation directly when file ownership is clear. Review the actual edits and run the
+  focused checks (`Emulator/.venv/bin/python -m pytest tests -q`) before accepting them. Model output alone is not
+  evidence: a message layout, client rule or address needs the disassembly, a client table, a log or a passing test.
+- One OpenCode worker at a time by default, no concurrent edits to the same files. Keep doing independent lead work
+  while it runs.
+- Delegation does not widen authorization: no blanket permission auto-approval, no sandbox bypass, no destructive
+  actions, no commits or pushes, no emulator restarts or process kills, no database or client-pack writes, nothing
+  in game. Those stay with the lead under the working rules above.
+- Send only relevant code and evidence. No passwords, tickets, account rows or personal data, no whole client
+  trees, not the whole notes file.
+- Skip delegation for trivial changes or when its overhead would dominate. If OpenCode or the model is unavailable,
+  fails or times out, continue as lead and say so. Do not silently substitute another model or provider, and do not
+  retry an unavailable service repeatedly.
+- Report material delegated contributions and the lead's verification in the final reply. Never claim delegation
+  that did not happen.
+
 ## Reverse-engineering the client
 
 - **The client:** `Client US/DriftCityUS.exe` is the unpacked 2011 exe. Image base 0x400000. `.text` is at file

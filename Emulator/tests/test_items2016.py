@@ -169,6 +169,40 @@ class Items2016Test(unittest.TestCase):
                          2, 1, 0, 100, 0, 0)                   # a Porsche 918 grade with a_00125
         self.assertGreater(assists.totals(self.p)['speedup'], 0)
 
+    def test_gotcha_2016_car_slots(self):
+        """[gotcha] car_slot_N (2016): the configured slot gives its car's key (give() makes the car), other slots
+        and Capsule Points are rolled as before."""
+        from dcemu.native.game import gotcha, driftuse
+        driftuse._groups = None
+        gotcha._keys = None
+        cars = self.t.vehicles
+        name = cars[442]['UI Name']
+        slots = gotcha.parse_slots({'car_slot_1': f'{name.lower()}, 441', 'car_slot_3': '440', 'car_slot_2': '',
+                                    'season': '60'}, cars)
+        self.assertEqual(slots, {1: (442, 441), 3: (440, 440)})
+        with self.assertRaises(ValueError):
+            gotcha.parse_slots({'car_slot_1': 'no such car'}, cars)
+        self.assertEqual(gotcha.car_key(442), 'pc_0442s')
+        context.gotcha_car_slots = slots
+        try:
+            rows = {r[1]: r for r in driftuse.groups()['rw_cash_gacha_2015']}
+            for item, coin, want in (('rw_cash_gacha_slot_01', True, [('NormalItem', 'pc_0442s', 0, 1, 1)]),
+                                     ('rw_cash_gacha_slot_03', True, [('NormalItem', 'pc_0440s', 0, 1, 1)])):
+                with patch('random.choices', return_value=[rows[item]]):
+                    self.assertEqual(gotcha.roll_cars('rw_cash_gacha_2015', coin), want)
+            mito = {r[1]: r for r in driftuse.groups()['rw_mito_gacha_2015']}
+            with patch('random.choices', return_value=[mito['rw_mito_gacha_slot_01']]):
+                self.assertEqual(gotcha.roll_cars('rw_mito_gacha_2015', False), [('NormalItem', 'pc_0441s', 0, 1, 1)])
+            won = {w[1] for _ in range(300) for w in gotcha.roll_cars('rw_cash_gacha_2015', True)}
+            self.assertIn('i_n_gacha_point', won)
+            self.assertTrue(any(w.startswith('i_n_box_') for w in won))          # an unconfigured slot: its gift box
+            self.assertFalse(any('dominator' in w or 'prometheus' in w for w in won))
+            context.gotcha_car_slots = {}
+            self.assertTrue(gotcha.roll_cars('rw_cash_gacha_2015', True))
+        finally:
+            context.gotcha_car_slots = {}
+            driftuse._groups = None
+
     def test_gotcha_2016_prices_and_groups(self):
         from dcemu.native.game import gotcha, driftuse
         driftuse._groups = None

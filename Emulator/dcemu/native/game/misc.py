@@ -5,6 +5,7 @@
     XiStrCharInfo @0, XiStrCarInfo @0x11b, XiStrStatInfo @0x14c, XiStrTeamInfo @0x1b4 (384), u32
     serial @0x334, then the location: 2008 one u32 (1 recorded), here u32 city @0x338 and zeros).
     Cmd_GameCharInfo: any character by name (online or not here), else 20019.
+0x29e GameCharInfoOffLine (2016) -> 0x29f: game_char_info_offline.
 0x348 MyTeamInfo and the other crew messages: crews.py.
 0x35e GetCBattleTime (act) -> 0x35f (act, u32 battle time: channels.battle_time).
 0x387 CBattleInstance (act, ..) -> 0x388 (act, u32 0 battles; 2011 10 bytes).
@@ -68,6 +69,32 @@ async def game_char_info(session, frame):
     from ..version import is_2016
     size = CHAR_INFO_ACK_2016 if is_2016() else CHAR_INFO_ACK
     send(session, Frame(0x295, bytes(out.ljust(size, b'\0'))))
+
+
+
+NAME_BY_CID_SQL = "SELECT CNAME FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s"
+
+
+@on(SVC, C2S, 0x29e)
+async def game_char_info_offline(session, frame):
+    """0x29e GameCharInfoOffLine (2016 only; sender 0x8472d0, 0x38 bytes with the type): wchar[21] name @2, i64 cid
+    @0x2c, u32 mode @0x34 (from a list: the name, cid 0, mode 2 (0x67a65b); from a record: no name, the cid, mode 3
+    (0x67a748)) -> 0x29f GameCharInfoOffLineAck (handler 0x52f200, 0x147 bytes): the 2016 XiCharInfo (0x141) @2, u32
+    the mode @0x143 (1: the client only keeps the cid; 2 / 3: the info window 0xe, with no car). Online or not."""
+    from ..version import is_2016
+    if not is_2016() or len(frame.payload) < 0x36:
+        return
+    name = read_wstr(frame.payload, 0, 0x2a).strip()
+    cid, mode = struct.unpack_from('<qI', frame.payload, 0x2a)
+    if not name and cid > 0:
+        db = context.db
+        r = await db.row(NAME_BY_CID_SQL, (db.server_id, cid))
+        name = (r[0] or '').strip() if r else ''
+    s = online(name) if name else None
+    p = s.state['player'] if s else (await player.load(name) if name else None)
+    if not p:
+        return error(session, '20019')
+    send(session, Frame(0x29f, p.char.encode() + struct.pack('<I', mode)))
 
 
 @on(SVC, C2S, 0x35e)
