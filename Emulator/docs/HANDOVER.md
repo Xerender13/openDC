@@ -52,6 +52,15 @@ Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
   `[window+0x4e8]`, is copied at 0x6d56a3 and sent through the 0x4b3 builder (ctor 0x858d90, its only caller
   0x6d5788). **Next:** find what fills `[window+0x4e8]` — i.e. how the client picks the style digit — or test the
   car's *own* set (VShopItem 1942, "Hurricane 에어로셋 01(B타입)") instead of the generic "Aero2".
+  **Checked after the user's "it is the car model, not the item" note:** the aero model itself IS ported —
+  `vehicle\player\pc_0449s_02.nif` is in the pack, 809 189 bytes, md5 `cd3bb5f7f505`, byte-identical to what BOTH
+  source builds ship (Origin patch.006 and Skid Rush patch.010), and different from the default `pc_0449s_01.nif`
+  (593 991, `bbf3bcc878d9`). So the modified body exists; the client still renders the default one. The client's own
+  `GameLog_*.txt` shows per-car lookups failing for other cars (`GetVehicleDisplayInfo - wrong id: N` for 169 player
+  cars that have no VehicleDisplay row — the Hurricane 449 does have one) and `GetPartData - wrong id: 0` 34 times,
+  plus `GetDecalInfo fail 683,12` / `662,12` (the missing decal textures). Nothing in the log names 449 or the aero.
+  **Key next test:** equip an aero set on an ORIGINAL car (e.g. the Kicker/Drifter). If its body does not change
+  either, the fault is the emulator's aero slot value in general; if it does, it is specific to the ported cars.
 - **Missing decal textures for the ported cars**: `decal\pc_XXXXs_decal01.dds` / `_decal02.dds` were not copied by
   `portorigin` (it copies the `.dds` the *models* name, and the aero/body NIFs do not name the decals). Two are known
   missing for the Hurricane (patch.006 / patch.007). A car's own decals would show blank.
