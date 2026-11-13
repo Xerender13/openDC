@@ -8,6 +8,49 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 45 (2026-11-13): in-game test round — crew create / grade / donations, aero port, Neo City start
+
+**User tested in game throughout.** 250 tests pass. Emulator left running (2016, 111xx, skdb2016test).
+
+**Aero sets (the big fix, user-confirmed).** The 2016 client draws an aero body by its number, and in the original
+table every non-generic `Aero Parts Set` row has `index == its position in the category` (653 rows; only the six
+index-0 generic sets at the end differ). `portorigin` appended the new cars' rows with their Origin index numbers, so
+220 rows broke it — `pc_0449s_02` (the Hurricane's B body) sat at position **656** with index **674**, so the client
+resolved the wrong row and the car kept its default (A) body. Renumbered in `server_data_2016` and the client's
+`Data/Init.agt`; `portorigin.renumber_aero()` enforces it. The diagnostic that found it: the Kicker's style-1 aero is
+a category **4 bumper** (`pc_0000c_b02`, index 2), not a category 6 body, so original cars were never affected.
+Also: `pc_0449s_02` and `_03` are **byte-identical in both source builds** (md5 `cd3bb5f7f505`), so B and C must look
+the same; and `portorigin` never copied `data\decal\pc_XXXXs_decalNN.dds` (it collected only `data\vehicle\`), which
+is the client's `GetDecalInfo fail <car>,12` — 143 decals added.
+
+**Crew creation (2016).** `RANK_ORDER_SQL` (my ranking SELECT) reused the name `RANK_SQL`, which the member-rank UPDATE
+further down redefines, so `rankings()` bound 1 parameter to a 4-parameter statement (PostgreSQL 08P01) and every
+`team()` call raised after a create: the crew row, the character link and the 10 000 Mito were written, but no `0x34b`
+went out. Renamed; the old test used a Mock DB and could not catch it.
+
+**Crew grade / ranking.** Numbering every open crew 1..N gave the only crew (0 points) rank 1 -> grade 3 (S) and the
+red S nameplate. Now only `CHANNELWINCNT` or `TEAMPOINT` > 0 ranks a crew; the rest go back to `TEAMRANKING = 0`. The
+grade no longer rides in the u32 at `+0xeb`: `0x536674` does `lea eax,[eax+eax*1+0xef]` (the client indexes with it),
+so rank is plain at `+0xeb` and the grade at `+0xef`.
+
+**Donations (0xceb).** Wrapper `0x869090`/ctor `0x860650` forces the u32 at `+2` to 0 (`0x8690db`), so kind is `@6`,
+amount `@0xa`. kind 0 = OMD Gold Mark (the account's G Coin, 1 research point each, text 12838), kind 1 = Mito
+(1 per 100). The old code read the fixed zero as the kind and dropped everything.
+
+**Neo City (start).** The region gate is a content flag, not a message: `City.NeoCity` + `City.NeoOros/Cras/
+Koinonia/MoonPalace` live in `flags_2016.tsv` at `0x14` bits 21-25 and were never sent (the 2008 Contents.ini has no
+Neo entry); `login.content_flags()` sets them for 2016 now. `[session+0x198]`, which guards the HP handler, is **not**
+a Neo flag — the session constructor fills it from `MissionBattleAdv` (`0x946dbc`) and `+0x199` from `UseHeadLight`.
+`neocity.py` implements `0xf4d` -> `0xf4e` (`base ^ hp`, handler `0x53e630` accepts 0-20000 only, stores
+`[player+0x1da4] = [player+0x1da0] ^ value` via `0x760910`; format string `0x956c90` "Receive HP : %d"). The client's
+own `Cmd_Neo*` strings name the rest of the feature (docs/NEOCITY.md).
+
+**Open.** The crew "Contribution Rank" tab says `"is feature is currently unavailable"`: `+0x290` is Team Research
+Point (correct, from the user's screenshot), the message is in no client data file and `game.nui` has no plain
+strings, the tab requests nothing and the ranking service is an empty stub. Next test: a crew with two members.
+`docs/OPEN_FEATURES.md` holds the measured list of everything still unimplemented.
+
+
 ## Session 44 (2026-11-13): 2016 client cars re-ported from the newer Skid Rush build
 
 **User:** "restore the backup vehicles.agt in 2016 client and port the cars from <SkidRush> client to the 2016 client,

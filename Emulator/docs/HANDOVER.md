@@ -4,9 +4,63 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 44 (2026-11-13): 2016 cars re-ported from the newer Skid Rush build — resume here
+## Session 45 (2026-11-13): 2016 in-game test round — crew, cars, aero, Neo City start — resume here
 
-Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
+**User tested in game all session.** 250 tests pass. Everything below is committed and pushed (`99865f8` at the end).
+The emulator was left **running** (pid 1658250, 2016 ports 111xx, database `skdb2016test`) and the **client closed**.
+
+### What was fixed and CONFIRMED in game
+
+- **Porting aero sets (`portorigin` / VisualItem).** The 2016 client draws an aero body by its number, and in the
+  original table every non-generic `Aero Parts Set` row has **index == its position in the category**. The port
+  appended the new cars' rows with their Origin index numbers, so 220 rows broke that (`pc_0449s_02`, the Hurricane's
+  B body, sat at position 656 with index 674), and a ported car stayed on its default body. Renumbered to the row
+  position in `server_data_2016` **and** the client's `Data/Init.agt`; `portorigin.renumber_aero()` keeps it. **User
+  confirmed the fix.** The Kicker test that found it: its style-1 aero is a category **4 bumper**, not a category 6
+  body, which is why original cars were unaffected.
+- **Crew creation (2016).** My `RANK_ORDER_SQL` had reused the name `RANK_SQL` (the member-rank UPDATE, 4 params), so
+  the UPDATE won and every `team()` call raised after a create: the crew was made in the database but the client got
+  no `0x34b`. Renamed; `test_ranking_statements_are_distinct` guards it. **Crew creation and the crew window work.**
+- **Crew grade / ranking.** `rankings()` numbered every open crew 1..N, so the only crew (0 points) took rank 1 ->
+  grade 3 (S) with the red S nameplate. Now only a crew with `CHANNELWINCNT` or `TEAMPOINT` > 0 is ranked; everything
+  else is written back to `TEAMRANKING = 0` (the client's "no grade"). The grade also no longer rides in the top byte
+  of the u32 at `+0xeb` — `0x536674` does `lea eax,[eax+eax*1+0xef]`, i.e. the client uses that u32 as an index — so
+  the rank is written plain at `+0xeb` and the grade at `+0xef`.
+- **Team Research Lab works** (user). Its gate is crew EXP: Team Level 1 = 50 000 crew EXP (1 % of members' EXP), and
+  the 26 research rows need level 1-9.
+- **Donations (`0xceb`).** The sender forces the u32 at `+2` to 0 (`0x8690db`), so kind is `@6` and the amount `@0xa`;
+  the old code read that fixed zero as the kind and dropped every donation. kind 0 = OMD Gold Mark (the account's
+  G Coin, 1 research point each), kind 1 = Mito (1 point per 100).
+- **`gmcrewexp`** — `tools.gmctl crewexp NAME AMOUNT` and the in-game chat command `gmcrewexp [name] amount` (GM
+  only): crew EXP + research points, so Team Level 1 is reachable without grinding.
+
+### Done, not yet confirmed in game
+
+- **Neo City stage 1**: the region gate is content flags, not a message. `login.content_flags()` now sets
+  `City.NeoCity` + `City.NeoOros/Cras/Koinonia/MoonPalace` (flags_2016.tsv `0x14` bits 21-25) for 2016. **Check Oros
+  for the entry quest.**
+- **Neo City HP sync** (`neocity.py`): `0xf4d` -> `0xf4e`, `base ^ hp`, full 20 000 until enemies exist.
+- **Decals**: `portorigin` never copied `data\decal\pc_XXXXs_decalNN.dds` (it only collected `data\vehicle\`); 143
+  decals for the ported cars are in `Data/vehicles.agt` again.
+
+### Open
+
+- **Crew "contribution rank" tab** shows `"is feature is currently unavailable"`. `Team Research Point = +0x290` is
+  ours and correct (screenshot), `Team Contribution 50 000 000` is derived by the client. The message is in no client
+  file (GlobalText, GlobalContent, the exe; `game.nui` has no plain strings), the tab sends no request, the ranking
+  service is an empty stub, and `TeamSystemRenewalStep` is already 3. **Next cheap test: add a second member to the
+  crew** — a ranking of one may be what the client calls unavailable.
+- **Neo City stages 2-5** (`docs/NEOCITY.md`): chapter entry (`Cmd_NeoCitySuggest/Agree/Load`), enemies, gear /
+  `0x4c4` repair, rewards. The client's own `Cmd_Neo*` symbol names are listed there as the map.
+- **Still unimplemented features** (`docs/OPEN_FEATURES.md`, measured): DCGP `0x776-0x778`, World Laptime
+  `0x3c0`/`0xf51-0xf5e`, honor ranking `0xfae-0xfb2`, Neo HUS combat, Neo repair `0x4c4`/`0x4c5`, PvpCollisionDamage
+  `0xfbd`/`0xfbe`, GMEventRush `0xfc3`, rank pages `0xfa2-0xfa5`, plus size-changed messages never built.
+- **The only requests the client sends that we ignore** are `0x0f4d` (Neo HP poll, answered now), `0x0e8d` and
+  `0x02d5` (no reply expected), `0x0fc1`/`0x0fb4` (GM event) and `0x0777` (DCGP).
+
+## Session 44 (2026-11-13): 2016 cars re-ported from the newer Skid Rush build
+
+Details: EMULATOR_NOTES session 44. 240 tests pass.
 - The newer Skid Rush build's packs use the **standard** NayaPack key (byte 16 = 0x31); the 2025 Origin client keeps
   0x6c. `tools/portorigin.py` gained `--key auto|origin|standard`.
 - `portorigin reset` restored the pre-port 2016 packs; then `apply --origin ../SkidRush/client` added **243 player
