@@ -43,6 +43,15 @@ Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
   for cars 2 and 5 carry a **different ITEM_DATA format** (`'4020000011079220216'`, no 10-space prefix), so those may
   decode to 0. The defect is therefore inside the client's own aero application (or in the generic-set decode), not in
   the ported tables; the next step is that code, not the data.
+  **Answer (user equipped Aero2):** both purchases carry the **same** text. `SKID_VSITEM_TB` and the 0x4b3 log lines:
+  `buy visual item pc_Aero (Aero) text '          449121935'` (22:07:55) and `pc_Aero2 (Aero2) text
+  '          449121935'` (22:11:52). The client itself sends the item text (`vshop.item_text` stores it verbatim), so
+  Aero and Aero2 both name car 449, style 1, uid 21935 = the *same* B model — they are the same item, which is why
+  the look does not change. The generic rows (20293-20470) are byte-identical between the original 2016 table and the
+  ported one, so the port did not flatten them. The style digit is chosen in the shop window: the text sits at
+  `[window+0x4e8]`, is copied at 0x6d56a3 and sent through the 0x4b3 builder (ctor 0x858d90, its only caller
+  0x6d5788). **Next:** find what fills `[window+0x4e8]` — i.e. how the client picks the style digit — or test the
+  car's *own* set (VShopItem 1942, "Hurricane 에어로셋 01(B타입)") instead of the generic "Aero2".
 - **Missing decal textures for the ported cars**: `decal\pc_XXXXs_decal01.dds` / `_decal02.dds` were not copied by
   `portorigin` (it copies the `.dds` the *models* name, and the aero/body NIFs do not name the decals). Two are known
   missing for the Hurricane (patch.006 / patch.007). A car's own decals would show blank.
