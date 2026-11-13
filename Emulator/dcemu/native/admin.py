@@ -25,15 +25,15 @@ from . import context, now
 
 KICK_TEXT = 'Kicked by a GM.'
 DUPLICATE_TEXT = 'Disconnecting by another login!'
-BLOCK_GAME_SQL = "UPDATE SKID_CHARACTER_TB SET BLOCKGAMEDATE=GetDate()+%s WHERE SERVERID=%s AND UCNAME=UPPER(%s) AND STATE <> 'D'"
-BLOCK_CHAT_SQL = "UPDATE SKID_CHARACTER_TB SET BLOCKCHATDATE=GetDate()+%s WHERE SERVERID=%s AND UCNAME=UPPER(%s) AND STATE <> 'D'"
+BLOCK_GAME_SQL = "UPDATE SKID_CHARACTER_TB SET BLOCKGAMEDATE=GetDate()+%s*interval '1 day' WHERE SERVERID=%s AND UCNAME=UPPER(%s) AND STATE <> 'D'"
+BLOCK_CHAT_SQL = "UPDATE SKID_CHARACTER_TB SET BLOCKCHATDATE=GetDate()+%s*interval '1 day' WHERE SERVERID=%s AND UCNAME=UPPER(%s) AND STATE <> 'D'"
 CLEAR_SQL = "UPDATE SKID_CHARACTER_TB SET {}=NULL WHERE SERVERID=%s AND UCNAME=UPPER(%s) AND STATE <> 'D'"
 BLOCKS_SQL = """SELECT CASE WHEN BLOCKGAMEDATE > GetDate() THEN 1 ELSE 0 END,
-    CASE WHEN BLOCKCHATDATE > GetDate() THEN DATEDIFF(second, GetDate(), BLOCKCHATDATE) ELSE 0 END
+    CASE WHEN BLOCKCHATDATE > GetDate() THEN extract(epoch FROM BLOCKCHATDATE - GetDate())::int ELSE 0 END
   FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s"""
 CHAR_SQL = "SELECT CNAME, MEMBERID FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND UCNAME=UPPER(%s) AND STATE IN ('P', 'R')"
 VALID_SQL = "SELECT VALID FROM MEUSERMT WHERE MEMBERID=%s"
-SET_VALID_SQL = "SET NOCOUNT ON; UPDATE MEUSERMT SET VALID=%s WHERE MEMBERID=%s; SELECT @@ROWCOUNT"
+SET_VALID_SQL = "UPDATE MEUSERMT SET VALID=%s WHERE MEMBERID=%s"
 
 
 def message(session, text):
@@ -140,8 +140,7 @@ async def block_chat(name, minutes):
 async def ban(account, valid=False):
     """account: an account ID, or the name of one of its characters. -> the account, or None."""
     db = context.db
-    r = await db.row(SET_VALID_SQL, ('y' if valid else 'n', account))
-    if not (r and r[0]):
+    if not await db.execute(SET_VALID_SQL, ('y' if valid else 'n', account)):
         c = await db.row(CHAR_SQL, (db.server_id, account))
         if not c or c[1].startswith('$'):
             return None
@@ -157,12 +156,10 @@ async def ban(account, valid=False):
 
 
 ACCOUNT_SQL = "SELECT MEMBERID FROM MEUSERMT WHERE MEMBERID=%s"
-COIN_ADD_SQL = """SET NOCOUNT ON;
-IF NOT EXISTS (SELECT 1 FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s)
-  INSERT INTO SKID_UNALISCOIN_TB (MEMBERID, COIN, LASTDATE) VALUES (%s, 0, GETDATE());
-UPDATE SKID_UNALISCOIN_TB SET COIN=CASE WHEN COIN+%s < 0 THEN 0 ELSE COIN+%s END, LASTACTION='GM', LASTDATE=GETDATE()
-  WHERE MEMBERID=%s;
-SELECT COIN FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s"""
+COIN_NEW_SQL = ("INSERT INTO SKID_UNALISCOIN_TB (MEMBERID, COIN, LASTDATE) SELECT %s, 0, GETDATE()"
+                " WHERE NOT EXISTS (SELECT 1 FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s)")
+COIN_ADD_SQL = ("UPDATE SKID_UNALISCOIN_TB SET COIN=CASE WHEN COIN+%s < 0 THEN 0 ELSE COIN+%s END, LASTACTION='GM',"
+                " LASTDATE=GETDATE() WHERE MEMBERID=%s RETURNING COIN")
 
 
 async def add_coin(name, amount):
@@ -176,7 +173,8 @@ async def add_coin(name, amount):
         account = r[0] if r else None
     if not account:
         return None, 0
-    r = await db.row(COIN_ADD_SQL, (account, account, amount, amount, account, account))
+    await db.execute(COIN_NEW_SQL, (account, account))
+    r = await db.row(COIN_ADD_SQL, (amount, amount, account))
     balance = int(r[0]) if r else 0
     from .game.login import send
     for s in connections(account):

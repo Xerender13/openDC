@@ -72,18 +72,19 @@ def posts(row):
 
 
 PAGE = 10
-# date type -> condition on LASTDATE (the database's GetDate(), so its own clock); day 0 of SQL Server is a Monday
-_TODAY = "CAST(CAST(GETDATE() AS date) AS datetime)"
-_MONTH = "DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)"
-_WEEK = f"DATEADD(day, -(DATEDIFF(day, 0, GETDATE()) %% 7), {_TODAY})"
+# date type -> condition on LASTDATE (the database's GetDate(), so its own clock); weeks start on Monday (as SQL
+# Server's day 0 did; date_trunc('week') too)
+_TODAY = "date_trunc('day', GETDATE())"
+_MONTH = "date_trunc('month', GETDATE())"
+_WEEK = "date_trunc('week', GETDATE())"
 RANGES = {0: "", 1: f" AND LASTDATE >= {_MONTH}", 2: f" AND LASTDATE >= {_WEEK}",
-          3: f" AND LASTDATE >= DATEADD(month, -1, {_MONTH}) AND LASTDATE < {_MONTH}",
-          4: f" AND LASTDATE >= DATEADD(day, -7, {_WEEK}) AND LASTDATE < {_WEEK}", 5: f" AND LASTDATE >= {_TODAY}"}
-RECORD_SQL = ("SET NOCOUNT ON; UPDATE SKID_ARBEITREC_TB SET TIME=%s, TID=%s, TEAMNAME=%s, LASTDATE=GetDate()"
-              " WHERE SERVERID=%s AND CID=%s AND AID=%s AND TIME > %s;"
-              " IF NOT EXISTS (SELECT 1 FROM SKID_ARBEITREC_TB WHERE SERVERID=%s AND CID=%s AND AID=%s)"
-              " INSERT INTO SKID_ARBEITREC_TB (SERVERID, AID, TIME, CID, CNAME, TID, TEAMNAME, LASTDATE)"
-              " VALUES (%s, %s, %s, %s, %s, %s, %s, GetDate())")
+          3: f" AND LASTDATE >= {_MONTH} - interval '1 month' AND LASTDATE < {_MONTH}",
+          4: f" AND LASTDATE >= {_WEEK} - interval '7 days' AND LASTDATE < {_WEEK}", 5: f" AND LASTDATE >= {_TODAY}"}
+RECORD_SQL = ("UPDATE SKID_ARBEITREC_TB SET TIME=%s, TID=%s, TEAMNAME=%s, LASTDATE=GetDate()"
+              " WHERE SERVERID=%s AND CID=%s AND AID=%s AND TIME > %s")
+RECORD_NEW_SQL = ("INSERT INTO SKID_ARBEITREC_TB (SERVERID, AID, TIME, CID, CNAME, TID, TEAMNAME, LASTDATE)"
+                  " SELECT %s, %s, %s, %s, %s, %s, %s, GetDate()"
+                  " WHERE NOT EXISTS (SELECT 1 FROM SKID_ARBEITREC_TB WHERE SERVERID=%s AND CID=%s AND AID=%s)")
 
 
 async def top(table_idx, dtype, offset, count):
@@ -91,7 +92,7 @@ async def top(table_idx, dtype, offset, count):
     db = context.db
     rows = await db.rows("SELECT TIME, CID, CNAME, TID, TEAMNAME FROM SKID_ARBEITREC_TB WHERE SERVERID=%s AND AID=%s"
                          + RANGES.get(dtype, "") + " ORDER BY TIME ASC, LASTDATE ASC"
-                         " OFFSET %s ROWS FETCH NEXT %s ROWS ONLY", (db.server_id, table_idx, offset, count))
+                         " LIMIT %s OFFSET %s", (db.server_id, table_idx, count, offset))
     return [(offset + k + 1, int(r[0]), int(r[1]), r[2] or '', int(r[3] or 0), r[4] or '') for k, r in enumerate(rows)]
 
 
@@ -234,8 +235,9 @@ async def job_reward(session, frame):
     db, ms, aid = context.db, j.get('ms', 0), j['table_idx']
     if ms > 0:
         team = c.team_id if c.team_id > 0 else 0
-        await db.execute(RECORD_SQL, (ms, team, c.team_name[:16], db.server_id, c.cid, aid, ms, db.server_id, c.cid, aid,
-                                      db.server_id, aid, ms, c.cid, c.name, team, c.team_name[:16]))
+        await db.execute(RECORD_SQL, (ms, team, c.team_name[:16], db.server_id, c.cid, aid, ms))
+        await db.execute(RECORD_NEW_SQL, (db.server_id, aid, ms, c.cid, c.name, team, c.team_name[:16],
+                                          db.server_id, c.cid, aid))
     from .rewards import delivery_rewards, give
     from .items import mod_list
     gains, given = await give(p, delivery_rewards(row[0], j['medal']))

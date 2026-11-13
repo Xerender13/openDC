@@ -40,10 +40,8 @@ from . import context, nation, ticket_for
 LOGIN, LOGIN_ACK, SERVER_LIST = 0x14, 0x16, 0x17
 OK, WRONG_PASSWORD, UNKNOWN_ID, NO_ID, SUSPENDED = 0, 1, 2, 4, 12
 REGISTER_ID = re.compile(r'[A-Za-z0-9_.-]{1,32}')   # MEMBERID is varchar(32); '$' marks deleted characters' owners
-REGISTER_SQL = """SET NOCOUNT ON;
-IF NOT EXISTS (SELECT 1 FROM MEUSERMT WHERE MEMBERID=%s)
-  INSERT INTO MEUSERMT (MEMBERID, PASSWORD, VALID, JOINDATE) VALUES (%s, %s, 'y', GETDATE());
-SELECT @@ROWCOUNT"""
+REGISTER_SQL = ("INSERT INTO MEUSERMT (MEMBERID, PASSWORD, VALID, JOINDATE) SELECT %s, %s, 'y', GETDATE()"
+                " WHERE NOT EXISTS (SELECT 1 FROM MEUSERMT WHERE MEMBERID=%s)")
 
 
 @dataclass
@@ -101,7 +99,7 @@ async def register(member, password):
     if not context.auto_register or not REGISTER_ID.fullmatch(member):
         return UNKNOWN_ID
     md5 = hashlib.md5(password.encode('utf-8')).hexdigest()
-    added, = await context.db.row(REGISTER_SQL, (member, member, md5))
+    added = await context.db.execute(REGISTER_SQL, (member, md5, member))
     print(f'auth: registered account {member!r}' if added else f'auth: account {member!r} appeared meanwhile', flush=True)
     return OK if added else await check_login(member, password)
 

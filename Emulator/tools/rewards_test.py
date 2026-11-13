@@ -8,6 +8,9 @@ from dcemu.native.data import Tables
 from dcemu.wire import Frame
 
 cp = configparser.ConfigParser(inline_comment_prefixes=(';',)); cp.read('emulator.ini'); d = cp['database']
+import os as _os
+for _k in ('host', 'port', 'name'):            # DCEMU_DB_NAME=... runs it on a copy
+    d[_k] = _os.environ.get('DCEMU_DB_' + _k.upper(), d[_k])
 context.db = Database(d['host'], int(d['port']), d['user'], d['password'], d['name'], int(d['server_id']))
 context.data = Tables('server_data', 'server_data/tables', 'server_data/adminlist.txt')
 from dcemu.native.game import cars, driftuse, gotcha, items, login, player, vshop  # noqa

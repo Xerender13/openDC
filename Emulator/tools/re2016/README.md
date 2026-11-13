@@ -24,3 +24,6 @@ python3 fidx.py                       # function index of both -> f2011.pkl, f20
   `push "Cmd_X"; push handler; push type`).
 - The 2016 flag table: a flat image of the 2016 exe (sections at their addresses from 0x400000) through
   `Server2008/tools/dev/flagtable.py img` -> `dcemu/data/flags_2016_raw.tsv` (needs capstone).
+- `sender_sizes.py --dis11 text.dis --dis16 dev.dis --out DIR`: every C>S message of both clients with its body size
+  (allocator 0x807450 / 0x86c800 + the type write), compared 2011 / 2016 and against the emulator's `@on` handlers
+  (session 42; written by a delegated worker, checked by hand on 0x94, 0x29e, 0xfb3, 0x4c4, 0xb7, 0x1d8, 0x1dd).

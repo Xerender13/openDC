@@ -28,6 +28,8 @@ class RentalTest(unittest.TestCase):
         context.data = self.tables
         context.db = SimpleNamespace(server_id=2016, execute=AsyncMock(), row=AsyncMock(return_value=(77, 10000, 200)),
                                      rows=AsyncMock(return_value=[]))
+        # PostgreSQL: the multi-statement work runs in db.transaction(fn); here it answers as row() did
+        context.db.transaction = lambda fn: context.db.row(fn)
         c = character()
         c.cars = [Car(42, 50, 0x01010102, 9, 0, 40., 0., 0, 40., 5.)]
         c.part_inven_idx = 200

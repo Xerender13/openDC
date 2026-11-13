@@ -38,7 +38,6 @@ Catalog:
 """
 import struct
 
-import pytds
 
 from ..handlers import on
 from ..protocol import C2S
@@ -141,7 +140,7 @@ async def put_image(session, image_id, attr, colorkey):
         return False
     db = context.db
     await db.execute("INSERT INTO SKID_IMAGE_TB(IMGID, SERVERID, IMGTYPE, IMGSIZE, IMGCOLORKEY, IMGDATA, CDATE)"
-                     " VALUES (%s, %s, %s, %s, %s, %s, GetDate())", (image_id, db.server_id, attr, len(data), colorkey, pytds.Binary(data)))
+                     " VALUES (%s, %s, %s, %s, %s, %s, GetDate())", (image_id, db.server_id, attr, len(data), colorkey, bytes(data)))
     return True
 
 

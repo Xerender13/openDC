@@ -28,13 +28,12 @@ from .login import SVC, error, send, stat_frames
 from .records import Item
 
 NEW, REMOVED, CHANGED = 1, 2, 3
-NEXT_GID_SQL = "SET NOCOUNT ON; UPDATE SKID_SEQUENCE_TB SET item_sq1=item_sq1+1 OUTPUT INSERTED.item_sq1"
-INSERT_SQL = "EXEC PC_SKID_INSERTITEM %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s"
+NEXT_GID_SQL = "UPDATE SKID_SEQUENCE_TB SET item_sq1=item_sq1+1 RETURNING item_sq1"
+INSERT_SQL = "SELECT pc_skid_insertitem(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"   # db/postgres/02_procedures.sql
 STACK_SQL = "UPDATE SKID_ITEM_TB SET STACKNUM=%s WHERE SERVERID=%s AND CID=%s AND INVENIDX=%s"
 DELETE_SQL = "DELETE FROM SKID_ITEM_TB WHERE SERVERID=%s AND CID=%s AND INVENIDX=%s"
-GOLD_SQL = """SET NOCOUNT ON;
-UPDATE SKID_CHARACTER_TB SET GOLD=GOLD+%s WHERE SERVERID=%s AND CID=%s AND GOLD+%s>=0;
-SELECT @@ROWCOUNT, GOLD FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s"""
+GOLD_SQL = "UPDATE SKID_CHARACTER_TB SET GOLD=GOLD+%s WHERE SERVERID=%s AND CID=%s AND GOLD+%s>=0 RETURNING GOLD"
+GOLD_NOW_SQL = "SELECT GOLD FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s"
 
 
 def mod_list(*changes):
@@ -45,10 +44,13 @@ def mod_list(*changes):
 async def add_money(c, delta):
     """Money + delta in the database (never below 0) -> True if done; c.mito follows the database."""
     db = context.db
-    r = await db.row(GOLD_SQL, (delta, db.server_id, c.cid, delta, db.server_id, c.cid))
+    r = await db.row(GOLD_SQL, (delta, db.server_id, c.cid, delta))
+    done = r is not None
+    if not done:
+        r = await db.row(GOLD_NOW_SQL, (db.server_id, c.cid))
     if r:
-        c.mito = int(r[1])
-    return bool(r and r[0])
+        c.mito = int(r[0])
+    return done
 
 
 # ---- drift shop bonus items (XiCsCharInfo::HancoinBonusUpdate flags) ----------------------------------
@@ -263,6 +265,8 @@ async def sell_item(session, frame):
     if not p or len(frame.payload) < 12:
         return
     table_idx, count, inven_idx = struct.unpack_from('<III', frame.payload)
+    if session.state.get('trade') is not None:
+        return error(session, '20113')          # 2008 Cmd_SellItem 0x5febee: "This is not allowed during a trade."
     it = next((i for i in p.items if i.inven_idx == inven_idx), None)
     info = context.data.item_info(table_idx)
     if not it or not info or it.item_id.startswith('r_type_') or it.table_idx != table_idx or count < 1 or count > it.stack or (it.state & 0xffff) == 4:

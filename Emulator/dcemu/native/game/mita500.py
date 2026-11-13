@@ -42,11 +42,10 @@ MAX_PER_MESSAGE = 16                # BS_PktMita500Position m_Info[16]
 DAILY = 3                           # 2008: more than 2 drinks today -> 20125
 MODE = 'MITA500'
 STATE_SQL = "SELECT TRYCNT, WINCNT, POINT, NEXP, LASTDATE FROM SKID_PLAYMODE_TB WHERE SERVERID=%s AND CID=%s AND MODEID=%s"
-SAVE_SQL = """SET NOCOUNT ON;
-UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), TRYCNT=%s, WINCNT=%s, POINT=%s, NEXP=%s WHERE SERVERID=%s AND CID=%s AND MODEID=%s;
-IF @@ROWCOUNT = 0
-  INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,
-    NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),%s,%s,%s,0,%s,0,0,0,%s)"""
+SAVE_SQL = ("UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), TRYCNT=%s, WINCNT=%s, POINT=%s, NEXP=%s WHERE SERVERID=%s"
+            " AND CID=%s AND MODEID=%s",
+            "INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,"
+            " NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),%s,%s,%s,0,%s,0,0,0,%s)")
 
 boxes = {}                          # area -> [[position index, shows again (time.time()), cid], ...]
 
@@ -98,8 +97,9 @@ def bonus_rate(p):
 
 async def save(p):
     m, db, c = p.mita, context.db, p.char
-    await db.execute(SAVE_SQL, (m['today'], m['total'], m['rate'], m['end'], db.server_id, c.cid, MODE,
-                                db.server_id, c.cid, c.name, MODE, m['today'], m['total'], m['rate'], m['end'], c.member))
+    await db.update_or_insert(SAVE_SQL[0], (m['today'], m['total'], m['rate'], m['end'], db.server_id, c.cid, MODE),
+                              SAVE_SQL[1], (db.server_id, c.cid, c.name, MODE, m['today'], m['total'], m['rate'],
+                                            m['end'], c.member))
 
 
 def buff_frame(p, paid=0, new=False):

@@ -65,9 +65,8 @@ MAIL_SQL = ("INSERT INTO SKID_MSG_TB(SERVERID, RECEIVER_ID, SENDER_ID, SNAME, MS
             " ITEM, SENDDATE) VALUES (%s, %s, %s, %s, %s, 'N', '', %s, 0, %s, GetDate())")
 WAITING_SQL = ("SELECT ITEMID, PERIODIDX, ITEM_DATA, DSTNAME FROM SKID_VISUALITEM_HISTORY"
                " WHERE SERVERID=%s AND CID=%s AND GID=%s AND GETTYPE=2 AND STATE=2")
-TAKE_SQL = """SET NOCOUNT ON;
-UPDATE SKID_VISUALITEM_HISTORY SET STATE=0, USETIME=%s WHERE SERVERID=%s AND CID=%s AND GID=%s AND GETTYPE=2 AND STATE=2;
-SELECT @@ROWCOUNT"""
+TAKE_SQL = ("UPDATE SKID_VISUALITEM_HISTORY SET STATE=0, USETIME=%s WHERE SERVERID=%s AND CID=%s AND GID=%s AND GETTYPE=2"
+            " AND STATE=2 RETURNING 1")
 MAIL_DELETE_SQL = "DELETE FROM SKID_MSG_TB WHERE SERVERID=%s AND RECEIVER_ID=%s AND MSGKIND=%s AND ITEM LIKE %s"
 
 # VShopItem category 14 (CARREMODELING, the permanent V upgrades i_d_u_01..08): the client buys them as a car upgrade
@@ -207,8 +206,9 @@ async def return_upgrades(session, p):
     from .vshop import destroy
     t, c, db = context.data, p.char, context.db
     for v in [v for v in p.vsitems if t.visuals.get(v.table_idx) and t.visuals[v.table_idx].category == CAR_UPGRADE]:
-        h = await db.row("SELECT TOP 1 DSTNAME, CHAR_MSG FROM SKID_VISUALITEM_HISTORY WHERE SERVERID=%s AND CID=%s"
-                         " AND ITEMID=%s AND GETTYPE=2 AND STATE=0 ORDER BY USETIME DESC", (db.server_id, c.cid, v.item_id))
+        h = await db.row("SELECT DSTNAME, CHAR_MSG FROM SKID_VISUALITEM_HISTORY WHERE SERVERID=%s AND CID=%s"
+                         " AND ITEMID=%s AND GETTYPE=2 AND STATE=0 ORDER BY USETIME DESC LIMIT 1",
+                         (db.server_id, c.cid, v.item_id))
         sender, message = ((h[0] or '').strip(), (h[1] or '').strip()) if h else (c.name, '')
         r = await db.row(mail.RECEIVER, (db.server_id, sender)) if sender else None
         when = now()

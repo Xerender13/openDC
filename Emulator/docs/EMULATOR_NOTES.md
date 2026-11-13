@@ -8,6 +8,95 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 42 (2026-11-13): 2011 / 2016 request audit, chase end fix, password joins, player trade
+
+**User:** "Continue work delegating to DeepSeek. Check all 2016 client handlers compared to 2011, so that all
+existing features work, then work on unimplemented features based on client and internet information. I will test
+everything later." **Nothing here was tried in game** (the servers were not running; nothing restarted).
+
+**Audit.** S>C: `tools/re2016/compare_sizes.py` (handler sizes of both clients, 61 types differ) against the
+emulator's senders; with session 40's timeline / log check every size-changed message the emulator builds has its
+2016 branch (spot-checked again: 0x10d / 0x10f / 0x124 / 0x341 / 0x3fc / 0x7d1 / 0xfa1). C>S: new
+`tools/re2016/sender_sizes.py` (worker 3; every sender of both clients: allocator 0x807450 / 0x86c800 + the type
+write) -> 33 requests changed size, 51 only in 2016. Of the changed ones the emulator handles, each was checked
+against both senders: rooms / moves / ghost / crew create / channel rooms / manufacture already had 2016 layouts;
+0x26f (team change: a 4th u32 after the team, unused), 0x52c (lap record: same fields, 12 unused bytes), 0x294 fine.
+**One bug:** 0xb7 ChaseEnd: 2016 (sender 0x848765, 0x38) inserts a u16 @6, the result moves 0xe -> 0x10; the
+emulator read the 2011 offset (a 2016 "stop" logged result 706, 2026-10-20 15:24:19). Fixed (chase.chase_end).
+Also found: the timeline's "out" sizes (session 40 thought there were none) are C>S ('#N' = the type in decimal).
+
+**Unhandled requests that existed in 2011 too, now built:**
+- 0x1d8 ChannelRoomSecureJoin (0x1d7 + wchar[30] password after the PlayerInfo: 2016 0x84aee6 wcsncpy to @0x10c)
+  and 0x1dd SecureSwitchToPlayer (UserInfo + password: 2016 0x8673db, @0x12): rooms.py. Rooms with a password
+  could not be joined from a channel list or by an observer taking a seat.
+- **Player trade 0x1f4-0x203** (trade.py, new module; the emulator had none). Layouts: the 2011 client (0x51d920,
+  0x51db00, 0x515650, 0x5156b0, 0x515700, 0x51d9b0, 0x51dc60, 0x515750; window flags 0x70f300-0x70f470) and the
+  2008 server's PDB structs; rules from the 2008 server (worker 4 read PacketParser::Cmd_Trade* / BS_TradeRoom;
+  the addresses are in the module docstring). 2016: only 0x1f9 grows (+4, the item record). Ours: Mito through
+  0x202 (not in 2008), mail.sendable as the tradeable rule, no copy of the 2008 holes (anyone knowing a trade id
+  could act on it). Selling (20113) and auction registration (20118) are refused during a trade, as 2008.
+  Tests tests/test_trade.py (6), tests/test_requests2016.py.
+
+**Valentine chocolate event (2016; valentine.py):** C>S 0xfb9 (sender 0x86b020, 0x101: the station NPC's key, a
+char string from the station window 0x79b350, button 0x86485) -> S>C 0xfba (handler 0x540f20, 0x72: the key; the
+client finds its Init/ValentainReward.xlt row (0x770bc0) and shows the NPC's thanks). Ours: one
+2013_valen_choco_success taken, the row's Reward Group given (driftuse), then 0xfba. The event's buttons need
+Etc.EventValentainChocolate (2016 flag): on in emulator.ini [2016]. Test Valentine2016Test.
+
+**Crew level / research / boards (2016; crewlevel.py, worker 5's reading of the 2016 exe):** the 664-byte crew
+record's new fields (+0x180 introduction, +0x284 crew EXP, +0x28c level, +0x290 i64: here the research points, a
+guess) and the 0x349 tail (u32 @0x2ac: the level panel's EXP); 0xce5 introduction (master), 0xce6 -> 0xce7 the two
+paged boards (0x408 news: research started, level ups; 0x409 empty for now), 0xce8 -> 0xce9 research list from the
+client's TeamResearchTable, 0xcea start (master; level, previous research, points; one at a time), 0xcec buy the
+finished research's item for Team Contribution Points. Rules from the client's texts: 1% of members' EXP to the crew
+(12725), 1 contribution point per 1,000 contributed crew EXP (12833); ours: research points = the crew EXP gained
+(the donation message 0xceb is not proven, only logged), the item's period = the table's count/period. New tables
+SKID_TEAM2016_TB, SKID_TEAMRESEARCH_TB, SKID_TEAMCONTRIB_TB, SKID_TEAMEVENT_TB (made on first use). 2011 unchanged.
+Tests tests/test_crewlevel.py (7).
+
+**Crew window (2016; worker 6 read every control of it):** *broken before:* creating a crew: the 2016 dialog sends
+**0xce4** (0x34: i64 crew @2, i64 @0xa unknown, wchar[17] name @0x12; sender 0x868ca0 from 0x686d00), 0x34a has no
+caller in 2016 -> now crews.create_team_2016 (the 0x34a rules and 0x34b answer, no description / URL, mark 1). Rank
+changes: 0x375's handler is empty in both clients (0x546910 / 0x530720) and 0x359's sets rank 2 for everyone
+(0x546927) -> the changed members now also get 0x349 with their real rank. Unsolicited 0x358 pushes after a
+change: the 2016 handlers use their windows without a null check (acts 0x3f2 / 0x3f4: 0x68ae50, 0x407: 0x679980) and
+the 2016 crew window asks with act 0x407 -> 2016 pushes only the act the client last asked for (push_members); 2011
+unchanged. Donations 0xceb (kind 0 OMD Gold Mark / 1 Mito by the panel's dialogs 12842 / 12843): kind 1 takes the Mito
+and gives 1 research point per 100 (12838); kind 0 only logged (no OMD Gold Mark balance here). *Still open:* the
+Acceptance page (join requests kept 7 days, 12730): its request is not pinned down (0x357 act 0x3f4 or the unknown
+0x36f, 11 bytes) and the emulator keeps no queue (an offline master: 20199); the crew grade byte +0xef and the u32
++0x280 (both zero); TEAMRANKING never computed. Tests CrewWindow2016Test.
+
+**PostgreSQL (user: "start working on porting the database to PostgreSQL. After that can drop the Microsoft SQL
+support"):** the emulator now uses PostgreSQL 17 (container dcemu_pg, 127.0.0.1:15432, volume dcemu_pg-data, user
+dcemu; databases skdbtw / skdb2016test) through pg8000 (pure Python: runs on ARM too). SQL Server support is gone from
+the emulator, the launchers (launch.sh / launch.ps1), docker-compose.yml and the Dockerfile; db/*.sql, setup-db.sh
+and SKDBTW_clean.bak are deleted (git). Kept: tools/pgport/migrate.py (worker 7; SQL Server -> PostgreSQL, needs
+python-tds, for old installs). How:
+- Schema and rows moved by the tool: names unquoted (lower case), text columns citext (SQL Server compared
+  case-insensitively; checked: CNAME='xERANDER' finds Xerander), numeric identities as sequences, datetime ->
+  timestamp(3). db/postgres/00_compat.sql: citext, getdate() / getutcdate() / sysdatetime() / isnull(); 02_procedures.sql:
+  PC_SKID_CREATECAR / PC_SKID_INSERTITEM as functions (the other four procedures were unused).
+- db.py: one statement per call (no batches), execute() returns the row count, update_or_insert() for the
+  "UPDATE; IF @@ROWCOUNT = 0 INSERT" pattern, transaction(fn) for what the BEGIN TRAN batches did (character creation,
+  rental redemption / expiry, the apprentice starter, car purchase, fuel payment, channel tax). Every T-SQL statement
+  in dcemu/ was rewritten (OUTPUT INSERTED -> RETURNING, @@ROWCOUNT -> RETURNING 1 / row counts, TOP / OFFSET FETCH
+  -> LIMIT / OFFSET, DATEADD / DATEDIFF -> intervals / extract(epoch), LIKE '[_]' -> '\\_', IF EXISTS -> two steps).
+- Migrated: SKDBTW -> skdbtw and SKDB2016TEST -> skdb2016test (row counts equal for all 64 / 65 tables, sequences
+  set), and the two clean backups -> db/postgres/<name>_clean.dump (the first start makes a missing database from it).
+- Checked: 229 unit tests; a test emulator on 112xx against a migrated copy with the scripted client (register,
+  create a character with its car, enter the game: no error); tools/auction_test.py and tools/rewards_test.py on a
+  copy of skdbtw: ALL DONE; launch.sh status / db / backup-db and the first-start creation with a throwaway name.
+  Not run: launch.ps1 (no Windows here), the 2016 client, the live servers.
+- **The local `../Emulator 2011` copy still runs the SQL Server code** with its database in dcemu2011_db (untouched);
+  copying this over means its database is skdbtw in PostgreSQL (already migrated from the same SKDBTW).
+
+**Still unhandled (both clients):** 0xce NeoHuvEnd, 0xeeb NeoMissionCompleteParam (Neo City is not in the
+emulator), 0x1e3, 0x22b (relayed?), 0xcf0, 0xf49, 0xfa2 / 0xfa4 ranking pages (the 0xc4 / 0xb4 entry layout is
+not read yet), and the 2016-only list in sender_sizes' report (DCGP 0x776-0x778, crew research 0xce4-0xcec, World
+Laptime 0xf4d-0xf5d, honor ranking 0xfae / 0xfb0, Valentine 0xfb7-0xfb9, ...). Internet sources: searched, nothing
+usable (fan wikis blocked or without the mechanics).
+
 ## Session 41 (2026-11-13): delegation rules, 2016 car limit 450 -> 2000, Origin cars in the 2016 client, Gotcha car slots, WhisperDeny
 
 **User:** "Continue the emulator project, but write delegation rules from Honkai impact 3rd project for Deepseek.

@@ -5,9 +5,9 @@
 #   launch.bat server         database + emulator, no client
 #   launch.bat client [eu]    the client only (US, or the EU client with eu; version 2016: ..\DriftCity Dev Ed)
 #   launch.bat setup          build the emulator image; which client (2011 / 2016) and its tables (again after a client patch)
-#   launch.bat init-db        create the game database from db\*.sql (an existing one is DELETED: asks first)
-#   launch.bat restore-db F   replace the game database with the SQL Server backup F (e.g. db\SKDBTW_clean.bak; asks)
-#   launch.bat backup-db [F]  save the game database to a SQL Server backup (default db\SKDBTW_<date>.bak)
+#   launch.bat init-db        create the game database from db\postgres (an existing one is DELETED: asks first)
+#   launch.bat restore-db F   replace the game database with the dump F (e.g. db\postgres\skdbtw_clean.dump; asks)
+#   launch.bat backup-db [F]  save the game database (pg_dump; default db\<name>_<date>.dump)
 #   launch.bat stop           stop the emulator and the database
 #   launch.bat restart-emu    restart the emulator (clients are disconnected)
 #   launch.bat status         what is running
@@ -27,7 +27,7 @@ Set-Location $PSScriptRoot
 $ClientUsDir = Join-Path $PSScriptRoot '..\Client US'    # the US client (its tables: tools\client_setup.py)
 $ClientEuDir = Join-Path $PSScriptRoot '..\Client EU'    # the EU client (tools\eu_client.py)
 $Client2016Dir = Join-Path $PSScriptRoot '..\DriftCity Dev Ed'   # the 2016 client (emulator.ini [client] version = 2016)
-$Sql = @('exec', 'dcemu2011_db', '/opt/mssql-tools18/bin/sqlcmd', '-C', '-S', 'localhost', '-U', 'sa', '-P', 'z0ne!server', '-b')
+$DbContainer = 'dcemu_pg'   # PostgreSQL (docker-compose.yml service db)
 
 function Die($msg) { Write-Host "launch: $msg" -ForegroundColor Red; exit 1 }
 
@@ -48,7 +48,7 @@ function Read-Config {   # again after the first-launch question changed [client
     }
     $script:Version = if ($Ini['client.version']) { $Ini['client.version'] } else { '2011' }
     $script:AuthPort = [int]((Setting 'services.auth' '11005 0 56') -split '\s+')[0]
-    $script:DbName = Setting 'database.name' 'SKDBTW'
+    $script:DbName = Setting 'database.name' 'skdbtw'
     $script:ClientDir = if ($Version -eq '2016') { $Client2016Dir } else { $ClientUsDir }
 }
 Read-Config
@@ -63,11 +63,40 @@ function Compose { docker compose @args; if ($LASTEXITCODE -ne 0) { Die "docker 
 
 function Ask($text) { (Read-Host "$text Type YES") -eq 'YES' }
 
+# psql in the database container on one database; extra arguments are psql's (-c ..., -tAc ...)
+function Psql($db) { docker exec -i $DbContainer psql -U dcemu -d $db -v ON_ERROR_STOP=1 -q @args }
+
+function Seed-Dump {
+    $f = "db\postgres\$($DbName)_clean.dump"
+    if (Test-Path $f) { return $f } else { return 'db\postgres\skdbtw_clean.dump' }
+}
+
+# A new $DbName from a dump (pg_dump -Fc), then the helpers (db\postgres\00_compat.sql, 02_procedures.sql)
+function Create-Db($file) {
+    if (-not (Test-Path $file)) { Die "$file not found" }
+    Psql dcemu -c "DROP DATABASE IF EXISTS `"$DbName`" WITH (FORCE)" -c "CREATE DATABASE `"$DbName`""
+    if ($LASTEXITCODE -ne 0) { Die 'creating the database failed' }
+    # through a file in the container: PowerShell's pipes would change the binary dump
+    docker cp $file "$($DbContainer):/tmp/restore.dump"
+    if ($LASTEXITCODE -ne 0) { Die 'copying the dump into the container failed' }
+    docker exec $DbContainer pg_restore -U dcemu -d $DbName --no-owner --exit-on-error /tmp/restore.dump
+    if ($LASTEXITCODE -ne 0) { Die "restoring $file failed" }
+    docker exec $DbContainer rm -f /tmp/restore.dump
+    Get-Content db\postgres\00_compat.sql -Raw | Psql $DbName
+    Get-Content db\postgres\02_procedures.sql -Raw | Psql $DbName
+    if ($LASTEXITCODE -ne 0) { Die 'the database helpers failed' }
+    Write-Host "database $DbName created from $file"
+}
+
 function Wait-Db {
     Write-Host 'database: starting'
     Compose up -d db
     for ($i = 0; $i -lt 90; $i++) {
-        if ((docker inspect -f '{{.State.Health.Status}}' dcemu2011_db 2>$null) -eq 'healthy') { Write-Host 'database: ready'; return }
+        if ((docker inspect -f '{{.State.Health.Status}}' $DbContainer 2>$null) -eq 'healthy') {
+            $have = (Psql dcemu -tAc "SELECT 1 FROM pg_database WHERE datname='$DbName'" | Out-String).Trim()
+            if ($have -ne '1') { Create-Db (Seed-Dump) }
+            Write-Host "database: ready ($DbName)"; return
+        }
         Start-Sleep 2
     }
     Die 'the database did not become ready (launch.bat logs db)'
@@ -149,43 +178,33 @@ switch ($Command) {
     'setup' {
         Compose build emulator
         Client-Tables -Refresh
-        Write-Host "setup done (version $Version). A new machine also needs a database: launch.bat init-db (or restore-db db\SKDBTW_clean.bak)"
+        Write-Host "setup done (version $Version). The first server start creates the database (db\postgres)."
     }
     'init-db' {
         if (-not (Ask "This deletes the $DbName database (all accounts and characters) and creates it again.")) { Die 'cancelled' }
-        docker compose stop emulator db 2>$null
-        Compose --profile setup run --rm -e "DB_NAME=$DbName" db-setup
+        docker compose stop emulator 2>$null
+        Wait-Db
+        Create-Db (Seed-Dump)
     }
     'restore-db' {
         $file = $Rest | Select-Object -First 1
-        if (-not $file -or -not (Test-Path $file)) { Die 'usage: launch.bat restore-db FILE.bak' }
+        if (-not $file -or -not (Test-Path $file)) { Die 'usage: launch.bat restore-db FILE.dump' }
         if (-not (Ask "This replaces the $DbName database (all accounts and characters) with $file.")) { Die 'cancelled' }
         docker compose stop emulator 2>$null
         Wait-Db
-        docker cp $file dcemu2011_db:/var/opt/mssql/data/restore.bak
-        if ($LASTEXITCODE -ne 0) { Die 'copying the backup into the container failed' }
-        # the backup's logical file names (SKDBTW / SKDBTW_log in db\SKDBTW_clean.bak) go to files named after the database
-        $move = ''
-        foreach ($row in (docker @Sql -h -1 -W -s '|' -Q "SET NOCOUNT ON; RESTORE FILELISTONLY FROM DISK='/var/opt/mssql/data/restore.bak'")) {
-            $f = "$row" -split '\|'
-            if ($f.Count -lt 3 -or -not $f[0]) { continue }
-            $ext = if ($f[2] -eq 'L') { '_log.ldf' } else { '.mdf' }
-            $move += ", MOVE '$($f[0])' TO '/var/opt/mssql/data/$DbName$ext'"
-        }
-        docker @Sql -Q "IF DB_ID(N'$DbName') IS NOT NULL ALTER DATABASE [$DbName] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; RESTORE DATABASE [$DbName] FROM DISK='/var/opt/mssql/data/restore.bak' WITH REPLACE$move; ALTER DATABASE [$DbName] SET MULTI_USER"
-        if ($LASTEXITCODE -ne 0) { Die 'the restore failed' }
-        docker exec dcemu2011_db rm -f /var/opt/mssql/data/restore.bak
+        Create-Db $file
         Write-Host 'database restored'
     }
     'backup-db' {
         $file = $Rest | Select-Object -First 1
-        if (-not $file) { $file = "db\$($DbName)_$(Get-Date -Format yyyy-MM-dd).bak" }
+        if (-not $file) { $file = "db\$($DbName)_$(Get-Date -Format yyyy-MM-dd).dump" }
         Wait-Db
-        docker @Sql -Q "BACKUP DATABASE [$DbName] TO DISK='/var/opt/mssql/data/backup.bak' WITH INIT, COPY_ONLY" | Out-Null
+        # through a file in the container: PowerShell's pipes would change the binary dump
+        docker exec $DbContainer pg_dump -U dcemu -Fc --no-owner -f /tmp/backup.dump $DbName
         if ($LASTEXITCODE -ne 0) { Die 'the backup failed' }
-        docker cp dcemu2011_db:/var/opt/mssql/data/backup.bak $file
+        docker cp "$($DbContainer):/tmp/backup.dump" $file
         if ($LASTEXITCODE -ne 0) { Die 'copying the backup out of the container failed' }
-        docker exec dcemu2011_db rm -f /var/opt/mssql/data/backup.bak
+        docker exec $DbContainer rm -f /tmp/backup.dump
         Write-Host "database saved to $file"
     }
     'stop'        { docker compose stop emulator db }

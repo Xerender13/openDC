@@ -1,7 +1,7 @@
 """Native services: the emulator is the server (no 2008 ZoneServer behind them).
 
 Same architecture as the original server (separate auth / lobby / game / area / barea services
-on their own ports, the same SQL Server database and tables, serverlist.txt), but the messages
+on their own ports, the same database tables (PostgreSQL now), serverlist.txt), but the messages
 are the 2011 client's and the tables are read in the 2011 client's own formats (.xlt / .tdf as
 the client has them, see data.py), not converted to the 2008 server's columns.
 

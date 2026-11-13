@@ -406,16 +406,16 @@ async def _ticker():
 
 CHANNEL_SQL = ("SELECT CHANNELID, OWNERTEAM, OWNDATE, LEADERCID, LEADERCNAME, BATTLE_MAP1, BATTLE_MAP2, BATTLE_MAP3,"
                " ACC_TAX FROM SKID_CHANNEL_TB WHERE SERVERID=%s")
-SAVE_SQL = """IF EXISTS (SELECT 1 FROM SKID_CHANNEL_TB WHERE SERVERID=%s AND CHANNELID=%s)
-UPDATE SKID_CHANNEL_TB SET OWNERID=%s, OWNERTEAM=%s, OWNCNAME=%s, OWNTNAME=%s, OWNDATE=%s, LEADERCID=%s, LEADERCNAME=%s,
-  BATTLE_MAP1=%s, BATTLE_MAP2=%s, BATTLE_MAP3=%s, ACC_TAX=%s WHERE SERVERID=%s AND CHANNELID=%s
-ELSE INSERT INTO SKID_CHANNEL_TB(SERVERID, CHANNELID, OWNERID, OWNERTEAM, OWNCNAME, OWNTNAME, OWNDATE, LEADERCID,
-  LEADERCNAME, BATTLE_MAP1, BATTLE_MAP2, BATTLE_MAP3, ACC_TAX) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
-LAST_SQL = ("SELECT TOP 1 MASTERTEAM_ID, SUCCESSIVE_WIN FROM SKID_CBATTLE_TB WHERE SERVERID=%s AND CHANNELID=%s"
-            " ORDER BY BATTLEID DESC")
-WIN_SQL = """DELETE FROM SKID_CBATTLE_TB WHERE SERVERID=%s AND CHANNELID=%s AND BATTLEID=%s;
-INSERT INTO SKID_CBATTLE_TB(SERVERID, CHANNELID, BATTLEID, MASTERTEAM_ID, SUCCESSIVE_WIN, BATTLE_ODATE)
-VALUES (%s, %s, %s, %s, %s, GetDate())"""
+SAVE_SQL = ("UPDATE SKID_CHANNEL_TB SET OWNERID=%s, OWNERTEAM=%s, OWNCNAME=%s, OWNTNAME=%s, OWNDATE=%s, LEADERCID=%s,"
+            " LEADERCNAME=%s, BATTLE_MAP1=%s, BATTLE_MAP2=%s, BATTLE_MAP3=%s, ACC_TAX=%s WHERE SERVERID=%s AND CHANNELID=%s",
+            "INSERT INTO SKID_CHANNEL_TB(SERVERID, CHANNELID, OWNERID, OWNERTEAM, OWNCNAME, OWNTNAME, OWNDATE, LEADERCID,"
+            " LEADERCNAME, BATTLE_MAP1, BATTLE_MAP2, BATTLE_MAP3, ACC_TAX) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+            " %s, %s)")
+LAST_SQL = ("SELECT MASTERTEAM_ID, SUCCESSIVE_WIN FROM SKID_CBATTLE_TB WHERE SERVERID=%s AND CHANNELID=%s"
+            " ORDER BY BATTLEID DESC LIMIT 1")
+WIN_SQL = ("DELETE FROM SKID_CBATTLE_TB WHERE SERVERID=%s AND CHANNELID=%s AND BATTLEID=%s",
+           "INSERT INTO SKID_CBATTLE_TB(SERVERID, CHANNELID, BATTLEID, MASTERTEAM_ID, SUCCESSIVE_WIN, BATTLE_ODATE)"
+           " VALUES (%s, %s, %s, %s, %s, GetDate())")
 LOG_SQL = ("INSERT INTO SKID_CBATTLELOG_TB(SERVERID, CHANNELID, BATTLE_ODATE, BATTLEID, CDATE, DEF_TEAMID, ATK_TEAMID,"
            " DEF_TEAMNAME, ATK_TEAMNAME, DEF_MEMBERS, ATK_MEMBERS, DEF_POINT, ATK_POINT, NROUND, NMATCH)"
            " VALUES (%s, %s, SYSDATETIME(), %s, GetDate(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
@@ -423,9 +423,12 @@ RECORD_SQL = ("SELECT COUNT(*), SUM(CASE WHEN (DEF_TEAMID=%s AND DEF_POINT>0) OR
               " THEN 1 ELSE 0 END) FROM SKID_CBATTLELOG_TB WHERE SERVERID=%s AND (DEF_TEAMID=%s OR ATK_TEAMID=%s)")
 TEAM_WIN_SQL = "UPDATE SKID_TEAM_TB SET CHANNELWINCNT=ISNULL(CHANNELWINCNT, 0) + 1 WHERE SERVERID=%s AND TID=%s"
 OWN_SQL = "UPDATE SKID_TEAM_TB SET OWNCHANNEL=%s WHERE SERVERID=%s AND TID=%s"
-TAX_PAY_SQL = """UPDATE SKID_CHARACTER_TB SET GOLD=GOLD+%s WHERE SERVERID=%s AND CID=%s;
-UPDATE SKID_TEAM_TB SET TAXINCOME=ISNULL(TAXINCOME, 0)+%s WHERE SERVERID=%s AND TID=%s;
-UPDATE SKID_CHANNEL_TB SET LAST_TAX=%s, LAST_COLDATE=GetDate(), ACC_TAX=0 WHERE SERVERID=%s AND CHANNELID=%s"""
+def tax_pay(cur, amount, sid, master, tid, ch):
+    """db.transaction: the channel's tax to the owner crew's master; the crew's income; the channel's account emptied."""
+    cur.execute("UPDATE SKID_CHARACTER_TB SET GOLD=GOLD+%s WHERE SERVERID=%s AND CID=%s", (amount, sid, master))
+    cur.execute("UPDATE SKID_TEAM_TB SET TAXINCOME=ISNULL(TAXINCOME, 0)+%s WHERE SERVERID=%s AND TID=%s", (amount, sid, tid))
+    cur.execute("UPDATE SKID_CHANNEL_TB SET LAST_TAX=%s, LAST_COLDATE=GetDate(), ACC_TAX=0 WHERE SERVERID=%s"
+                " AND CHANNELID=%s", (amount, sid, ch))
 
 
 def _map_text(s):
@@ -467,7 +470,7 @@ async def save(lb):
     own = datetime.datetime.fromtimestamp(lb.own_time - CLOCK_SHIFT, datetime.UTC).replace(tzinfo=None) if lb.owner else None
     vals = (o.get('master', -1), o.get('tid', -1), o.get('master_name', '')[:32], o.get('name', '')[:16], own,
             lb.leader[0], lb.leader[1][:32], *maps, int(lb.acc_tax))
-    await db.execute(SAVE_SQL, (db.server_id, lb.ch, *vals, db.server_id, lb.ch, db.server_id, lb.ch, *vals))
+    await db.update_or_insert(SAVE_SQL[0], (*vals, db.server_id, lb.ch), SAVE_SQL[1], (db.server_id, lb.ch, *vals))
 
 
 async def save_owned(tid):
@@ -892,7 +895,8 @@ async def end_channel_battle(lb):
         prev_owner = int(last[0]) if last and last[0] is not None else -1
         lb.successive = (int(last[1] or 0) if prev_owner == t['tid'] else 0) + 1
         battle_id = int(time.strftime('%Y%m%d', time.gmtime(lb.battle_time - CLOCK_SHIFT)))
-        await db.execute(WIN_SQL, (db.server_id, lb.ch, battle_id, db.server_id, lb.ch, battle_id, t['tid'], lb.successive))
+        await db.execute(WIN_SQL[0], (db.server_id, lb.ch, battle_id))
+        await db.execute(WIN_SQL[1], (db.server_id, lb.ch, battle_id, t['tid'], lb.successive))
         await db.execute(TEAM_WIN_SQL, (db.server_id, t['tid']))
         if lb.owner_room is not None and time.time() > lb.won_at + 30:     # not again right after taking it
             lb.notice(lb.owner_room, CHANNEL_WON)
@@ -959,8 +963,7 @@ async def tax_payout():
         if not lb.owner or lb.owner['tid'] <= 0 or amount <= 0 or lb.owner['master'] < 0:
             continue
         master = lb.owner['master']
-        await db.execute(TAX_PAY_SQL, (amount, db.server_id, master, amount, db.server_id, lb.owner['tid'],
-                                       amount, db.server_id, lb.ch))
+        await db.transaction(lambda cur: tax_pay(cur, amount, db.server_id, master, lb.owner['tid'], lb.ch))
         lb.acc_tax -= amount
         s = online(master)
         if s:

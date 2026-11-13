@@ -25,34 +25,53 @@ RENTAL_EPOCH = 1325376000  # 2012-01-01 UTC; client 0x6536b1 -> 0x69fc80
 
 SPECIAL_ASSISTS = ('a_00002', 'a_00118', 'a_00081', 'a_00221')
 LOCK = asyncio.Lock()
-SCHEMA_SQL = """IF OBJECT_ID(N'dbo.SKID_RENTCAR_TB', N'U') IS NULL
-CREATE TABLE dbo.SKID_RENTCAR_TB(
+SCHEMA_SQL = """CREATE TABLE IF NOT EXISTS SKID_RENTCAR_TB(
  SERVERID numeric(18,0) NOT NULL, CID numeric(18,0) NOT NULL, CARID numeric(18,0) NOT NULL,
  KIND int NOT NULL, EXPIRES bigint NOT NULL, SPEED int NOT NULL, ACCEL int NOT NULL,
  BOOST int NOT NULL, CRASH int NOT NULL, SPECIAL int NOT NULL, PARTS int NOT NULL,
  PRIMARY KEY(SERVERID,CID,CARID))"""
-REDEEM_SQL = """SET NOCOUNT ON; SET XACT_ABORT ON;
-DECLARE @sid numeric=%s, @cid numeric=%s, @inven numeric=%s, @item varchar(32)=%s,
- @car numeric, @expires bigint=%s, @name varchar(32)=%s, @gid numeric, @idx numeric;
-BEGIN TRY
- BEGIN TRANSACTION;
- IF NOT EXISTS(SELECT 1 FROM SKID_ITEM_TB WITH(UPDLOCK,HOLDLOCK)
-   WHERE SERVERID=@sid AND CID=@cid AND INVENIDX=@inven AND ITEMID=@item AND STATE=0 AND STACKNUM=1)
- BEGIN ROLLBACK; SELECT -1; RETURN; END;
- EXEC PC_SKID_CREATECAR @sid,@cid,@name,%s,%s,9,0,%s,0,@car OUTPUT;
- IF ISNULL(@car,-1)<=0 BEGIN ROLLBACK; SELECT -1; RETURN; END;
- INSERT INTO SKID_RENTCAR_TB VALUES(@sid,@cid,@car,%s,@expires,%s,%s,%s,%s,%s,%s);
- UPDATE SKID_SEQUENCE_TB SET @gid=item_sq1, item_sq1=item_sq1+8;
- SELECT @idx=PARTINVENIDX FROM SKID_CHARACTER_TB WHERE SERVERID=@sid AND CID=@cid;
- {parts_sql}
- DELETE FROM SKID_ITEM_TB WHERE SERVERID=@sid AND CID=@cid AND INVENIDX=@inven;
- UPDATE SKID_CHARACTER_TB SET CURCAR=@car, PARTINVENIDX=@idx+8 WHERE SERVERID=@sid AND CID=@cid;
- COMMIT; SELECT @car,@gid,@idx;
-END TRY
-BEGIN CATCH
- IF @@TRANCOUNT>0 ROLLBACK;
- THROW;
-END CATCH"""
+
+
+def redeem_in_db(cur, sid, cid, inven, item, name, car_type, color, capacity, rental, specs):
+    """db.transaction: the capsule (still held, unused) -> a rental car (pc_skid_createcar, grade 9), its terms row,
+    its rental parts (8 item ids from the sequence), the capsule deleted, the car current. -> (car, first gid, first
+    inventory index) or None (nothing changed)."""
+    cur.execute("SELECT 1 FROM SKID_ITEM_TB WHERE SERVERID=%s AND CID=%s AND INVENIDX=%s AND ITEMID=%s AND STATE=0"
+                " AND STACKNUM=1 FOR UPDATE", (sid, cid, inven, item))
+    if not cur.fetchall():
+        return None
+    cur.execute("SELECT pc_skid_createcar(%s, %s, %s, %s, %s, 9, 0, %s, 0)", (sid, cid, name, car_type, color, capacity))
+    car = int(cur.fetchone()[0] or -1)
+    if car <= 0:
+        raise RuntimeError('no rental car')
+    cur.execute("INSERT INTO SKID_RENTCAR_TB VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (sid, cid, car, rental.kind, rental.expires, rental.speed, rental.accel, rental.boost, rental.crash,
+                 rental.special, rental.parts))
+    cur.execute("UPDATE SKID_SEQUENCE_TB SET item_sq1=item_sq1+8 RETURNING item_sq1-8")
+    gid = int(cur.fetchone()[0])
+    cur.execute("SELECT PARTINVENIDX FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s", (sid, cid))
+    idx = int(cur.fetchone()[0])
+    for n, (info, slot, aid) in enumerate(specs, 1):
+        cur.execute("INSERT INTO SKID_ITEM_TB(SERVERID,CID,CNAME,GID,CARID,INVENIDX,ITEMID,STACKNUM,NRANDOM,STATE,"
+                    "NUPGRADE,BELONGING,ASSIST_A,ASSIST_B,CTIME) VALUES(%s,%s,%s,%s,%s,%s,%s,1,0,%s,0,1,'','',0)",
+                    (sid, cid, name, gid + n, car, idx + n, info.item_id, (slot << 16) | 1))
+    cur.execute("DELETE FROM SKID_ITEM_TB WHERE SERVERID=%s AND CID=%s AND INVENIDX=%s", (sid, cid, inven))
+    cur.execute("UPDATE SKID_CHARACTER_TB SET CURCAR=%s, PARTINVENIDX=%s WHERE SERVERID=%s AND CID=%s",
+                (car, idx + 8, sid, cid))
+    return car, gid, idx
+
+
+def remove_in_db(cur, sid, cid, car):
+    """db.transaction: an expired rental: its rental parts deleted, other gear back to the inventory, the car and its
+    terms row deleted."""
+    cur.execute("DELETE FROM SKID_ITEM_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s AND ITEMID LIKE 'r\\_type\\_%%'",
+                (sid, cid, car))
+    cur.execute("UPDATE SKID_ITEM_TB SET CARID=0,STATE=0 WHERE SERVERID=%s AND CID=%s AND CARID=%s", (sid, cid, car))
+    cur.execute("UPDATE SKID_VSITEM_TB SET CARID=0,STATE=0 WHERE SERVERID=%s AND CID=%s AND CARID=%s", (sid, cid, car))
+    cur.execute("DELETE FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s", (sid, cid, car))
+    if cur.rowcount > 0:
+        cur.execute("UPDATE SKID_CHARACTER_TB SET NUMCAR=NUMCAR-1 WHERE SERVERID=%s AND CID=%s", (sid, cid))
+    cur.execute("DELETE FROM SKID_RENTCAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s", (sid, cid, car))
 
 
 @dataclass
@@ -110,16 +129,6 @@ def gear_assists(p, car):
     return out
 
 
-def parts_sql(specs):
-    inserts, params = [], []
-    for n, (info, slot, aid) in enumerate(specs, 1):
-        inserts.append('INSERT INTO SKID_ITEM_TB(SERVERID,CID,CNAME,GID,CARID,INVENIDX,ITEMID,STACKNUM,'
-                       'NRANDOM,STATE,NUPGRADE,BELONGING,ASSIST_A,ASSIST_B,CTIME) '
-                       f"VALUES(@sid,@cid,@name,@gid+{n},@car,@idx+{n},%s,1,0,%s,0,1,%s,'',0);")
-        params.extend((info.item_id, (slot << 16) | 1, ''))
-    return '\n'.join(inserts), params
-
-
 async def load(p):
     if not is_2016():
         return
@@ -153,15 +162,7 @@ async def expire(session, p):
         from .items import mod_list, REMOVED, CHANGED
         gear = [it for it in p.items if it.car_id == car.car_id and it.item_id.startswith('r_type_')]
         # Return cosmetics and any non-rental gear to inventory, then remove the rental.
-        await db.execute('SET XACT_ABORT ON; BEGIN TRANSACTION; '
-                         "DELETE FROM SKID_ITEM_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s AND ITEMID LIKE 'r[_]type[_]%%'; "
-                         'UPDATE SKID_ITEM_TB SET CARID=0,STATE=0 WHERE SERVERID=%s AND CID=%s AND CARID=%s; '
-                         'UPDATE SKID_VSITEM_TB SET CARID=0,STATE=0 WHERE SERVERID=%s AND CID=%s AND CARID=%s; '
-                         'DELETE FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s; '
-                         'IF @@ROWCOUNT>0 UPDATE SKID_CHARACTER_TB SET NUMCAR=NUMCAR-1 WHERE SERVERID=%s AND CID=%s; '
-                         'DELETE FROM SKID_RENTCAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s; COMMIT;',
-                         (db.server_id, p.char.cid, car.car_id) * 4 + (db.server_id, p.char.cid)
-                         + (db.server_id, p.char.cid, car.car_id))
+        await db.transaction(lambda cur, car_id=car.car_id: remove_in_db(cur, db.server_id, p.char.cid, car_id))
         for it in gear:
             p.items.remove(it)
         moved = [it for it in p.items if it.car_id == car.car_id]
@@ -228,10 +229,9 @@ async def redeem(session, frame):
         await db.execute(SCHEMA_SQL)
         rental = Rental(kind, now() + days * 86400, speed, accel, boost, crash, special, parts)
         specs = part_specs(parts)
-        insert_sql, insert_params = parts_sql(specs)
-        row = await db.row(REDEEM_SQL.format(parts_sql=insert_sql), (db.server_id, p.char.cid, inven, capsule.item_id, rental.expires,
-                                       p.char.name, car_type, DEFAULT_COLOR, float(up['capacity']), kind,
-                                       speed, accel, boost, crash, special, parts, *insert_params))
+        row = await db.transaction(lambda cur: redeem_in_db(cur, db.server_id, p.char.cid, inven, capsule.item_id,
+                                                            p.char.name, car_type, DEFAULT_COLOR, float(up['capacity']),
+                                                            rental, specs))
         if not row or int(row[0]) <= 0:
             return error(session, '20036')
         car = Car(int(row[0]), car_type, DEFAULT_COLOR, 9, 0, float(up['capacity']), 0., 0,

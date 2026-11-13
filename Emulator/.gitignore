@@ -27,7 +27,8 @@ server_data/tables/*
 
 # Database backups other than the clean one (they hold accounts and characters)
 db/*.bak
-!db/SKDBTW_clean.bak
+# database backups (./launch.sh backup-db); the clean seeds in db/postgres are kept
+db/*.dump
 replays/
 
 # Exact originals retained by the desktop editor; may contain private configuration

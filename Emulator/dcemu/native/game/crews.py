@@ -90,9 +90,9 @@ STATS_SQL = ("SELECT COUNT(CID), SUM(NEXP), SUM(GOLD) FROM SKID_CHARACTER_TB WHE
 MEMBERS_SQL = ("SELECT a.CID, a.CNAME, a.TEAMRANK, a.NLEVEL, a.TEAMJOINDATE, b.CARTYPE, b.COLOR FROM SKID_CHARACTER_TB a"
                " LEFT OUTER JOIN SKID_CAR_TB b ON a.SERVERID=b.SERVERID AND a.CID=b.CID AND a.CURCAR=b.CARID"
                " WHERE a.SERVERID=%s AND a.TEAMID=%s AND a.STATE='P' ORDER BY a.TEAMRANK, a.CNAME")
-CREATE_SQL = ("SET NOCOUNT ON; INSERT INTO SKID_TEAM_TB(SERVERID, TMARKID, TEAMNAME, UTEAMNAME, TEAMDESC, TEAMLEVEL,"
-              " TEAMPOINT, MEMBERCNT, CID, CNAME, TEAMSTATE, TEAMURL, UTEAMURL, CREATEDATE, LASTDATE) OUTPUT INSERTED.TID"
-              " VALUES (%s,%s,%s,UPPER(%s),%s,0,0,1,%s,%s,'A',%s,UPPER(%s),GetDate(),GetDate())")
+CREATE_SQL = ("INSERT INTO SKID_TEAM_TB(SERVERID, TMARKID, TEAMNAME, UTEAMNAME, TEAMDESC, TEAMLEVEL,"
+              " TEAMPOINT, MEMBERCNT, CID, CNAME, TEAMSTATE, TEAMURL, UTEAMURL, CREATEDATE, LASTDATE)"
+              " VALUES (%s,%s,%s,UPPER(%s),%s,0,0,1,%s,%s,'A',%s,UPPER(%s),GetDate(),GetDate()) RETURNING TID")
 NAME_USED_SQL = "SELECT COUNT(*) FROM SKID_TEAM_TB WHERE SERVERID=%s AND UTEAMNAME=UPPER(%s)"
 URL_USED_SQL = "SELECT COUNT(*) FROM SKID_TEAM_TB WHERE SERVERID=%s AND UTEAMURL=UPPER(%s)"
 CHAR_TEAM_SQL = ("UPDATE SKID_CHARACTER_TB SET TEAMID=%s, TEAMRANK=%s, TEAMJOINDATE=CASE WHEN %s=1 THEN GetDate() ELSE"
@@ -134,6 +134,9 @@ async def team(tid):
         return None
     n, exp, money = await db.row(STATS_SQL, (db.server_id, tid))
     t.update(count=_i(n), exp=_i(exp), money=_i(money))
+    from . import crewlevel
+    if crewlevel.is_on():                       # 2016: crew EXP / research points / introduction (crewlevel.py)
+        t['x2016'] = await crewlevel.extra(tid)
     return t
 
 
@@ -173,6 +176,9 @@ def info_bytes(t):
     struct.pack_into('<qq', out, 0x110, t['master'], t['master'])
     out[0x120:0x14a] = wstr(t['master_name'], 42)
     out[0x14a:0x174] = wstr(t['master_name'], 42)
+    if len(out) > TEAM_INFO:                    # 2016: introduction, crew EXP / level, research points
+        from .crewlevel import fill
+        fill(out, t)
     return bytes(out)
 
 
@@ -216,11 +222,16 @@ def notify(tid, crew_name, kind, name='', rank=0, when=0, skip=None):
             send(s, out)
 
 
+def crew_exp(t):
+    return t.get('x2016', (0,))[0] if t else 0
+
+
 def my_info_frame(session, p, act=0):
     c = p.char
     return Frame(0x349, struct.pack('<Iqi', act, c.cid, c.team_rank if c.team_id > 0 else -1)
                  + info_bytes(session.state.get('crew')) + struct.pack('<H', session.state.get('visual_age', 1) & 0xffff)
-                 + bytes(8 if team_info_size() > TEAM_INFO else 0))  # 2016: two more u32 (@0x2aa / @0x2ae, unknown)
+                 + (struct.pack('<II', min(crew_exp(session.state.get('crew')), 0xffffffff), 0)
+                    if team_info_size() > TEAM_INFO else b''))  # 2016: u32 @0x2ac the level panel's EXP (0x678a00)
 
 
 async def refresh(session, p):
@@ -301,7 +312,21 @@ async def team_members(session, frame):
     t = await team(tid)
     if not t:
         return error(session, '20192')
+    p = session.state.get('player')
+    if p and tid == p.char.team_id:
+        session.state['crew_list_act'] = act       # the list the client has open (push_members)
     send(session, *await member_frames(t, act, channel))
+
+
+async def push_members(session, t):
+    """The member list again after a change. 2011: act 0x3f2 as always. 2016: only with the act of the list the
+    client last asked for, which is open: its 0x358 handlers use their windows without a null check (act 0x3f2 /
+    0x3f4: 0x68ae50, act 0x407: the crew window 0x679980; worker 6's reading), and the 2016 crew window asks with
+    0x407, not 0x3f2."""
+    from ..version import is_2016
+    act = session.state.get('crew_list_act') if is_2016() else ACT_LIST
+    if act:
+        send(session, *await member_frames(t, act))
 
 
 # ---- creating, names, URL, mark ---------------------------------------------------------------------------------
@@ -381,7 +406,6 @@ async def set_team_mark(session, frame):
     i32 size, u16 age; client 0x530380) to the crew's members. The clients fetch the picture from the lobby: 0x40
     GetImage (act 0x3f5, i64 crew, i64 mark) -> 0x41 (stickers.get_image; the built-in marks 1-10 from
     server_data/teammark). A file on disk was not seen by the client (user: an empty square)."""
-    import pytds
     from ..stickers import next_id
     p = session.state.get('player')
     if not p or len(frame.payload) < 12:
@@ -397,7 +421,7 @@ async def set_team_mark(session, frame):
     db = context.db
     mark = await next_id()
     await db.execute("INSERT INTO SKID_IMAGE_TB(IMGID, SERVERID, IMGTYPE, IMGSIZE, IMGCOLORKEY, IMGDATA, CDATE)"
-                     " VALUES (%s, %s, 0, %s, 0, %s, GetDate())", (mark, db.server_id, len(data), pytds.Binary(data)))
+                     " VALUES (%s, %s, 0, %s, 0, %s, GetDate())", (mark, db.server_id, len(data), bytes(data)))
     await db.execute("UPDATE SKID_TEAM_TB SET TMARKID=%s WHERE SERVERID=%s AND TID=%s", (mark, db.server_id, tid))
     t = await team(tid)
     session.log.note(f'crew {t["name"]!r}: new mark {mark} ({len(data)} bytes)')
@@ -418,6 +442,27 @@ async def create_team(session, frame):
     name = read_wstr(info, 0x10, 26).strip()
     desc = read_wstr(info, 0x2a, 122).strip()
     url = info[0xa4:0xc5].split(b'\0')[0].decode('latin-1', 'replace').strip()[:32]
+    await create(session, p, name, desc, url, mark)
+
+
+@on(SVC, C2S, 0xce4)
+async def create_team_2016(session, frame):
+    """0xce4 (2016 only; the 2016 create dialog sends it instead of 0x34a, which has no caller there: sender 0x868ca0
+    from 0x686d00, 0x34 bytes): i64 the asker's crew (-1) @2, i64 @0xa (not known), wchar[17] the name @0x12. Same
+    rules and answer as 0x34a (0x34b: 680 bytes in 2016); no description, URL or mark (mark 1: the first built-in)."""
+    p = session.state.get('player')
+    if not p or len(frame.payload) < 16 + 2:
+        return
+    name = read_wstr(frame.payload, 16, 34).strip()
+    session.log.note(f'crew create (0xce4) {name!r}, field @0xa {frame.payload[8:16].hex()}')
+    if not name:
+        return error(session, '20166')
+    await create(session, p, name, '', '', 1)
+
+
+async def create(session, p, name, desc, url, mark):
+    """A new crew with p as its master (2008 rules: level 20, 10000 Mito, not in a crew, a free name) -> 0x34b."""
+    from .items import add_money
     c, db = p.char, context.db
     if c.level < CREATE_LEVEL:
         return error(session, '20163')
@@ -463,7 +508,7 @@ async def close_team(session, frame):
     if t['state'] == 'C':
         return error(session, '20168')
     db = context.db
-    await db.execute(f"UPDATE SKID_TEAM_TB SET TEAMSTATE='C', CLOSEDATE=DATEADD(day, {CLOSE_DAYS}, GetDate())"
+    await db.execute(f"UPDATE SKID_TEAM_TB SET TEAMSTATE='C', CLOSEDATE=GetDate() + interval '{CLOSE_DAYS} days'"
                      " WHERE SERVERID=%s AND TID=%s", (db.server_id, t['tid']))
     t = await team(t['tid'])
     session.log.note(f'crew {t["name"]!r} closing until {t["closed"]}')
@@ -601,7 +646,7 @@ async def join_team_confirm(session, frame):
     session.log.note(f'crew {t["name"]!r}: {b["name"]} joined')
     send(s, Frame(0x34f, struct.pack('<i', 1) + info_bytes(t) + struct.pack('<H', age(s))))
     notify(t['tid'], t['name'], 4, b['name'], MEMBER, skip=s)
-    send(session, *await member_frames(t, ACT_LIST))
+    await push_members(session, t)
 
 
 @on(SVC, C2S, 0x36c)
@@ -676,7 +721,7 @@ async def remove_member(session, t, b, kicked):
     t = await team(t['tid'])
     for x in crew_sessions(t['tid']):
         x.state['crew'] = t
-    send(session, *await member_frames(t, ACT_LIST))
+    await push_members(session, t)
 
 
 @on(SVC, C2S, 0x36b)
@@ -718,8 +763,11 @@ async def assign_team_rank(session, frame):
         s.state['player'].char.team_rank = rank
     session.log.note(f'crew {t["name"]!r}: {_s(r[1])} rank {rank}')
     send(session, Frame(0x375, struct.pack('<qi', cid, rank)))
+    if s:                   # its client takes the rank only from 0x349 (0x375's handler is empty: 0x546910 / 0x530720)
+        await refresh(s, s.state['player'])
+        send(s, my_info_frame(s, s.state['player']))
     notify(t['tid'], t['name'], 8, _s(r[1]), rank)
-    send(session, *await member_frames(t, ACT_LIST))
+    await push_members(session, t)
 
 
 @on(SVC, C2S, 0x352)
@@ -753,8 +801,11 @@ async def delegate_team_master(session, frame):
     ack = Frame(0x359, struct.pack('<iqq', 1, tid, cid))
     send(session, ack)
     send(s, ack)
+    for x in (session, s):  # 0x359's handler sets rank 2 for both (0x546927): the real ranks by 0x349
+        await refresh(x, x.state['player'])
+        send(x, my_info_frame(x, x.state['player']))
     notify(tid, t['name'], 7, _s(r[1]), MASTER)
-    send(session, *await member_frames(t, ACT_LIST))
+    await push_members(session, t)
 
 
 # ---- logging on / off, chat ------------------------------------------------------------------------------------------

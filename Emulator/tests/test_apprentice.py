@@ -21,6 +21,8 @@ class ApprenticeTest(unittest.TestCase):
         context.data = SimpleNamespace(vehicles={29: {'Sellable': '10001'}, 999: {'Sellable': '1'}},
                                        upgrade={(29, 1): {'capacity': 100, 'efficiency': 2}})
         context.db = SimpleNamespace(server_id=2016, row=AsyncMock(return_value=(43, 12345)))
+        # PostgreSQL: the multi-statement work runs in db.transaction(fn); here it answers as row() did
+        context.db.transaction = lambda fn: context.db.row(fn)
         c = character()
         c.pos_state, c.city = 3, 0
         c.cars = [Car(42, 95, 0x01000002, 1, 0, 106, 0, apprentice.TRAINING_SLOT)]

@@ -7,8 +7,8 @@ Each service in `emulator.ini` is either **proxied** (a port of the 2008 ZoneSer
 message is logged and the handlers in `dcemu/handlers/` rewrite what the 2011 client and the
 2008 server disagree on; the rest goes through byte for byte) or **native** (ZoneServer port 0:
 the emulator is the server, `dcemu/native/`). The native services keep the original server's
-architecture (separate auth/lobby/game/area/barea services and ports, the same SQL Server
-database and tables, `serverlist.txt`) but read the server tables in the 2011 client's own
+architecture (separate auth/lobby/game/area/barea services and ports, the original server's
+database tables, now in PostgreSQL, `serverlist.txt`) but read the server tables in the 2011 client's own
 formats (.xlt/.tdf, not converted to the 2008 columns).
 
 Now every service is native (`emulator.ini`); the 2008 ZoneServer is not used at all.
@@ -25,7 +25,7 @@ to run it. The client is started with `../Client US/DriftCityLauncher` (Linux) o
 (Windows), source in `../Launcher/`; the EU client the same way from `../Client EU/` (`tools/eu_client.py`, below).
 
 ```
-2011 client --11005..11051--> emulator (python3 -m dcemu) --14330--> SQL Server  (container dcemu2011_db)
+2011 client --11005..11051--> emulator (python3 -m dcemu) --15432--> PostgreSQL  (container dcemu_pg)
 ```
 
 UDP 11400/11401 (the client's time sync / P2P) has no listener: the native area answers the time sync on the
@@ -36,8 +36,8 @@ TCP connection and relays cars itself.
 `./launch.sh` (Linux) starts the parts together or one by one (`./launch.sh help`); Windows: `launch.bat`, below.
 
 ```sh
-./launch.sh setup        # once: .venv with python-tds (and again after a client patch: copies the client's tables again)
-./launch.sh init-db      # once, on a new machine: creates the database (deletes an existing one; asks)
+./launch.sh setup        # once: .venv with pg8000 (and again after a client patch: copies the client's tables again)
+./launch.sh init-db      # a fresh database (deletes an existing one; asks); the first start makes it by itself
 ./launch.sh              # database + emulator (background) + the client
 ./launch.sh server       # the same without the client
 ./launch.sh db | emu | emu-bg | client          # one part (emu: foreground, Ctrl+C stops it)
@@ -45,8 +45,18 @@ TCP connection and relays cars itself.
 ```
 
 Needs Python 3.10+ and podman (or docker) with podman-compose / docker compose (`docker-compose.yml`: the
-database; its volume is `driftcity2011_mssql-data`, the one the 2008 stack made). Restarting the emulator
-disconnects the clients.
+database, PostgreSQL 17, volume `dcemu_pg-data`). Everything runs on x86-64 and ARM (the database driver pg8000 is
+pure Python). Restarting the emulator disconnects the clients.
+
+**Database (PostgreSQL since 2026-11-13; SQL Server before).** `[database] name` is `skdbtw` (2011) or
+`skdb2016test` (2016). A missing one is made on the first start from `db/postgres/<name>_clean.dump` (the account
+`admin` / `admin`, no characters), then `db/postgres/00_compat.sql` (citext, `getdate()`, ...) and
+`02_procedures.sql` (the 2008 server's procedures as functions). `./launch.sh backup-db [F]` writes a pg_dump,
+`restore-db F` loads one. **An old SQL Server database** (an install from before the switch): start its container
+(`podman start dcemu2011_db`), create the empty PostgreSQL database and run
+`python -m tools.pgport.migrate --mssql 127.0.0.1:14330:sa:PASSWORD:SKDBTW --pg 127.0.0.1:15432:dcemu:PASSWORD:skdbtw`
+(needs `pip install python-tds` once; it copies every table and row and reports the counts), then apply
+`db/postgres/02_procedures.sql`.
 
 The client's tables are not in git. The first `./launch.sh` / `server` / `emu` (and `launch.bat`) asks which client
 the server is for, 1) 2011 (US / EU) or 2) 2016 (US), writes it to `emulator.ini` `[client] version`, then asks for
@@ -65,7 +75,7 @@ have the 2011 client (e.g. in `..\Client US`, next to this folder), then in this
 
 ```bat
 launch.bat setup        :: builds the emulator image, copies the client's tables (again after a client patch)
-launch.bat init-db      :: once: an empty database with the account admin / admin (asks; deletes an existing one)
+launch.bat init-db      :: a fresh database with the account admin / admin (asks; deletes an existing one; the first start makes one)
 launch.bat              :: database + emulator + the client (..\Client US\DriftCityLauncher.exe; "launch.bat all eu": ..\Client EU)
 launch.bat server | client [eu] | stop | restart-emu | status | logs [db] | gm who | help
 ```
@@ -80,17 +90,9 @@ Other players connect to this PC's address: set it in their `DriftCityLauncher.i
 
 ### A fresh database
 
-`db/SKDBTW_clean.bak` is an empty game database (the schema of `db/*.sql`, the account `admin` / `admin`, no
-characters), the same thing `init-db` creates. To use it instead: `launch.bat restore-db db\SKDBTW_clean.bak`
-on Windows, or on Linux:
-
-```sh
-podman cp db/SKDBTW_clean.bak dcemu2011_db:/var/opt/mssql/data/clean.bak
-podman exec dcemu2011_db /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'z0ne!server' -Q \
-  "RESTORE DATABASE SKDBTW FROM DISK='/var/opt/mssql/data/clean.bak' WITH REPLACE, MOVE 'SKDBTW' TO '/var/opt/mssql/data/SKDBTW.mdf', MOVE 'SKDBTW_log' TO '/var/opt/mssql/data/SKDBTW_log.ldf'"
-```
-
-(stop the emulator first: `./launch.sh stop emu`)
+`db/postgres/skdbtw_clean.dump` (and `skdb2016test_clean.dump`) is an empty game database (the account `admin` /
+`admin`, no characters): the first start makes the database from it, `./launch.sh init-db` / `launch.bat init-db`
+makes it again (stop the emulator first: `./launch.sh stop emu`).
 
 New accounts are made by logging in with a new ID (`emulator.ini [auth] auto_register = 1`).
 Settings: `emulator.ini`; the clients': `../Client US/DriftCityLauncher.ini`, `../Client EU/DriftCityLauncher.ini` (server address, windowed /
@@ -100,7 +102,7 @@ fullscreen, HUD type, Proton or Wine). `-q` logs to the file only.
 |---|---|
 | `dcemu/` | the emulator (`native/` the services, `handlers/` the proxy mode, unused now) |
 | `server_data/` | `Init/` and most of `tables/` (the client's .xlt / .tdf tables and `<City>/` traffic files) come from the client (`server_data/Init` is in git; the rest is copied on the first start: `python -m tools.client_setup`); from the 2008 server: `tables/` (LevelServer, Contents.ini, ItemServer, drops, upgrade odds, rush hours), exp / money tables, Lap Time and Real Match settings, `Localize/` server messages, `race/` battle zone track paths, `serverlist.txt`, `adminlist.txt`; the editable reward / chance files `delivery_rewards.txt`, `patrol_rewards.txt`, `gate_rewards.txt`, `team_gate_rewards.txt`, `docking_chances.txt` |
-| `db/` | the database schema (`./launch.sh init-db`) and `SKDBTW_clean.bak` (the same, as a backup) |
+| `db/postgres/` | the clean databases (`<name>_clean.dump`, pg_dump) and the helper SQL (`00_compat.sql`, `02_procedures.sql`) |
 | `tools/` | gmctl (GM commands), sync_data, client.py (scripted client), global_content.py / agt.py (client packs), auction_test.py |
 | `client_backup/` | original client packs (Patch.000) for global_content.py `reset` |
 | `docs/` | `EMULATOR_NOTES.md` (the hand-off: start there), `BATTLEZONE.md` |
@@ -137,7 +139,7 @@ entry in `docs/EMULATOR_NOTES.md`.
 | `dcemu/handlers/` | `@on(service, direction, type)` handlers; list new modules in `MODULES` |
 | `dcemu/handlers/auth.py` | login: plain password -> MD5 hex, 2011 message cut to the 2008 size |
 | `dcemu/native/__init__.py` | the native services' shared context: DB, tables, login tickets, server list |
-| `dcemu/native/db.py` | SQL Server (python-tds) on a worker thread, awaitable `row`/`rows`/`execute` |
+| `dcemu/native/db.py` | PostgreSQL (pg8000) on a worker thread, awaitable `row`/`rows`/`execute`/`transaction` |
 | `dcemu/native/data.py` | the server tables in the 2011 formats (`server_data/Init/*.xlt`, `server_data/tables/*.tdf`) |
 | `dcemu/native/auth.py` | login (MEUSERMT, MD5) and the server list from `serverlist.txt` |
 | `dcemu/native/lobby.py` | check-in, character list, name check, character creation, keepalive |
@@ -225,13 +227,13 @@ data_2016 = server_data_2016      ; the 2016 client's tables
 
 [2016]
 services.auth = 11105 0 56        ; own ports (111xx), so a 2011 server can run next to it
-database.name = SKDB2016TEST      ; own database
+database.name = skdb2016test      ; own database
 gotcha.season = 60
 flags.Main.PasserBy = 1           ; the first dot splits: [flags] Main.PasserBy
 ```
 
 `./launch.sh` / `launch.bat` follow the version: the ports and database (`init-db`, `backup-db`, `restore-db` work on
-`[database] name`, so `SKDB2016TEST` for 2016) and the client (`../DriftCity Dev Ed/DriftCityLauncher2016` on Linux,
+`[database] name`, so `skdb2016test` for 2016) and the client (`../DriftCity Dev Ed/DriftCityLauncher2016` on Linux,
 `DriftCityLauncher.exe` on Windows). `python -m dcemu --get services.auth database.name` prints settings as the
 emulator resolves them. To run a 2011 and a 2016 server at once, use two copies of `Emulator/` (one per version);
 they share the database container.

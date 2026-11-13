@@ -20,8 +20,8 @@ async def command(cmd,args):
     db=context.db
     if cmd=='accounts':
         query=' '.join(args)
-        rows=await db.rows("""SELECT TOP 300 MEMBERID, VALID, JOINDATE FROM MEUSERMT
-            WHERE MEMBERID LIKE %s ORDER BY MEMBERID""",('%'+query+'%',))
+        rows=await db.rows("""SELECT MEMBERID, VALID, JOINDATE FROM MEUSERMT
+            WHERE MEMBERID LIKE %s ORDER BY MEMBERID LIMIT 300""",('%'+query+'%',))
         return encoded([dict(zip(('account','valid','joined'),r)) for r in rows])
     if not args:
         return False,'account ID required'

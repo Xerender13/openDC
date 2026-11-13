@@ -82,24 +82,24 @@ LOCKED = 4                       # item / drift item state while registered
 CARS_PER_FLOOR = 8
 LOCK = asyncio.Lock()            # one auction change at a time (serials, two buyers of one listing)
 
-VS_TABLE_SQL = """IF OBJECT_ID(N'dbo.SKID_AUCTIONVS_TB', N'U') IS NULL
-CREATE TABLE dbo.SKID_AUCTIONVS_TB(SERVERID numeric(18,0) NOT NULL, CID numeric(18,0) NOT NULL,
-  CNAME varchar(32) NOT NULL, REGID numeric(18,0) NOT NULL, ITEMID varchar(32) NOT NULL,
-  INVENIDX numeric(18,0) NOT NULL, ITEM_DATA varchar(20) NULL, PERIOD numeric(18,0) NOT NULL,
+VS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS SKID_AUCTIONVS_TB(SERVERID numeric(18,0) NOT NULL,
+  CID numeric(18,0) NOT NULL, CNAME citext NOT NULL, REGID numeric(18,0) NOT NULL, ITEMID citext NOT NULL,
+  INVENIDX numeric(18,0) NOT NULL, ITEM_DATA citext NULL, PERIOD numeric(18,0) NOT NULL,
   CTIME numeric(18,0) NOT NULL, UTIME numeric(18,0) NOT NULL, PRICE numeric(18,0) NOT NULL,
-  STATE numeric(18,0) NOT NULL, REGDATE datetime NULL DEFAULT (getdate()),
-  PRIMARY KEY CLUSTERED (CID, SERVERID, REGID))"""
-MILEAGE_SQL = """IF NOT EXISTS (SELECT 1 FROM SKID_AUCTIONMILEAGE_TB WHERE SERVERID=%s AND CID=%s)
-  INSERT INTO SKID_AUCTIONMILEAGE_TB(SERVERID, CID, CNAME, REGNUM, BUYNUM, SELLNUM) VALUES (%s, %s, %s, 0, 0, 0);
-UPDATE SKID_AUCTIONMILEAGE_TB SET {col}={col}+1 WHERE SERVERID=%s AND CID=%s"""
-SELLER = ("m.REGNUM, m.BUYNUM, m.SELLNUM, DATEDIFF(second, a.REGDATE, GETDATE()) FROM {table} a"
+  STATE numeric(18,0) NOT NULL, REGDATE timestamp(3) NULL DEFAULT getdate(),
+  PRIMARY KEY (CID, SERVERID, REGID))"""
+MILEAGE_NEW_SQL = ("INSERT INTO SKID_AUCTIONMILEAGE_TB(SERVERID, CID, CNAME, REGNUM, BUYNUM, SELLNUM) SELECT %s, %s, %s, 0, 0, 0"
+                   " WHERE NOT EXISTS (SELECT 1 FROM SKID_AUCTIONMILEAGE_TB WHERE SERVERID=%s AND CID=%s)")
+MILEAGE_SQL = "UPDATE SKID_AUCTIONMILEAGE_TB SET {col}={col}+1 WHERE SERVERID=%s AND CID=%s"
+SECONDS = "extract(epoch FROM GETDATE() - {col})::bigint"          # SQL Server DATEDIFF(second, {col}, GETDATE())
+SELLER = ("m.REGNUM, m.BUYNUM, m.SELLNUM, " + SECONDS.format(col='a.REGDATE') + " FROM {table} a"
           " LEFT OUTER JOIN SKID_AUCTIONMILEAGE_TB m ON m.SERVERID=a.SERVERID AND m.CID=a.CID WHERE a.SERVERID=%s")
-CLAIM_SQL = """SET NOCOUNT ON; UPDATE {table} SET STATE=2 WHERE SERVERID=%s AND REGID=%s AND STATE=1
-  AND DATEDIFF(second, REGDATE, GETDATE()) < %s; SELECT @@ROWCOUNT"""
+CLAIM_SQL = ("UPDATE {table} SET STATE=2 WHERE SERVERID=%s AND REGID=%s AND STATE=1 AND "
+             + SECONDS.format(col='REGDATE') + " < %s RETURNING 1")
 UNCLAIM_SQL = "UPDATE {table} SET STATE=1 WHERE SERVERID=%s AND REGID=%s"
 DELETE_SQL = "DELETE FROM {table} WHERE SERVERID=%s AND REGID=%s"
 EXPIRE_SQL = ("UPDATE {table} SET STATE=3 WHERE SERVERID=%s AND STATE=1"
-              " AND DATEDIFF(second, REGDATE, GETDATE()) >= %s")
+              " AND " + SECONDS.format(col='REGDATE') + " >= %s")
 SERIAL_SQL = "SELECT ISNULL(MAX(REGID), 0) + 1 FROM {table} WHERE SERVERID=%s"
 
 
@@ -281,8 +281,8 @@ async def listing(kind, serial):
 
 async def count_up(c, col):
     db = context.db
-    await db.execute(MILEAGE_SQL.format(col=col), (db.server_id, c.cid, db.server_id, c.cid, c.name, db.server_id,
-                                                   c.cid))
+    await db.execute(MILEAGE_NEW_SQL, (db.server_id, c.cid, c.name, db.server_id, c.cid))
+    await db.execute(MILEAGE_SQL.format(col=col), (db.server_id, c.cid))
 
 
 async def count_up_cid(cid, name, col):
@@ -464,6 +464,8 @@ async def auction_on(session, frame):
     if not p or len(frame.payload) < 16:
         return
     table_idx, inven, count, price = struct.unpack_from('<4I', frame.payload)
+    if session.state.get('trade') is not None:
+        return error(session, '20118')          # 2008 Cmd_AuctionOn 0x6011c0: "This is not allowed during a trade."
     if not can_use(session, p):
         return
     it = next((i for i in p.items if i.inven_idx == inven), None)
@@ -786,9 +788,9 @@ async def auction_car_complete(session, frame):
     if gone:
         await destroy(p, *gone)
         send(session, vs_mod_list(*((v, VS_REMOVED) for v in gone)))
-    await db.execute("DELETE FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s;"
-                     " UPDATE SKID_CHARACTER_TB SET NUMCAR=NUMCAR-1 WHERE SERVERID=%s AND CID=%s AND NUMCAR>0",
-                     (db.server_id, c.cid, car_id, db.server_id, c.cid))
+    await db.execute("DELETE FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s", (db.server_id, c.cid, car_id))
+    await db.execute("UPDATE SKID_CHARACTER_TB SET NUMCAR=NUMCAR-1 WHERE SERVERID=%s AND CID=%s AND NUMCAR>0",
+                     (db.server_id, c.cid))
     c.cars = [o for o in c.cars if o.car_id != car_id]
 
 
@@ -930,11 +932,12 @@ async def auction_car_buy(session, frame):
         if not await claim(session, p, CARS, x):
             return
         src = x.car()
-        r = await db.row("SET NOCOUNT ON; DECLARE @carid numeric; EXEC PC_SKID_CREATECAR %s, %s, %s, %s, %s, %s, %s, %s,"
-                         " %s, @carid OUTPUT; IF @carid > 0 UPDATE SKID_CAR_TB SET SLOT=%s WHERE SERVERID=%s AND CID=%s"
-                         " AND CARID=@carid; SELECT ISNULL(@carid, -1)",
+        r = await db.row("SELECT pc_skid_createcar(%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                          (db.server_id, c.cid, c.name, src.car_type, src.color, src.grade, 1, int(src.mitron),
-                          int(src.km), src.slot, db.server_id, c.cid))
+                          int(src.km)))
+        if r and int(r[0] or -1) > 0:
+            await db.execute("UPDATE SKID_CAR_TB SET SLOT=%s WHERE SERVERID=%s AND CID=%s AND CARID=%s",
+                             (src.slot, db.server_id, c.cid, int(r[0])))
         car_id = int(r[0]) if r else -1
         if car_id <= 0:
             return error(session, '20053')

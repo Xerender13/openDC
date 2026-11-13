@@ -1,7 +1,7 @@
 # openDC: Drift City 2011 emulator
 
 A native server for the 2011 Drift City client (US build, also run as the EU version), written in Python. It keeps
-the original server's layout: separate services and ports, the same SQL Server database and tables,
+the original server's layout: separate services and ports, the original database tables (PostgreSQL since 2026-11-13; it was SQL Server),
 `serverlist.txt`, an ini. It reads the game tables in the 2011 client's own formats.
 
 ## Read first
@@ -26,8 +26,8 @@ the original server's layout: separate services and ports, the same SQL Server d
 ## Running
 
 `Emulator/emulator.ini` serves both builds: `[client] version` (2016 in this folder and on GitHub) and a `[2016]`
-section whose `section.key = value` lines replace settings for 2016 (ports 111xx, database SKDB2016TEST, logs/2016).
-`Emulator 2011/` is a local copy for playing 2011 (version = 2011, 110xx, SKDBTW; not in git: `.git/info/exclude`,
+section whose `section.key = value` lines replace settings for 2016 (ports 111xx, database skdb2016test, logs/2016).
+`Emulator 2011/` is a local copy for playing 2011 (version = 2011, 110xx, still SQL Server SKDBTW until fixes are copied over: then PostgreSQL skdbtw; not in git: `.git/info/exclude`,
 created 2026-10-20). It does not follow `Emulator/` by itself: copy fixes over when the user asks.
 
 ```sh

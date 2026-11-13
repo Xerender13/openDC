@@ -49,9 +49,8 @@ SEASON_COIN = (300, 300, 300, 300, 290, 490, 390, 190, 540, 300, 300, 300, 300, 
 PARTS_COIN, MITO_PRICE = 300, 10000
 UPDATE_2015_COIN, UPDATE_2015_MITO, PARTS_MITO_2016 = 300, 50000, 25000     # 2016 GlobalContent (see above)
 GACHA_2015 = {True: 'rw_cash_gacha_2015', False: 'rw_mito_gacha_2015'}     # G Coin / Mito
-COIN_TAKE_SQL = """SET NOCOUNT ON;
-UPDATE SKID_UNALISCOIN_TB SET COIN=COIN-%s, LASTACTION='GCH', LASTCNAME=%s, LASTDATE=GETDATE() WHERE MEMBERID=%s AND COIN>=%s;
-SELECT @@ROWCOUNT, (SELECT COIN FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s)"""
+COIN_TAKE_SQL = ("UPDATE SKID_UNALISCOIN_TB SET COIN=COIN-%s, LASTACTION='GCH', LASTCNAME=%s, LASTDATE=GETDATE()"
+                 " WHERE MEMBERID=%s AND COIN>=%s RETURNING 1, COIN")      # None when there was not enough
 
 
 def price(coin, machine, season):
@@ -155,7 +154,7 @@ async def gotcha(session, frame):
     cost, group = price(coin, machine, season), group_for(coin, machine, season)
     db, c = context.db, p.char
     if coin:
-        r = await db.row(COIN_TAKE_SQL, (cost, c.name, c.member, cost, c.member))
+        r = await db.row(COIN_TAKE_SQL, (cost, c.name, c.member, cost))
         if not r or not r[0]:
             return error(session, '20094')              # not enough G Coin
         balance = int(r[1] or 0)

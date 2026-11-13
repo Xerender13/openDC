@@ -23,8 +23,8 @@ def load_config(path):
     cp = configparser.ConfigParser(inline_comment_prefixes=(';', '#'))
     cp.read_dict({'emulator': {'listen': '0.0.0.0', 'upstream': '127.0.0.1', 'log_dir': 'logs', 'control_port': '11099'},
                   'client': {'version': '2011', 'data_2016': 'server_data_2016'},
-                  'database': {'host': '127.0.0.1', 'port': '14330', 'user': 'sa', 'password': 'z0ne!server',
-                               'name': 'SKDBTW', 'server_id': '100'},
+                  'database': {'host': '127.0.0.1', 'port': '15432', 'user': 'dcemu', 'password': 'z0ne!server',
+                               'name': 'skdbtw', 'server_id': '100'},
                   'native': {'server_list': 'server_data/serverlist.txt', 'data': 'server_data',
                              'server_data': 'server_data/tables', 'admin_list': 'server_data/adminlist.txt',
                              'race_traffic_engine': 'dcemu/native/tw_traffic.py',
@@ -34,7 +34,7 @@ def load_config(path):
         cp.read(path, encoding='utf-8-sig')     # -sig: Windows Notepad may save a BOM
     apply_2016(cp)
     # the database address from the environment wins (docker-compose.yml: the emulator container reaches the
-    # database as db:1433, not 127.0.0.1:14330)
+    # database as db:5432, not 127.0.0.1:15432)
     for key in ('host', 'port', 'user', 'password', 'name'):
         value = os.environ.get('DCEMU_DB_' + key.upper())
         if value:

@@ -10,6 +10,9 @@ from dcemu.native.data import Tables
 from dcemu.wire import Frame
 
 cp = configparser.ConfigParser(inline_comment_prefixes=(';',)); cp.read('emulator.ini'); d = cp['database']
+import os as _os
+for _k in ('host', 'port', 'name'):            # DCEMU_DB_NAME=... runs it on a copy
+    d[_k] = _os.environ.get('DCEMU_DB_' + _k.upper(), d[_k])
 context.db = Database(d['host'], int(d['port']), d['user'], d['password'], d['name'], int(d['server_id']))
 context.data = Tables('server_data', 'server_data/tables', 'server_data/adminlist.txt')
 context.auction_drift = True
@@ -114,16 +117,16 @@ async def main():
         print('7. expiry')
         await auction.auction_on(s, F(0x246, stack.table_idx, stack.inven_idx, 1, 10)); show(s, 'register 1')
         x = [x for x in await auction.listings(auction.ITEMS, ' AND a.CID=%s', (SCID,)) if x.state == 1][-1]
-        await db.execute("UPDATE SKID_AUCTION_TB SET REGDATE=DATEADD(day, -7, GETDATE()) WHERE REGID=%s", (x.serial,))
+        await db.execute("UPDATE SKID_AUCTION_TB SET REGDATE=GETDATE() - interval '7 days' WHERE REGID=%s", (x.serial,))
         await call(0x24c, b, F(0x24c, 0, 13, 5, 0, 0, 0)); o = show(b, 'public list')
         print('    public total', struct.unpack_from('<I', o[-1].payload)[0])
         await auction.auction_buy(b, F(0x250, x.serial)); show(b, 'buy expired')
         await call(0x244, s, F(0x244)); o = show(s, 'my list')
         print('    unit', struct.unpack_from('<6Ii', o[-1].payload, 8))
-        await db.execute("UPDATE SKID_AUCTION_TB SET REGDATE=DATEADD(hour, -30, GETDATE()) WHERE REGID=%s", (x.serial,))
+        await db.execute("UPDATE SKID_AUCTION_TB SET REGDATE=GETDATE() - interval '30 hours' WHERE REGID=%s", (x.serial,))
         await auction.auction_cancel(s, F(0x248, x.serial)); show(s, 'cancel expired')
         print('8. cars')
-        r = await db.row("SET NOCOUNT ON; DECLARE @carid numeric; EXEC PC_SKID_CREATECAR %s, %s, %s, 80, 0, 3, 0, 100, 0, @carid OUTPUT; SELECT @carid", (sid, SCID, SNAME))
+        r = await db.row("SELECT pc_skid_createcar(%s, %s, %s, 80, 0, 3, 0, 100, 0)", (sid, SCID, SNAME))
         sp2 = await player.load(SNAME); s.state['player'] = sp = sp2
         car = next(c for c in sp.char.cars if c.car_id == int(r[0]))
         v = t.vehicles[80]; key = await items.new_item(sp, t.item_info(t.item_index[v['File Name'].rsplit('.', 1)[0]]), 1)

@@ -44,11 +44,10 @@ TOKEN = 'i_n_00049'
 RUN_DAYS = 7
 MODE = 'DAYMISSION'
 STATE_SQL = "SELECT TRYCNT, WINCNT, POINT, LASTDATE FROM SKID_PLAYMODE_TB WHERE SERVERID=%s AND CID=%s AND MODEID=%s"
-SAVE_SQL = """SET NOCOUNT ON;
-UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), TRYCNT=%s, WINCNT=%s, POINT=%s WHERE SERVERID=%s AND CID=%s AND MODEID=%s;
-IF @@ROWCOUNT = 0
-  INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,
-    NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),%s,%s,%s,0,0,0,0,0,%s)"""
+SAVE_SQL = ("UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), TRYCNT=%s, WINCNT=%s, POINT=%s WHERE SERVERID=%s AND CID=%s"
+            " AND MODEID=%s",
+            "INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,"
+            " NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),%s,%s,%s,0,0,0,0,0,%s)")
 
 
 def day_start():
@@ -84,8 +83,8 @@ async def state(p):
 
 async def save(p, today, total, run):
     db, c = context.db, p.char
-    await db.execute(SAVE_SQL, (today, total, run, db.server_id, c.cid, MODE,
-                                db.server_id, c.cid, c.name, MODE, today, total, run, c.member))
+    await db.update_or_insert(SAVE_SQL[0], (today, total, run, db.server_id, c.cid, MODE),
+                              SAVE_SQL[1], (db.server_id, c.cid, c.name, MODE, today, total, run, c.member))
 
 
 async def info_frame(p):

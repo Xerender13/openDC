@@ -88,12 +88,19 @@ async def select_car(session, frame):
 #   Some 2011 cars have capacity but no stats below their class (Shark V1-V6, user 2026-10-19: Shark bought as V1, the
 #   EU dealership listed V7), or stats from a lower grade (WILD F V4, class V7): a car with empty low rows starts at its
 #   class (VehicleList Lvl; its listed stats are that grade's). Price = that grade's Price.
-CREATE_CAR_SQL = ("SET NOCOUNT ON; DECLARE @carid numeric; EXEC PC_SKID_CREATECAR %s, %s, %s, %s, %s, %s, 0, %s, 0,"
-                  " @carid OUTPUT; IF @carid > 0 UPDATE SKID_CHARACTER_TB SET CURCAR=@carid WHERE SERVERID=%s AND CID=%s;"
-                  " SELECT ISNULL(@carid, -1)")
+# pc_skid_createcar (db/postgres/02_procedures.sql): the new car id, or -1
+GIVE_CAR_SQL = "SELECT pc_skid_createcar(%s, %s, %s, %s, %s, %s, 0, %s, 0)"
 CARS_PER_FLOOR = 8
-GIVE_CAR_SQL = ("SET NOCOUNT ON; DECLARE @carid numeric; EXEC PC_SKID_CREATECAR %s, %s, %s, %s, %s, %s, 0, %s, 0,"
-                " @carid OUTPUT; SELECT ISNULL(@carid, -1)")
+
+
+def create_current(cur, sid, cid, name, car_type, color, grade, capacity):
+    """db.transaction: a new car that becomes the current car. -> its id or -1. (Not one statement: PostgreSQL does
+    not let one statement update the character row twice, the function's NEXTCAR and this CURCAR.)"""
+    cur.execute(GIVE_CAR_SQL, (sid, cid, name, car_type, color, grade, capacity))
+    car_id = int(cur.fetchone()[0] or -1)
+    if car_id > 0:
+        cur.execute(CUR_CAR_SQL, (car_id, sid, cid))
+    return car_id
 
 
 def garage_space(p):
@@ -185,8 +192,8 @@ async def buy_car(session, frame):
     if not await add_money(c, -price):
         return error(session, '20042')
     capacity = float(up['capacity'])
-    car_id = int((await db.row(CREATE_CAR_SQL, (db.server_id, c.cid, c.name, car_type, color, grade, capacity,
-                                                db.server_id, c.cid)))[0])
+    car_id = await db.transaction(lambda cur: create_current(cur, db.server_id, c.cid, c.name, car_type, color, grade,
+                                                             capacity))
     if car_id <= 0:
         return error(session, '20042')
     car = Car(car_id, car_type, color, grade, 0, capacity, 0.0, 0, capacity, float(up['efficiency']))
@@ -235,9 +242,9 @@ async def sell_car(session, frame):
     price = int(up['sell'] if sold else up.get('close_sell', up['sell']))
     if not await add_money(c, price):
         return error(session, '20045')
-    await db.execute("DELETE FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s;"
-                     " UPDATE SKID_CHARACTER_TB SET NUMCAR=NUMCAR-1 WHERE SERVERID=%s AND CID=%s AND NUMCAR>0",
-                     (db.server_id, c.cid, car_id, db.server_id, c.cid))
+    await db.execute("DELETE FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s", (db.server_id, c.cid, car_id))
+    await db.execute("UPDATE SKID_CHARACTER_TB SET NUMCAR=NUMCAR-1 WHERE SERVERID=%s AND CID=%s AND NUMCAR>0",
+                     (db.server_id, c.cid))
     c.cars = [o for o in c.cars if o.car_id != car_id]
     keys = [i for i in p.items if i.random == car_id and getattr(info_of(i), 'kind', '') == 'car']
     for k in keys:

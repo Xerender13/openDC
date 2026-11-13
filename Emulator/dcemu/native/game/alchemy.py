@@ -49,12 +49,10 @@ NAME = 56                                   # char[56] skill book id in 0x0e78 /
 DOUBLER = 'i_n_createdouble'                # 2016 Manufacturing Booster: twice the result (see 0x0e78 above)
 ENTRY = 0x78                                # one skill book id in 0x0e75
 STATE_SQL = ("SELECT MODEID, POINT FROM SKID_PLAYMODE_TB WHERE SERVERID=%s AND CID=%s AND"
-             " (MODEID=%s OR MODEID LIKE 'SKB[_]%%')")
-SAVE_SQL = """SET NOCOUNT ON;
-UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), POINT=%s WHERE SERVERID=%s AND CID=%s AND MODEID=%s;
-IF @@ROWCOUNT = 0
-  INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,
-    NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),0,0,%s,0,0,0,0,0,%s)"""
+             " (MODEID=%s OR MODEID LIKE 'SKB\\_%%')")
+SAVE_SQL = ("UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), POINT=%s WHERE SERVERID=%s AND CID=%s AND MODEID=%s",
+            "INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,"
+            " NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),0,0,%s,0,0,0,0,0,%s)")
 
 _recipes = _levels = _shop = None
 
@@ -140,7 +138,8 @@ def info_frame(p):
 
 async def save(p, mode, point):
     db, c = context.db, p.char
-    await db.execute(SAVE_SQL, (point, db.server_id, c.cid, mode, db.server_id, c.cid, c.name, mode, point, c.member))
+    await db.update_or_insert(SAVE_SQL[0], (point, db.server_id, c.cid, mode),
+                              SAVE_SQL[1], (db.server_id, c.cid, c.name, mode, point, c.member))
 
 
 async def learn(session, p, info):

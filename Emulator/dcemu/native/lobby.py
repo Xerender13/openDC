@@ -26,7 +26,7 @@ Messages (offsets from the type; 2008 structs from ZoneServer.pdb, 2011 sizes fr
   0x50 C>S CheckCharName (name)  -> 0x51 (name, bool usable)
   0x52 C>S CreateChar (name, u16 avatar, u32 car type, u32 colour) -> 0x53 (name, int64 cid, int car id)
   0x07 C>S ping (u32);  0x02 S>C keepalive (u32 server time, native.now), at once and every 3 s.
-Database work as the 2008 server does it on SQL Server: the character row (CID is an identity
+Database work as the 2008 server did it (on SQL Server; PostgreSQL since session 42): the character row (CID is an identity
 column: OUTPUT INSERTED.CID), then PC_SKID_CREATECAR for the first car (grade 1, Mitron =
 the car's V1 capacity from the 2011 VehicleUpgrade.xlt).
 """
@@ -124,24 +124,23 @@ async def check_name(session, frame):
     session.to_client(Frame(NAME_ACK, name_bytes(name) + bytes([1 if free else 0])))
 
 
-# One transaction: the character row (CID is an identity column), its first car, CURCAR.
-# NOCOUNT: otherwise the row counts of the INSERT/UPDATE come back before the SELECT.
-CREATE_SQL = (
-    "SET NOCOUNT ON; SET XACT_ABORT ON; BEGIN TRAN;"
-    " DECLARE @c TABLE (cid numeric); DECLARE @cid numeric, @carid numeric;"
-    " INSERT INTO SKID_CHARACTER_TB(SERVERID, CNAME, UCNAME, AVATAR, MEMBERID)"
-    " OUTPUT INSERTED.CID INTO @c VALUES (%s, %s, UPPER(%s), %s, %s);"
-    " SELECT @cid = cid FROM @c;"
-    " EXEC PC_SKID_CREATECAR %s, @cid, %s, %s, %s, 1, 0, %s, 0, @carid OUTPUT;"
-    " IF @carid > 0 BEGIN"
-    " UPDATE SKID_CHARACTER_TB SET CURCAR = @carid WHERE SERVERID = %s AND CID = @cid;"
-    " IF %s <> 0 BEGIN"
-    " UPDATE SKID_CAR_TB SET SLOT = %s WHERE SERVERID = %s AND CID = @cid AND CARID = @carid;"
-    " UPDATE SKID_CHARACTER_TB SET LASTPOSSTATE=3, LASTCITYID=0, LASTAREA=-1"
-    " WHERE SERVERID = %s AND CID = @cid; END; END"
-    " ELSE ROLLBACK;"
-    " IF @@TRANCOUNT > 0 COMMIT;"
-    " SELECT CASE WHEN @carid > 0 THEN @cid ELSE -1 END, ISNULL(@carid, -1);")
+def create_in_db(cur, sid, name, avatar, member, car_type, color, capacity, training, slot):
+    """One transaction (db.transaction): the character row (CID is an identity column), its first car
+    (pc_skid_createcar), CURCAR; the training car's slot and the Driver Dome start. -> (cid, car id) or (-1, -1)."""
+    cur.execute("INSERT INTO SKID_CHARACTER_TB(SERVERID, CNAME, UCNAME, AVATAR, MEMBERID)"
+                " VALUES (%s, %s, UPPER(%s), %s, %s) RETURNING CID", (sid, name, name, avatar, member))
+    cid = int(cur.fetchone()[0])
+    cur.execute("SELECT pc_skid_createcar(%s, %s, %s, %s, %s, 1, 0, %s, 0)", (sid, cid, name, car_type, color, capacity))
+    car_id = int(cur.fetchone()[0] or -1)
+    if car_id <= 0:
+        raise RuntimeError('no first car')
+    cur.execute("UPDATE SKID_CHARACTER_TB SET CURCAR = %s WHERE SERVERID = %s AND CID = %s", (car_id, sid, cid))
+    if training:
+        cur.execute("UPDATE SKID_CAR_TB SET SLOT = %s WHERE SERVERID = %s AND CID = %s AND CARID = %s",
+                    (slot, sid, cid, car_id))
+        cur.execute("UPDATE SKID_CHARACTER_TB SET LASTPOSSTATE=3, LASTCITYID=0, LASTAREA=-1"
+                    " WHERE SERVERID = %s AND CID = %s", (sid, cid))
+    return cid, car_id
 
 
 @on('native:lobby', C2S, 0x52)
@@ -156,10 +155,8 @@ async def create_char(session, frame):
     capacity = context.data.mitron_capacity(car_type)
     if member and capacity is not None and await name_free(name):
         try:
-            cid, car_id = map(int, await context.db.row(CREATE_SQL, (
-                context.db.server_id, name, name, avatar, member,
-                context.db.server_id, name, car_type, color, capacity, context.db.server_id,
-                int(training), TRAINING_SLOT, context.db.server_id, context.db.server_id)))
+            cid, car_id = await context.db.transaction(lambda cur: create_in_db(
+                cur, context.db.server_id, name, avatar, member, car_type, color, capacity, training, TRAINING_SLOT))
         except Exception as e:                  # the transaction is rolled back; tell the client
             session.log.note(f'create {name!r} failed: {e}')
             cid, car_id = -1, -1
@@ -179,12 +176,14 @@ async def set_char_state(session, frame):
     state = chr(state) if state in (ord('R'), ord('P')) else None
     row = None
     if member and state:
+        await context.db.execute(
+            "UPDATE SKID_CHARACTER_TB SET STATE = %s,"
+            " DELDATE = CASE WHEN %s = 'R' THEN GETUTCDATE() + %s * interval '1 day' ELSE NULL END"
+            " WHERE SERVERID = %s AND CID = %s AND MEMBERID = %s AND STATE IN ('P', 'R')",
+            (state, state, int(days), context.db.server_id, cid, member))
         row = await context.db.row(
-            "SET NOCOUNT ON; UPDATE SKID_CHARACTER_TB SET STATE = %s,"
-            " DELDATE = CASE WHEN %s = 'R' THEN DATEADD(day, %s, GETUTCDATE()) ELSE NULL END"
-            " WHERE SERVERID = %s AND CID = %s AND MEMBERID = %s AND STATE IN ('P', 'R');"
-            " SELECT STATE, DELDATE FROM SKID_CHARACTER_TB WHERE SERVERID = %s AND CID = %s AND MEMBERID = %s",
-            (state, state, int(days), context.db.server_id, cid, member, context.db.server_id, cid, member))
+            "SELECT STATE, DELDATE FROM SKID_CHARACTER_TB WHERE SERVERID = %s AND CID = %s AND MEMBERID = %s",
+            (context.db.server_id, cid, member))
     cur, when = (row[0].strip(), time_t(row[1])) if row else ('P', 0)
     session.log.note(f'char state {name!r}: asked {state!r} ({days} days) -> {cur!r} until {when}')
     session.to_client(Frame(0x32, name_bytes(name) + struct.pack('<qII', cid, ord(cur), when if cur == 'R' else 0)))
@@ -200,11 +199,10 @@ async def delete_char(session, frame):
     row = None
     at_once = 1 if context.delete_wait_days == 0 else 0
     if member:
-        row = await context.db.row(
-            "SET NOCOUNT ON; UPDATE SKID_CHARACTER_TB SET MEMBERID = '$' + MEMBERID, STATE = 'D', DELDATE = GETUTCDATE()"
+        row = (await context.db.execute(
+            "UPDATE SKID_CHARACTER_TB SET MEMBERID = '$' || MEMBERID, STATE = 'D', DELDATE = GETUTCDATE()"
             " WHERE SERVERID = %s AND UCNAME = UPPER(%s) AND MEMBERID = %s AND ((STATE = 'R' AND DELDATE <= GETUTCDATE())"
-            " OR (STATE = 'P' AND %s = 1));"
-            " SELECT @@ROWCOUNT", (context.db.server_id, name, member, at_once))
+            " OR (STATE = 'P' AND %s = 1))", (context.db.server_id, name, member, at_once)),)
     ok = bool(row and row[0])
     session.log.note(f'delete {name!r}: {"done" if ok else "refused (not reserved, or its time has not come)"}')
     if ok:

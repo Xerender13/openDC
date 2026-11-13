@@ -148,10 +148,10 @@ async def set_gauge(p, value):
     from .coupons import params
     db = context.db
     (await params(p))[GAUGE_TYPE] = float(value)
-    await db.execute("UPDATE SKID_COUPONPARAMVALUE_TB SET VALUE=%s, LASTDATE=GetDate() WHERE SERVERID=%s AND CID=%s"
-                     " AND CTYPE=%s; IF @@ROWCOUNT = 0 INSERT INTO SKID_COUPONPARAMVALUE_TB(SERVERID, CID, CTYPE, VALUE,"
-                     " LASTDATE) VALUES (%s,%s,%s,%s,GetDate())",
-                     (value, db.server_id, p.char.cid, GAUGE_TYPE, db.server_id, p.char.cid, GAUGE_TYPE, value))
+    await db.update_or_insert("UPDATE SKID_COUPONPARAMVALUE_TB SET VALUE=%s, LASTDATE=GetDate() WHERE SERVERID=%s"
+                              " AND CID=%s AND CTYPE=%s", (value, db.server_id, p.char.cid, GAUGE_TYPE),
+                              "INSERT INTO SKID_COUPONPARAMVALUE_TB(SERVERID, CID, CTYPE, VALUE, LASTDATE)"
+                              " VALUES (%s,%s,%s,%s,GetDate())", (db.server_id, p.char.cid, GAUGE_TYPE, value))
 
 
 def gauge_frame(value):

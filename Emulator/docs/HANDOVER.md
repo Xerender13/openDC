@@ -4,6 +4,17 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
+## Session 42 (2026-11-13): PostgreSQL, request audit, trade, crew level / research / window — resume here
+
+Details: EMULATOR_NOTES session 42. **Nothing was tried in game.** 232 tests pass. Nothing committed.
+- **The database is PostgreSQL now** (`./launch.sh db` starts container dcemu_pg on 127.0.0.1:15432; databases skdbtw /
+  skdb2016test, already migrated from SQL Server with all rows). SQL Server code is removed; the old container
+  dcemu2011_db and its volume are untouched (the local `../Emulator 2011` copy still uses them).
+- 2016: chase-end result offset fixed; password joins 0x1d8 / 0x1dd; player trade (both clients); Valentine
+  chocolate event; crew level / research / boards / donations; 2016 crew creation (0xce4); crew rank refresh.
+- Open: the crew Acceptance page (request unknown, no queue), crew grade byte, ranking windows (0xfa2 / 0xfa4 entry
+  layout), honor ranking, World Laptime, DCGP, Neo City messages.
+
 ## Session 41 (2026-11-13): car limit 2000, Origin cars in 2016, Gotcha car slots — resume here
 
 Details: EMULATOR_NOTES session 41. **Nothing was tried in game** (emulator, database and clients were stopped all

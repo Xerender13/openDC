@@ -34,22 +34,27 @@ def training_car(car):
 
 # Lock the character before checking/removing its training car. The DB condition also
 # protects against duplicate requests from another connection with a stale player object.
-COMPLETE_SQL = (
-    "SET NOCOUNT ON; SET XACT_ABORT ON; BEGIN TRY BEGIN TRAN;"
-    " DECLARE @sid numeric=%s, @cid numeric=%s, @old numeric=%s, @slot numeric=%s;"
-    " DECLARE @new numeric=-1, @money bigint, @current numeric;"
-    " SELECT @money=GOLD, @current=CURCAR FROM SKID_CHARACTER_TB WITH (UPDLOCK, HOLDLOCK)"
-    " WHERE SERVERID=@sid AND CID=@cid;"
-    " IF @current=@old AND EXISTS (SELECT 1 FROM SKID_CAR_TB WITH (UPDLOCK, HOLDLOCK)"
-    " WHERE SERVERID=@sid AND CID=@cid AND CARID=@old AND CARTYPE=95 AND SLOT=@slot) BEGIN"
-    " EXEC PC_SKID_CREATECAR @sid, @cid, %s, %s, %s, 1, 0, %s, 0, @new OUTPUT;"
-    " IF ISNULL(@new,-1)<=0 THROW 50001, 'Cannot create apprentice starter', 1;"
-    " DELETE FROM SKID_CAR_TB WHERE SERVERID=@sid AND CID=@cid AND CARID=@old;"
-    " UPDATE SKID_CHARACTER_TB SET CURCAR=@new, NUMCAR=NUMCAR-1, LASTPOSSTATE=0,"
-    " LASTCITYID=1, LASTAREA=-1, LASTPOSX=0, LASTPOSY=0, LASTPOSZ=0, LASTPOSW=0"
-    " WHERE SERVERID=@sid AND CID=@cid; END;"
-    " COMMIT; SELECT @new, @money;"
-    " END TRY BEGIN CATCH IF @@TRANCOUNT>0 ROLLBACK; THROW; END CATCH;")
+def complete_in_db(cur, sid, cid, old, slot, name, car_type, color, capacity):
+    """db.transaction: with the character and its training car locked (FOR UPDATE), the training car still current
+    and in its slot -> the starter car (pc_skid_createcar), the training car deleted, the starter current and the
+    character placed for the field intro. -> (new car id, Mito), or (-1, Mito) when nothing was done."""
+    cur.execute("SELECT GOLD, CURCAR FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s FOR UPDATE", (sid, cid))
+    row = cur.fetchone()
+    if not row:
+        return -1, 0
+    money, current = row
+    cur.execute("SELECT 1 FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s AND CARTYPE=95 AND SLOT=%s"
+                " FOR UPDATE", (sid, cid, old, slot))
+    if int(current or 0) != old or not cur.fetchall():
+        return -1, money
+    cur.execute("SELECT pc_skid_createcar(%s, %s, %s, %s, %s, 1, 0, %s, 0)", (sid, cid, name, car_type, color, capacity))
+    new = int(cur.fetchone()[0] or -1)
+    if new <= 0:
+        raise RuntimeError('Cannot create apprentice starter')
+    cur.execute("DELETE FROM SKID_CAR_TB WHERE SERVERID=%s AND CID=%s AND CARID=%s", (sid, cid, old))
+    cur.execute("UPDATE SKID_CHARACTER_TB SET CURCAR=%s, NUMCAR=NUMCAR-1, LASTPOSSTATE=0, LASTCITYID=1, LASTAREA=-1,"
+                " LASTPOSX=0, LASTPOSY=0, LASTPOSZ=0, LASTPOSW=0 WHERE SERVERID=%s AND CID=%s", (new, sid, cid))
+    return new, money
 
 
 def completion_ack(old_id, car, mito, elapsed):
@@ -70,8 +75,8 @@ async def complete(session, frame):
         session.log.note(f'apprentice: refused starter {car_type}, result {result}')
         return
     capacity = float(up['capacity'])
-    row = await db.row(COMPLETE_SQL, (db.server_id, c.cid, old.car_id, old.slot,
-                                     c.name, car_type, color, capacity))
+    row = await db.transaction(lambda cur: complete_in_db(cur, db.server_id, c.cid, old.car_id, old.slot, c.name,
+                                                          car_type, color, capacity))
     if not row or int(row[0] or -1) <= 0:
         session.log.note('apprentice: training car already returned or character changed')
         return

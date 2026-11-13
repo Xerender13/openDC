@@ -28,19 +28,16 @@ from .login import SVC, error, send
 from .records import wstr
 from .player import BATTLE_TUTORIAL_DONE
 
-COUPON_SAVE_SQL = """IF EXISTS (SELECT 1 FROM SKID_COUPONVALUE_TB WHERE SERVERID=%s AND CID=%s)
-  UPDATE SKID_COUPONVALUE_TB SET PVPBATTLE=%s, QUICKSERVICE=%s, CHASING=%s, COMBO=%s, DRIVETIME=%s, DRIFT=%s,
-    ARTDRIVE=%s, JUMP=%s, REVDRIVE=%s, UNDERCITY=%s WHERE SERVERID=%s AND CID=%s
-ELSE
-  INSERT INTO SKID_COUPONVALUE_TB(SERVERID, CID, CNAME, PVPBATTLE, QUICKSERVICE, CHASING, COMBO, DRIVETIME, DRIFT,
-    ARTDRIVE, JUMP, REVDRIVE, UNDERCITY) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
-# the SQL Server form of the 2008 server's IncPlayMode (UPDATE ... OUTPUT, else INSERT)
-PLAY_MODE_SQL = """SET NOCOUNT ON;
-UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), TRYCNT=TRYCNT+%s, WINCNT=WINCNT+%s
-  WHERE SERVERID=%s AND CID=%s AND MODEID=%s;
-IF @@ROWCOUNT = 0
-  INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,
-    NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),%s,%s,0,0,0,0,0,0,%s)"""
+COUPON_SAVE_SQL = ("UPDATE SKID_COUPONVALUE_TB SET PVPBATTLE=%s, QUICKSERVICE=%s, CHASING=%s, COMBO=%s, DRIVETIME=%s,"
+                   " DRIFT=%s, ARTDRIVE=%s, JUMP=%s, REVDRIVE=%s, UNDERCITY=%s WHERE SERVERID=%s AND CID=%s",
+                   "INSERT INTO SKID_COUPONVALUE_TB(SERVERID, CID, CNAME, PVPBATTLE, QUICKSERVICE, CHASING, COMBO,"
+                   " DRIVETIME, DRIFT, ARTDRIVE, JUMP, REVDRIVE, UNDERCITY) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)")
+# the 2008 server's IncPlayMode: UPDATE, else INSERT
+PLAY_MODE_SQL = ("UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), TRYCNT=TRYCNT+%s, WINCNT=WINCNT+%s"
+                 " WHERE SERVERID=%s AND CID=%s AND MODEID=%s")
+PLAY_MODE_NEW_SQL = ("INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT,"
+                     " PLAYTIME, NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID)"
+                     " VALUES (%s,%s,%s,%s,GetDate(),GetDate(),%s,%s,0,0,0,0,0,0,%s)")
 COIN_SQL = "SELECT COIN FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s"
 COIN_NEW_SQL = "INSERT INTO SKID_UNALISCOIN_TB (MEMBERID, COIN, LASTDATE) VALUES (%s, 0, GETDATE())"
 COUNTERS_CHECKED = 9
@@ -53,8 +50,8 @@ def pack_coupon_vars(v):
 
 async def inc_play_mode(c, mode, tries, wins):
     db = context.db
-    await db.execute(PLAY_MODE_SQL, (tries, wins, db.server_id, c.cid, mode,
-                                     db.server_id, c.cid, c.name, mode, tries, wins, c.member))
+    if not await db.execute(PLAY_MODE_SQL, (tries, wins, db.server_id, c.cid, mode)):
+        await db.execute(PLAY_MODE_NEW_SQL, (db.server_id, c.cid, c.name, mode, tries, wins, c.member))
 
 
 @on(SVC, C2S, 0x3f2)
@@ -78,8 +75,8 @@ async def update_coupon_vars(session, frame):
         for _ in range(under):
             await count_many(session, ['UndercityClear'] + ([f'UndercityClear_{sfx}'] if sfx and sfx != 'OR' else []))
     db, c = context.db, p.char
-    await db.execute(COUPON_SAVE_SQL, (db.server_id, c.cid, *new, db.server_id, c.cid,
-                                       db.server_id, c.cid, c.name, *new))
+    await db.update_or_insert(COUPON_SAVE_SQL[0], (*new, db.server_id, c.cid),
+                              COUPON_SAVE_SQL[1], (db.server_id, c.cid, c.name, *new))
 
 
 @on(SVC, C2S, 0x104)
@@ -234,10 +231,16 @@ async def drive_info(session, frame):
 
 PREMIUM_FUEL, PREMIUM_FUEL_DISCOUNT = 1, 0.5     # sale flag 1: char byte +0x363 set (not kept here)
 AUTO_FILL_UP, AUTO_FILL_UP_FACTOR = 34, 0.8      # drift category of i_automitron, its 20 % discount
-PAY_SQL = """SET NOCOUNT ON;
-UPDATE SKID_CHARACTER_TB SET GOLD=GOLD-%s WHERE SERVERID=%s AND CID=%s AND GOLD>=%s;
-IF @@ROWCOUNT = 1 UPDATE SKID_CAR_TB SET MITRON=%s WHERE SERVERID=%s AND CID=%s AND CARID=%s;
-SELECT GOLD FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s"""
+def pay_fuel(cur, pay, sid, cid, mitron, car_id):
+    """db.transaction: the fuel's price taken (not below 0) and the car's fuel set. -> the character's GOLD."""
+    cur.execute("UPDATE SKID_CHARACTER_TB SET GOLD=GOLD-%s WHERE SERVERID=%s AND CID=%s AND GOLD>=%s RETURNING GOLD",
+                (pay, sid, cid, pay))
+    r = cur.fetchone()
+    if r:
+        cur.execute("UPDATE SKID_CAR_TB SET MITRON=%s WHERE SERVERID=%s AND CID=%s AND CARID=%s", (mitron, sid, cid, car_id))
+        return r
+    cur.execute("SELECT GOLD FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s", (sid, cid))
+    return cur.fetchone()
 
 
 @on(SVC, C2S, 0x2d3)
@@ -285,8 +288,7 @@ async def fuel_charge(session, frame):
         if pay > c.mito:
             return error(session, '20121')
         db = context.db
-        r = await db.row(PAY_SQL, (pay, db.server_id, c.cid, pay, car.mitron + fuel, db.server_id, c.cid, car_id,
-                                   db.server_id, c.cid))
+        r = await db.transaction(lambda cur: pay_fuel(cur, pay, db.server_id, c.cid, car.mitron + fuel, car_id))
         gold = int(r[0]) if r else c.mito
         if gold == c.mito - pay:
             car.mitron += fuel

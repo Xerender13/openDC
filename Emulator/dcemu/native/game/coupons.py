@@ -99,10 +99,10 @@ async def add_param(session, ctype, delta=1):
         return
     values, db = await params(p), context.db
     values[ctype] = values.get(ctype, 0.0) + delta
-    await db.execute("UPDATE SKID_COUPONPARAMVALUE_TB SET VALUE=%s, LASTDATE=GetDate() WHERE SERVERID=%s AND CID=%s"
-                     " AND CTYPE=%s; IF @@ROWCOUNT = 0 INSERT INTO SKID_COUPONPARAMVALUE_TB(SERVERID, CID, CTYPE, VALUE,"
-                     " LASTDATE) VALUES (%s,%s,%s,%s,GetDate())",
-                     (values[ctype], db.server_id, p.char.cid, ctype, db.server_id, p.char.cid, ctype, values[ctype]))
+    await db.update_or_insert("UPDATE SKID_COUPONPARAMVALUE_TB SET VALUE=%s, LASTDATE=GetDate() WHERE SERVERID=%s"
+                              " AND CID=%s AND CTYPE=%s", (values[ctype], db.server_id, p.char.cid, ctype),
+                              "INSERT INTO SKID_COUPONPARAMVALUE_TB(SERVERID, CID, CTYPE, VALUE, LASTDATE)"
+                              " VALUES (%s,%s,%s,%s,GetDate())", (db.server_id, p.char.cid, ctype, values[ctype]))
     send(session, *param_frames({ctype: values[ctype]}))
 
 

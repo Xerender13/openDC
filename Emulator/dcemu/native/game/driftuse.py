@@ -577,13 +577,13 @@ async def use_lucky_bag(session, frame):
 CHANGE_NICK = 36
 NAME_TABLES = None
 RENAME_MODE = 'RENAME'
-RENAME_WAIT_SQL = ("SELECT DATEDIFF(second, LASTDATE, GETUTCDATE()) FROM SKID_PLAYMODE_TB"
+RENAME_WAIT_SQL = ("SELECT extract(epoch FROM GETUTCDATE() - LASTDATE)::bigint FROM SKID_PLAYMODE_TB"
                    " WHERE SERVERID=%s AND CID=%s AND MODEID=%s")
-RENAME_SAVE_SQL = """SET NOCOUNT ON;
-UPDATE SKID_PLAYMODE_TB SET LASTDATE=GETUTCDATE(), TRYCNT=TRYCNT+1 WHERE SERVERID=%s AND CID=%s AND MODEID=%s;
-IF @@ROWCOUNT = 0
-  INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,
-    NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GETUTCDATE(),GETUTCDATE(),1,0,0,0,0,0,0,0,%s)"""
+RENAME_SAVE_SQL = ("UPDATE SKID_PLAYMODE_TB SET LASTDATE=GETUTCDATE(), TRYCNT=TRYCNT+1 WHERE SERVERID=%s AND CID=%s"
+                   " AND MODEID=%s",
+                   "INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT,"
+                   " PLAYTIME, NEXP, GAMEMONEY, BESTCNT, RETIRECNT, MEMBERID) VALUES (%s,%s,%s,%s,GETUTCDATE(),GETUTCDATE(),"
+                   "1,0,0,0,0,0,0,0,%s)")
 
 
 async def name_tables():
@@ -644,7 +644,8 @@ async def rename_char(session, frame):
         await db.execute(f"UPDATE {table} SET CNAME = %s" + (", UCNAME = UPPER(%s)" if has_upper else "")
                          + " WHERE CID = %s", (name, name, c.cid) if has_upper else (name, c.cid))
     c.name = name
-    await db.execute(RENAME_SAVE_SQL, (db.server_id, c.cid, RENAME_MODE, db.server_id, c.cid, name, RENAME_MODE, c.member))
+    await db.update_or_insert(RENAME_SAVE_SQL[0], (db.server_id, c.cid, RENAME_MODE),
+                              RENAME_SAVE_SQL[1], (db.server_id, c.cid, name, RENAME_MODE, c.member))
     await use_up(p, kit)
     session.log.note(f'renamed {old!r} -> {name!r}')
     send(session, rename_ack(0, name, True))

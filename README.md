@@ -9,7 +9,7 @@ Drift City (Skid Rush) Stage 2/Stage 3 Emulation Project: a server emulator for 
 **It's still work in progress, so expect bugs and unimplemented stuff!**
 
 The emulator is a native server written in Python. It keeps the original server's architecture from the leaked 2008 files (separate auth /
-lobby / game / area / battle-area services, the original SQL Server database tables), reads the server tables in the
+lobby / game / area / battle-area services, the original server's database tables, now in PostgreSQL), reads the server tables in the
 2011/2016 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
 the rest itself.
 

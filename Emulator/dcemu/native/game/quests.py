@@ -36,10 +36,10 @@ from .login import SVC, error, send, stat_frames
 from .progress import add_exp, play_mode
 
 STARTED, COMPLETED, REWARDED, FAILED, GIVEN_UP = 0, 1, 2, 3, 4
-QUEST_SAVE_SQL = """IF EXISTS (SELECT 1 FROM SKID_QUEST_TB WHERE SERVERID=%s AND CID=%s AND QUESTID=%s)
-  UPDATE SKID_QUEST_TB SET STATE=%s, FAILNUM=%s, PLACEIDX=%s, LASTDATE=GetDate() WHERE SERVERID=%s AND CID=%s AND QUESTID=%s
-ELSE
-  INSERT INTO SKID_QUEST_TB(SERVERID, CID, CNAME, QUESTID, STATE, FAILNUM, PLACEIDX) VALUES (%s,%s,%s,%s,%s,%s,%s)"""
+QUEST_SAVE_SQL = ("UPDATE SKID_QUEST_TB SET STATE=%s, FAILNUM=%s, PLACEIDX=%s, LASTDATE=GetDate() WHERE SERVERID=%s"
+                  " AND CID=%s AND QUESTID=%s",
+                  "INSERT INTO SKID_QUEST_TB(SERVERID, CID, CNAME, QUESTID, STATE, FAILNUM, PLACEIDX)"
+                  " VALUES (%s,%s,%s,%s,%s,%s,%s)")
 REWARD_ITEM_COLS = (77, 78, 79)
 
 
@@ -69,8 +69,8 @@ async def save(p, table_idx):
     _, state, place, fails = p.quests[k]
     qid = context.data.quests[table_idx][0]
     db, c = context.db, p.char
-    await db.execute(QUEST_SAVE_SQL, (db.server_id, c.cid, qid, state, fails, place, db.server_id, c.cid, qid,
-                                      db.server_id, c.cid, c.name, qid, state, fails, place))
+    await db.update_or_insert(QUEST_SAVE_SQL[0], (state, fails, place, db.server_id, c.cid, qid),
+                              QUEST_SAVE_SQL[1], (db.server_id, c.cid, c.name, qid, state, fails, place))
 
 
 @on(SVC, C2S, 0x106)

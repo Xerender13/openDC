@@ -161,8 +161,8 @@ async def detach(session, frame):
         return
     db, c = context.db, p.char
     inven, = struct.unpack_from('<I', frame.payload)
-    r = await db.row("SET NOCOUNT ON; DELETE FROM SKID_STITEM_TB WHERE SERVERID = %s AND CID = %s AND INVENIDX = %s;"
-                     " SELECT @@ROWCOUNT", (db.server_id, c.cid, inven))
+    r = await db.row("DELETE FROM SKID_STITEM_TB WHERE SERVERID = %s AND CID = %s AND INVENIDX = %s RETURNING 1",
+                     (db.server_id, c.cid, inven))
     if not (r and r[0]):
         from .. import admin
         return admin.message(session, 'Wrong StickerIndex')
@@ -211,9 +211,9 @@ async def gm_command(session, cmd, args):
     from ...proxy import live
     db = context.db
     if cmd == 'gmreports':
-        rows = await db.rows("SELECT TOP 10 c.STICKERNAME, COUNT(*), MAX(l.TXTCONTENT) FROM SKID_STLOG_TB l JOIN"
+        rows = await db.rows("SELECT c.STICKERNAME, COUNT(*), MAX(l.TXTCONTENT) FROM SKID_STLOG_TB l JOIN"
                              " SKID_STICKERCATALOG_TB c ON c.STICKERID = l.N1ARG WHERE l.LOGNAME = 'REPORT'"
-                             " AND c.STICKERTYPE <> %s GROUP BY c.STICKERNAME ORDER BY COUNT(*) DESC", (BLOCKED,))
+                             " AND c.STICKERTYPE <> %s GROUP BY c.STICKERNAME ORDER BY COUNT(*) DESC LIMIT 10", (BLOCKED,))
         return admin.message(session, 'Reported stickers: ' + (', '.join(f'{n} ({k}x: {t})' for n, k, t in rows) or 'none'))
     if not args:
         return admin.message(session, f'Usage: {cmd} <sticker name>')

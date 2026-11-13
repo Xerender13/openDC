@@ -73,17 +73,14 @@ CITY_SUFFIX = {1: ('Moon', 'Mo', 'MO'), 2: ('Koi', 'Ko', 'KO'), 3: ('Cras', 'Cr'
 POST_CITY = {'post_1st': 1, 'post_2nd': 2, 'post_3rd': 3, 'post_4rd': 4}
 TRACK_CITY = {'moonpalace': 1, 'koinonia': 2, 'kononia': 2, 'cras': 3, 'oros': 4}
 LOAD_SQL = ("SELECT MODEID, POINT, TRYCNT, WINCNT FROM SKID_PLAYMODE_TB WHERE SERVERID=%s AND CID=%s AND"
-            " (MODEID LIKE 'GC[_]%%' OR MODEID LIKE 'GCM[_]%%' OR MODEID LIKE 'LIC[_]%%' OR MODEID='LICSLOTS')")
-ADD_SQL = """SET NOCOUNT ON;
-UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), POINT=POINT+%s WHERE SERVERID=%s AND CID=%s AND MODEID=%s;
-IF @@ROWCOUNT = 0
-  INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME, NEXP,
-    GAMEMONEY, BESTCNT, RETIRECNT) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),0,0,%s,0,0,0,0,0)"""
-SLOTS_SQL = """SET NOCOUNT ON;
-UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), TRYCNT=%s, WINCNT=%s, POINT=%s WHERE SERVERID=%s AND CID=%s AND MODEID='LICSLOTS';
-IF @@ROWCOUNT = 0
-  INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME, NEXP,
-    GAMEMONEY, BESTCNT, RETIRECNT) VALUES (%s,%s,%s,'LICSLOTS',GetDate(),GetDate(),%s,%s,%s,0,0,0,0,0)"""
+            " (MODEID LIKE 'GC\\_%%' OR MODEID LIKE 'GCM\\_%%' OR MODEID LIKE 'LIC\\_%%' OR MODEID='LICSLOTS')")
+ADD_SQL = ("UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), POINT=POINT+%s WHERE SERVERID=%s AND CID=%s AND MODEID=%s",
+           "INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,"
+           " NEXP, GAMEMONEY, BESTCNT, RETIRECNT) VALUES (%s,%s,%s,%s,GetDate(),GetDate(),0,0,%s,0,0,0,0,0)")
+SLOTS_SQL = ("UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), TRYCNT=%s, WINCNT=%s, POINT=%s WHERE SERVERID=%s AND CID=%s"
+             " AND MODEID='LICSLOTS'",
+             "INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,"
+             " NEXP, GAMEMONEY, BESTCNT, RETIRECNT) VALUES (%s,%s,%s,'LICSLOTS',GetDate(),GetDate(),%s,%s,%s,0,0,0,0,0)")
 CNAME_SQL = "SELECT CNAME FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s"
 
 
@@ -236,7 +233,7 @@ def value(p, name):
 
 async def _add(cid, cname, mode, n):
     db = context.db
-    await db.execute(ADD_SQL, (n, db.server_id, cid, mode, db.server_id, cid, cname, mode, n))
+    await db.update_or_insert(ADD_SQL[0], (n, db.server_id, cid, mode), ADD_SQL[1], (db.server_id, cid, cname, mode, n))
 
 
 async def count(session, name, n=1, p=None):
@@ -422,7 +419,8 @@ async def select_license(session, frame):
     slots = [i if i in st['held'] and i not in want[:k] else 0 for k, i in enumerate(want)]
     st['slots'] = slots
     db = context.db
-    await db.execute(SLOTS_SQL, (*slots, db.server_id, p.char.cid, db.server_id, p.char.cid, p.char.name, *slots))
+    await db.update_or_insert(SLOTS_SQL[0], (*slots, db.server_id, p.char.cid), SLOTS_SQL[1],
+                              (db.server_id, p.char.cid, p.char.name, *slots))
     session.log.note(f'licenses mounted: {slots}' + (f' (asked {want})' if slots != want else ''))
     send(session, slots_frame(p))
     out = nameplate_frame(session)
@@ -517,11 +515,10 @@ async def license_status(session, frame):
 
 
 RESET_DAY = 1                            # = handlers/game.py NEW_FLAGS 'Etc.NewLicenseSystemnDay'
-PAY_SQL = """SET NOCOUNT ON;
-UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), POINT=%s, NEXP=%s WHERE SERVERID=%s AND CID=%s AND MODEID='LICPAY';
-IF @@ROWCOUNT = 0
-  INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME, NEXP,
-    GAMEMONEY, BESTCNT, RETIRECNT) VALUES (%s,%s,%s,'LICPAY',GetDate(),GetDate(),0,0,%s,0,%s,0,0,0)"""
+PAY_SQL = ("UPDATE SKID_PLAYMODE_TB SET LASTDATE=GetDate(), POINT=%s, NEXP=%s WHERE SERVERID=%s AND CID=%s"
+           " AND MODEID='LICPAY'",
+           "INSERT INTO SKID_PLAYMODE_TB(SERVERID, CID, CNAME, MODEID, CDATE, LASTDATE, TRYCNT, WINCNT, POINT, PLAYTIME,"
+           " NEXP, GAMEMONEY, BESTCNT, RETIRECNT) VALUES (%s,%s,%s,'LICPAY',GetDate(),GetDate(),0,0,%s,0,%s,0,0,0)")
 
 
 def pay_period(today=None):
@@ -559,7 +556,8 @@ async def pay_monthly(session, p):
         return
     amount = monthly_amount(p)
     st['paid'] = period
-    await db.execute(PAY_SQL, (period, amount, db.server_id, c.cid, db.server_id, c.cid, c.name, period, amount))
+    await db.update_or_insert(PAY_SQL[0], (period, amount, db.server_id, c.cid), PAY_SQL[1],
+                              (db.server_id, c.cid, c.name, period, amount))
     if amount <= 0 or not await add_money(c, amount):
         return
     t = tables()

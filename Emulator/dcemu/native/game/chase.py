@@ -266,9 +266,15 @@ async def chase_end(session, frame):
     user, 2026-10-13 "killing one HUV kills all".)"""
     p = session.state.get('player')
     chase = session.state.get('chase')
-    if not p or not chase or len(frame.payload) < 16:
+    from ..version import is_2016
+    if not p or not chase or len(frame.payload) < (18 if is_2016() else 16):
         return
-    serial, sort, kind, life, result = struct.unpack_from('<HHIfI', frame.payload)
+    # 2011 (sender 0x7e6f3c, 0x36 bytes): u16 serial @2, u16 sort @4, u32 result @0xe. 2016 (0x848765, 0x38): a u16
+    # more @6 (not known), result @0x10; read the 2011 way a 2016 "stop" gave result 706 (log 2026-10-20 15:24:19).
+    if is_2016():
+        serial, sort, _, result = struct.unpack_from('<HHH8xI', frame.payload)
+    else:
+        serial, sort, kind, life, result = struct.unpack_from('<HHIfI', frame.payload)
     if serial == 0:
         session.log.note(f'chase end: {p.char.name} stops (result {result})')
         await leave_chase(session, result)

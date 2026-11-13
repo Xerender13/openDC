@@ -1177,6 +1177,14 @@ async def channel_room_join(session, frame):
     join_request(session, frame.payload, 0x1d7)
 
 
+@on(SVC, C2S, 0x1d8)
+async def channel_room_secure_join(session, frame):
+    """0x1d8 ChannelRoomSecureJoin: 0x1d7 with the password (wchar[30]) after the PlayerInfo (2016 sender 0x84aee6:
+    PlayerInfo @0x34, wcsncpy to @0x10c; 2011 0x1c0 bytes = 0x1d7's 0x184 + 60). Had no handler: a channel room with
+    a password could not be joined from its list."""
+    join_request(session, frame.payload, 0x1d7, JOIN[year()][0x1d7][3] + PLAYER_INFO)
+
+
 def leave(session, banished=False):
     """Take the session's member out of its room (RoomLeave, RoomBanish, a dropped connection)."""
     room = rooms.get(session.state.pop('room', None))
@@ -1566,6 +1574,24 @@ async def switch_to_player(session, frame):
         return error(session, '20189')
     unwatch(session)
     join(session, room, frame.payload[:user_info_size()], b'', None, room.password)
+
+
+@on(SVC, C2S, 0x1dd)
+async def secure_switch_to_player(session, frame):
+    """0x1dd SecureSwitchToPlayer: 0x1dc (UserInfo) + the room's password, wchar[30] @UserInfo's end (2016 0x8673db:
+    UserInfo @2, wcsncpy to @0x12; 2011 0x4a bytes). An observer of a room with a password taking a seat; no handler
+    before."""
+    room = watching(session)
+    if not room:
+        return error(session, '20189')
+    ui = user_info_size()
+    if len(frame.payload) < ui + 2:
+        return
+    password = read_wstr(frame.payload, ui, 60)
+    if room.password and password != room.password:
+        return error(session, '20162')
+    unwatch(session)
+    join(session, room, frame.payload[:ui], b'', None, room.password)
 
 
 @on(SVC, C2S, 0x1e8)

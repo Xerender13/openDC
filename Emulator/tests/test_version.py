@@ -59,15 +59,15 @@ class VersionTest(unittest.TestCase):
     def test_2016_section_replaces_settings_only_for_2016(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'emulator.ini'
-            text = ('[client]\nversion = {}\n[services]\nauth = 11005 0 56\n[database]\nname = SKDBTW\n'
-                    '[2016]\nservices.auth = 11105 0 56\ndatabase.name = SKDB2016TEST\nflags.Main.PasserBy = 1\n')
+            text = ('[client]\nversion = {}\n[services]\nauth = 11005 0 56\n[database]\nname = skdbtw\n'
+                    '[2016]\nservices.auth = 11105 0 56\ndatabase.name = skdb2016test\nflags.Main.PasserBy = 1\n')
             path.write_text(text.format('2011'))
             cp = load_config(str(path))
-            self.assertEqual((cp['services']['auth'], cp['database']['name']), ('11005 0 56', 'SKDBTW'))
+            self.assertEqual((cp['services']['auth'], cp['database']['name']), ('11005 0 56', 'skdbtw'))
             self.assertFalse(cp.has_section('flags'))
             path.write_text(text.format('2016'))
             cp = load_config(str(path))
-            self.assertEqual((cp['services']['auth'], cp['database']['name']), ('11105 0 56', 'SKDB2016TEST'))
+            self.assertEqual((cp['services']['auth'], cp['database']['name']), ('11105 0 56', 'skdb2016test'))
             self.assertEqual(cp['flags']['main.passerby'], '1')
             self.assertEqual(cp['services']['lobby'], '11011 12011 56')    # not named: the default stays
 

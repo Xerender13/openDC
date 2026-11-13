@@ -47,11 +47,9 @@ from .progress import add_exp, play_mode
 
 STARTED, DONE = 0, 2
 REPUTATIONS = ('GC_Reputation_01', 'GC_Reputation_02', 'GC_Reputation_03')
-LOAD_SQL = "SELECT QUESTID, STATE FROM SKID_QUEST_TB WHERE SERVERID=%s AND CID=%s AND (QUESTID LIKE 'mq[_]%%' OR QUESTID LIKE 'sq[_]%%')"
-SAVE_SQL = """IF EXISTS (SELECT 1 FROM SKID_QUEST_TB WHERE SERVERID=%s AND CID=%s AND QUESTID=%s)
-  UPDATE SKID_QUEST_TB SET STATE=%s, LASTDATE=GetDate() WHERE SERVERID=%s AND CID=%s AND QUESTID=%s
-ELSE
-  INSERT INTO SKID_QUEST_TB(SERVERID, CID, CNAME, QUESTID, STATE, FAILNUM, PLACEIDX) VALUES (%s,%s,%s,%s,%s,0,0)"""
+LOAD_SQL = "SELECT QUESTID, STATE FROM SKID_QUEST_TB WHERE SERVERID=%s AND CID=%s AND (QUESTID LIKE 'mq\\_%%' OR QUESTID LIKE 'sq\\_%%')"
+SAVE_SQL = ("UPDATE SKID_QUEST_TB SET STATE=%s, LASTDATE=GetDate() WHERE SERVERID=%s AND CID=%s AND QUESTID=%s",
+            "INSERT INTO SKID_QUEST_TB(SERVERID, CID, CNAME, QUESTID, STATE, FAILNUM, PLACEIDX) VALUES (%s,%s,%s,%s,%s,0,0)")
 DELETE_SQL = "DELETE FROM SKID_QUEST_TB WHERE SERVERID=%s AND CID=%s AND QUESTID=%s"
 
 _rows = None
@@ -111,8 +109,8 @@ async def load(p):
 async def _save(p, i, state):
     db, c, qid = context.db, p.char, rows()[i]['id']
     p.mothers[i] = state
-    await db.execute(SAVE_SQL, (db.server_id, c.cid, qid, state, db.server_id, c.cid, qid,
-                                db.server_id, c.cid, c.name, qid, state))
+    await db.update_or_insert(SAVE_SQL[0], (state, db.server_id, c.cid, qid),
+                              SAVE_SQL[1], (db.server_id, c.cid, c.name, qid, state))
 
 
 async def reputation(p, name):
