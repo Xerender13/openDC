@@ -16,6 +16,12 @@ Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
 
 ### Open from the 2026-11-13 2016 test session (user reports)
 
+- **Crew donations** (0xceb) were dropped: the sender forces the u32 at +2 to 0 (`0x8690db`), so kind is `@6` and the
+  amount `@0xa`; the handler read that fixed zero as the kind. Now kind 0 = OMD Gold Mark (the account's G Coin, 1
+  research point each) and kind 1 = Mito (1 point per 100). Not yet tried in game after the fix.
+- **Crew EXP for testing**: `tools.gmctl crewexp NAME AMOUNT` and the chat command `gmcrewexp [name] amount` (GM only)
+  give crew EXP + research points, so Team Level 1 (50 000) is reachable without grinding.
+
 - **Hurricane's second aero kit does not change the car's look** (user, 2026-11-13: "the 2nd aero doesn't change the
   car look it should"). Suspect the ported aero set: `portorigin` builds the cars' aero sets from the source client's
   VisualItem / VShopItem rows, so this is either a wrong VisualItem row (a set that has no model of its own), a

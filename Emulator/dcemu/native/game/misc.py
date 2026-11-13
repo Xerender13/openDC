@@ -352,6 +352,12 @@ async def game_stream(session, frame):
         ok, reply = await admin.command('coin', args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
+    if cmd == 'gmcrewexp':                      # gmcrewexp [name] amount: crew EXP to that character's crew (2016)
+        if len(args) == 1:
+            args = [session.state['player'].char.name] + args
+        ok, reply = await admin.command('crewexp', args)
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
     if cmd[2:] in ADMIN_COMMANDS:
         ok, reply = await admin.command(cmd[2:], args)
         session.log.note(f'GM {text!r}: {reply}')
@@ -511,7 +517,7 @@ async def gm(session, cmd, args):
     from .items import add_money, mod_list
     if cmd not in GM_USAGE:
         return False, (f'unknown GM command {cmd!r}: gmitem, gmlevel, gmexp, gmmoney, gmdrift, gmsets, gmgate, '
-                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcbstart, gmtour, gmcoin, gmcar, gm' + ', gm'.join(ADMIN_COMMANDS))
+                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcbstart, gmtour, gmcoin, gmcrewexp, gmcar, gm' + ', gm'.join(ADMIN_COMMANDS))
     target = session
     if args and not args[0].lstrip('-').isdigit() and args[0] not in context.data.item_index:
         target = online(args[0])
