@@ -374,6 +374,29 @@ class Interface(p.Interface):
 
 # ---- the port ---------------------------------------------------------------------------------------------------
 
+def renumber_aero(lines):
+    """Make the "Aero Parts Set" category's index column equal to the row's position, as the 2016 table does (the six
+    generic sets at the end keep their 0). Appending the new cars' rows with their Origin index numbers broke that,
+    and the client draws the aero body by that number: a set whose number is no longer its position leaves the car
+    on its default body (pc_0449s_02, the Hurricane's B set, sat at 656 with index 674). -> rows changed."""
+    cat, pos, changed = None, 0, 0
+    for i in range(6, len(lines)):
+        c = cells(lines[i])
+        if len(c) < 3:
+            continue
+        if c[0].strip():
+            cat = c[0].strip()
+        if cat != 'Aero Parts Set':
+            continue
+        pos += 1
+        idx = c[2].strip()
+        if idx and idx != '0' and idx.isdigit() and int(idx) != pos:
+            c[2] = str(pos)
+            lines[i] = '\t'.join(c)
+            changed += 1
+    return changed
+
+
 def build(origin, sellable):
     from dcemu.native.data import read_tdf
     init = target('Data', 'Init.agt')
@@ -408,6 +431,9 @@ def build(origin, sellable):
     tables['VisualItem'], cleared = origin_defaults(tables['VisualItem'], vio, cars)
     if cleared:
         report.append(f'fits of the new cars cleared in rows before their Origin default part, by category: {cleared}')
+    fixed = renumber_aero(tables['VisualItem'])
+    if fixed:
+        report.append(f'{fixed} "A" aero set index value(s) renumbered to their row position')
     tables['VShopItem'], shop_rows, nocat = port_vshop(t16['VShopItem'], to['VShopItem'], set(aero))
     if nocat:
         report.append(f'VShopItem categories without a 2016 row (names left as Origin has them): {sorted(nocat)}')
@@ -443,6 +469,12 @@ def build(origin, sellable):
         want |= {n for n in vfiles if base in n.rsplit('\\', 1)[-1]}
     for t in tire_files:
         want |= set(by_base.get(t.lower(), [])) | set(by_base.get(t.lower()[:-4] + '.dds', []))
+    # the cars' own decals (data\decal\pc_XXXXs_decalNN.dds): the body models name textures but not the decals, so
+    # they were never copied and the client logs "GetDecalInfo fail <car>,12" for every car whose decal is picked
+    decals = {n: v for n, v in origin.files.items() if n.startswith('data\\decal\\')}
+    for f in cars:
+        base = f[7].lower()[:-4]
+        want |= {n for n in decals if n.rsplit('\\', 1)[-1].startswith(base + '_decal')}
     add = {}
     for n in sorted(want):
         add[n] = origin.read(n)

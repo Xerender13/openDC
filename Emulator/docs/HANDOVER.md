@@ -61,6 +61,21 @@ Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
   plus `GetDecalInfo fail 683,12` / `662,12` (the missing decal textures). Nothing in the log names 449 or the aero.
   **Key next test:** equip an aero set on an ORIGINAL car (e.g. the Kicker/Drifter). If its body does not change
   either, the fault is the emulator's aero slot value in general; if it does, it is specific to the ported cars.
+  **Root cause found (user's Kicker test):** the Kicker's style-1 aero resolves to a **category 4 bumper** part
+  (`pc_0000c_b02`, index 2), while the Hurricane's resolves to a **category 6 whole-body set** (`pc_0449s_02`).
+  In the original 2016 table every non-generic "Aero Parts Set" row has **index == its position in the category**
+  (653 rows, the only exceptions the six index-0 generic sets at the end). `portorigin` appended the new cars' rows
+  with their Origin index numbers, so 220 rows broke that: `pc_0449s_02` (the Hurricane's B body) sat at position 656
+  with index **674**, and the client draws the aero body by that number — an out-of-place number leaves the car on its
+  default body, which is exactly "B looks like A". **Fixed:** the aero index column is renumbered to the row position
+  (220 rows; the six generic 0 rows untouched), in `server_data_2016/Init/VisualItem.xlt` and in the client's
+  `Data/Init.agt`; `portorigin.renumber_aero()` now keeps the invariant on future ports. Not yet confirmed in game.
+- **The cars' decals were never copied**: `portorigin` only collected `data\vehicle\`, so `data\decal\pc_XXXXs_decalNN.dds`
+  was always skipped (the client logs `GetDecalInfo fail <car>,12`). Added to the tool's collection and applied now:
+  **143 decal textures** for the ported cars are in `Data/vehicles.agt` again (the Hurricane's
+  `pc_0449s_decal01/02.dds` are there). The other ~79 source decals belong to cars the 2016 build already had.
+- **VehicleDisplay**: 6 ported ids (446/447/448/569/570/644) have no row, but the Skid Rush source has none either,
+  so that is upstream, not the port. Left alone; the client only logs it.
 - **Missing decal textures for the ported cars**: `decal\pc_XXXXs_decal01.dds` / `_decal02.dds` were not copied by
   `portorigin` (it copies the `.dds` the *models* name, and the aero/body NIFs do not name the decals). Two are known
   missing for the Hurricane (patch.006 / patch.007). A car's own decals would show blank.
