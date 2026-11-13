@@ -1,5 +1,6 @@
 """2016 player profile (0x294 -> 0x295) and crew messages: the layouts measured in the 2016 client."""
 import asyncio
+import datetime
 import struct
 import unittest
 from types import SimpleNamespace
@@ -98,24 +99,117 @@ class CrewApply2016Test(unittest.TestCase):
         master = object()
         t = {'tid': 100001, 'name': 'Drifters', 'master': 1}
         sent = []
+        store = AsyncMock()
         with patch.object(crews, 'apply_checks', AsyncMock(return_value=None)), \
                 patch.object(crews, 'online_member', return_value=master), \
+                patch.object(crews, 'store_request', store), \
                 patch.object(crews, 'send', side_effect=lambda s, f: sent.append((s, f))):
             asyncio.run(crews.apply(me, t, b''))
-        return me, master, sent
+        return me, master, sent, store
 
     def test_2016_applicant_gets_0x36e(self):
         """0x36e (client 0x546720, 0x5e bytes with the type): wchar[13] crew name @2, the 66-byte bind @0x1c."""
-        me, master, sent = self.run_apply(2016)
+        me, master, sent, store = self.run_apply(2016)
         self.assertEqual([(s, f.type) for s, f in sent], [(master, 0x367), (me, 0x36e)])
         ack = sent[1][1].payload
         self.assertEqual(len(ack) + 2, 0x5e)
         self.assertEqual(ack[:26].decode('utf-16-le').rstrip('\0'), 'Drifters')
         self.assertEqual(ack[26:], sent[0][1].payload)
 
+    def test_2016_request_is_queued(self):
+        """The 2016 Acceptance page lists SKID_TEAMREQ_TB, so every request is stored even when the master is on."""
+        me, master, sent, store = self.run_apply(2016)
+        store.assert_awaited_once_with(100001, 7)
+
     def test_2011_unchanged(self):
-        me, master, sent = self.run_apply(2011)
+        me, master, sent, store = self.run_apply(2011)
         self.assertEqual([(s, f.type) for s, f in sent], [(master, 0x367)])
+        store.assert_not_awaited()
+
+
+class CrewRankingTest(unittest.TestCase):
+    """XiStrTeamInfo +0xeb: 24 bits of rank in a u32 whose top byte is the grade letter."""
+    def tearDown(self):
+        crews._rank_cache = (0, {})
+
+    def test_rank_tier(self):
+        self.assertEqual([crews.rank_tier(r) for r in (0, 1, 3, 4, 10, 11, 20, 21)],
+                         [0, 3, 3, 2, 2, 1, 1, 0])
+
+    def test_info_packs_the_grade_above_the_rank(self):
+        t = dict(tid=1, mark=1, name='Crew', desc='', url='', created=0, closed=0, banish=0, channels='',
+                 state='A', ranking=2, point=0, wins=0, count=1, exp=0, money=0, master=1, master_name='M')
+        out = crews.info_bytes(t)
+        self.assertEqual(struct.unpack_from('<I', out, 0xeb)[0], 2 | (3 << 24))
+
+    def test_rankings_numbers_by_team_point_and_stores(self):
+        db = Mock(server_id=100, rows=AsyncMock(return_value=[(11,), (22,)]), execute=AsyncMock())
+        crews._rank_cache = (0, {})
+        with patch.object(crews.context, 'db', db), patch.object(crews, 'now', return_value=1000):
+            table = asyncio.run(crews.rankings())
+        self.assertEqual(table, {11: 1, 22: 2})
+        db.execute.assert_any_await(crews.RANK_SET_SQL, (2, 100, 22))
+
+
+class AcceptancePage2016Test(unittest.TestCase):
+    """The crew Acceptance page: 0x357 act 0x3f4 asks, 0x358 act 0x3f4 answers, 0x36f accepts / refuses."""
+    CREW = {'tid': 100001, 'name': 'Drifters', 'master': 1}
+
+    def tearDown(self):
+        version.configure({'version': '2011'})
+
+    def test_act_0x3f4_answers_the_queue(self):
+        """Client: 0x5c2f2d asks act 0x3f4; its answer 0x547060 -> 0x68ae50 is the member list's handler, sub-view 2."""
+        version.configure({'version': '2016'})
+        db = Mock(server_id=100, execute=AsyncMock(),
+                  rows=AsyncMock(return_value=[(7, 'Applicant', 0, 30, datetime.datetime(2024, 1, 2, 3, 4, 5), 5, 0)]))
+        sent = []
+        with patch.object(crews.context, 'db', db), \
+                patch.object(crews, 'team', AsyncMock(return_value=self.CREW)), \
+                patch.object(crews, 'online_member', return_value=None), \
+                patch.object(crews, 'send', side_effect=lambda s, *fs: sent.extend(fs)):
+            asyncio.run(crews.team_members(SimpleNamespace(state={}, log=Mock()),
+                                           Frame(0x357, struct.pack('<iqi', crews.ACCEPT_ACT, 100001, 0))))
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0].type, 0x358)
+        act, tid, channel, master, n, page = struct.unpack_from('<iqiqHH', sent[0].payload)
+        self.assertEqual((act, tid, channel, master, n, page), (0x3f4, 100001, 0, 1, 1, 0))
+        self.assertEqual(struct.unpack_from('<q', sent[0].payload, 0x1c)[0], 7)     # the applicant's cid (entry @0x1e, type 2)
+        db.rows.assert_awaited()
+
+    def answer(self, result):
+        version.configure({'version': '2016'})
+        me = SimpleNamespace(char=SimpleNamespace(cid=1, name='Master', team_id=100001, team_rank=crews.MASTER))
+        session = SimpleNamespace(state={'player': me}, log=Mock())
+        db = Mock(server_id=100, row=AsyncMock(return_value=('Applicant',)))
+        self.drop, self.ok = AsyncMock(), AsyncMock()
+        with patch.object(crews, 'master_check', AsyncMock(return_value=(me, self.CREW))), \
+                patch.object(crews, 'has_request', AsyncMock(return_value=True)), \
+                patch.object(crews, 'drop_request', self.drop), \
+                patch.object(crews, 'approve', self.ok), \
+                patch.object(crews.context, 'db', db):
+            asyncio.run(crews.team_apply_answer(session, Frame(0x36f, struct.pack('<qb', 7, result))))
+        return session, me
+
+    def test_accept_answer_joins(self):
+        """0x36f: i64 applicant @2 + u8 result @0xa (sender 0x868a00, buttons 0x1d4c40 / 0x1d4c41 at 0x5902b8)."""
+        session, me = self.answer(1)
+        self.drop.assert_awaited_once_with(100001, 7)
+        self.ok.assert_awaited_once_with(session, me, self.CREW, 7, 'Applicant')
+
+    def test_refuse_answer_only_drops(self):
+        session, me = self.answer(0)
+        self.drop.assert_awaited_once_with(100001, 7)
+        self.ok.assert_not_awaited()
+
+    def test_2011_ignores_0x36f(self):
+        """The 2011 client has no 0x36f sender."""
+        version.configure({'version': '2011'})
+        drop = AsyncMock()
+        with patch.object(crews, 'drop_request', drop):
+            asyncio.run(crews.team_apply_answer(SimpleNamespace(state={}, log=Mock()),
+                                                Frame(0x36f, struct.pack('<qb', 7, 1))))
+        drop.assert_not_awaited()
 
 
 class OfflineCharInfo2016Test(unittest.TestCase):

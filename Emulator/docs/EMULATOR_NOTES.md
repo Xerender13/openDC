@@ -8,6 +8,45 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 43 (2026-11-13): crew Acceptance page (2016), crew grade letter / ranking
+
+**User:** "Continue the crew work. It's the 2016 client request." From session 42's open list: the Acceptance page
+(join requests kept 7 days, 12730) was not pinned down, the emulator kept no queue (a request to an offline master was
+refused, 20199), and the crew grade letter and ranking showed 0. **Nothing was tried in game.** 240 tests pass.
+
+**The requests (2016 exe `DriftCity Dev Ed/DriftCity.exe`, image base 0x400000, .text raw 0x400):**
+- **Ask: 0x357 TeamMembers with act 0x3f4.** The 0x357 sender wrapper is 0x868500 (act @2, crew @6, channel @0xe).
+  Its only 0x3f4 caller is 0x5c2f2d, which first sets [crew window +0x28] = 2 (the window's sub-view 2). The other acts
+  the client ever asks 0x357 with are only 0x3f1, 0x3f2 and 0x407 (every call site read), so 0x3f4 is the Acceptance
+  page.
+- **Answer: 0x358 with the same act.** Handler 0x547060 sends act 0x3f2 and act 0x3f4 to the same 0x68ae50, which fills
+  the window's entries ([window+0x648], 0x58 bytes each) from the message's list; for 0x3f4 it also sets +0x28 = 2 and
+  opens the sub-view when +0x24 == 2. So a request entry is the member entry: cid, name, rank, level, XiCarAttr,
+  serial, place, time.
+- **Answering one: 0x36f, 11 bytes, i64 applicant @2 + u8 result @0xa** (1 yes, 0 no). Sender 0x868a00, its only caller
+  0x679db0, whose only caller is the page's button handler at 0x590255-0x5902b8: control 0x1d4c40 = yes, 0x1d4c41 = no.
+  0x36f exists only in 2016: the 2011 US exe has no sender for it (no `66 c7 00 6f 03` in its .text, while 0x348 /
+  0x366 / 0x367 / 0x368 / 0x36c all do).
+
+**Ours (`crews.py`):**
+- `SKID_TEAMREQ_TB` (SERVERID, TID, CID, TIME timestamp; made on first use, like crewlevel.py's tables) keeps the
+  requests. A 0x357 act 0x3f4 purges the rows older than `APPLY_DAYS = 7` (text 12730) and answers them as 0x358 act
+  0x3f4 with rank 0 (an applicant is not a member).
+- `apply`: 2016 stores every request and no longer refuses with 20199 when the master is offline — no 0x367 is sent and
+  the request waits on the page. 2011 keeps 20199. 0x36e still goes to the applicant.
+- `0x36f` (2016 only): master only, needs a kept request, then `approve` (now shared with 0x368) or a refusal.
+- `approve` no longer refuses an offline applicant (the 2008 server sent 20206): the membership row is written and takes
+  effect at their next login. Ours.
+- **Ranking:** `rankings()` numbers the server's open crews, writes `SKID_TEAM_TB.TEAMRANKING` and is recomputed at most
+  every 60 s; `team()` puts the value in the record. **Ours: ordered by TEAMPOINT** — the original server's key is
+  unknown.
+- **Grade letter:** `XiStrTeamInfo`'s u32 at +0xeb is 24 bits of rank with the grade in the top byte (+0xef), which is
+  why nothing reads +0xef alone (a pass over both exes for `movzx reg, byte [reg+0xef]` finds none). `info_bytes` now
+  packs `rank | rank_tier(rank) << 24`; `rank_tier` gives 1-3 S, 4-10 A, 11-20 B, else 0. **The S/A/B = 3/2/1 encoding
+  is a guess** and needs the crew window to confirm.
+- Tests: tests/test_info2016.py — CrewApply2016Test (+1: every 2016 request is stored), AcceptancePage2016Test (4),
+  CrewRankingTest (3).
+
 ## Session 42 (2026-11-13): 2011 / 2016 request audit, chase end fix, password joins, player trade
 
 **User:** "Continue work delegating to DeepSeek. Check all 2016 client handlers compared to 2011, so that all

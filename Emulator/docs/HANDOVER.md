@@ -4,7 +4,19 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 42 (2026-11-13): PostgreSQL, request audit, trade, crew level / research / window — resume here
+## Session 43 (2026-11-13): crew Acceptance page (2016), crew grade / ranking — resume here
+
+Details: EMULATOR_NOTES session 43. **Nothing was tried in game.** 240 tests pass.
+- The Acceptance page **is** pinned down: it asks with **0x357 act 0x3f4** and is answered by 0x358 act 0x3f4 (the same
+  member entry); the Accept / Reject buttons send **0x36f** (i64 applicant @2 + u8 result @0xa). Client addresses in
+  the notes.
+- `SKID_TEAMREQ_TB` keeps the requests for 7 days, so a request to an **offline master** is no longer refused (2016
+  only; 2011 keeps 20199). `0x368` and `0x36f` share `approve`, which now also accepts an offline applicant.
+- Crew ranking (`TEAMRANKING`) is computed from TEAMPOINT (ours) and the grade letter is packed into the top byte of
+  XiStrTeamInfo's u32 at +0xeb. **The S/A/B = 3/2/1 encoding is a guess;** the letter in the crew window is the test.
+- Open: ranking windows (0xfa2 / 0xfa4 entry layout), honor ranking, World Laptime, DCGP, Neo City messages.
+
+## Session 42 (2026-11-13): PostgreSQL, request audit, trade, crew level / research / window
 
 Details: EMULATOR_NOTES session 42. **Nothing was tried in game.** 232 tests pass. Nothing committed.
 - **The database is PostgreSQL now** (`./launch.sh db` starts container dcemu_pg on 127.0.0.1:15432; databases skdbtw /

@@ -54,6 +54,12 @@ Messages (2011 sizes; offsets with the type):
     (11413), 12 logged off (12214).
 0x36e JoinTeamApplyAck (2016 only): to the applicant once 0x367 went to the master: wchar[13] crew name @2 + the bind
     @0x1c (0x5e bytes; client 0x546720 prints 10163 "You have requested to join %s Crew." with the name).
+0x36f TeamApplyAnswer (2016 only, the Acceptance page): i64 applicant @2, u8 result @0xa (1 yes, 0 no; 11 bytes).
+    Client: sender 0x868a00, its caller 0x679db0, from the page's buttons 0x1d4c40 (yes) / 0x1d4c41 (no) at
+    0x590255-0x5902b8. The 2011 client has no 0x36f sender.
+Acceptance page (2016): it asks with 0x357 act 0x3f4 (client 0x5c2f2d; act 0x3f4's answer 0x547060 -> 0x68ae50,
+    the same handler and entry as the member list, then sub-view 2). The crew keeps the requests for 7 days
+    (text 12730) in SKID_TEAMREQ_TB, so a request reaches a master who was offline.
 Crew chat: 0x92 room "team" -> 0x93 to the crew's members in the game (session.chat).
 """
 import asyncio
@@ -82,6 +88,13 @@ CLOSE_DAYS, KICK_WAIT_HOURS = 7, 24
 NAME_CHARS = 12                          # wchar[13] / SKID_TEAM_TB.TEAMNAME varchar(16)
 PAGE = 20
 ACT_LIST = 0x3f2
+ACCEPT_ACT = 0x3f4                       # 0x357 act of the 2016 Acceptance page (crew window sub-view 2)
+APPLY_DAYS = 7                           # text 12730: a join request is kept 7 days
+RANK_SQL = "SELECT TID FROM SKID_TEAM_TB WHERE SERVERID=%s AND TEAMSTATE='A' ORDER BY TEAMPOINT DESC, TID"
+RANK_SET_SQL = "UPDATE SKID_TEAM_TB SET TEAMRANKING=%s WHERE SERVERID=%s AND TID=%s"
+RANK_TTL = 60                            # seconds between two recomputations of TEAMRANKING
+_rank_cache = (0, {})
+_req_ready = False
 
 TEAM_SQL = ("SELECT TID, TMARKID, TEAMNAME, TEAMDESC, TEAMPOINT, TEAMRANKING, CHANNELWINCNT, TEAMSTATE, OWNCHANNEL, CID,"
             " CNAME, CREATEDATE, CLOSEDATE, BANISHDATE, TEAMURL FROM SKID_TEAM_TB WHERE SERVERID=%s")
@@ -105,6 +118,20 @@ CHAR_SQL = ("SELECT CID, CNAME, NLEVEL, TEAMID, TEAMRANK, MEMBERID, TEAMCLOSEDAT
             " WHERE SERVERID=%s AND CID=%s AND STATE='P'")
 ACCOUNT_TEAM_SQL = ("SELECT COUNT(*) FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND MEMBERID=%s AND TEAMID>0 AND CID<>%s"
                     " AND STATE='P'")
+# 2016 Acceptance page: the join requests a crew keeps for APPLY_DAYS (text 12730), so a request reaches a master who
+# was offline when it was sent. Made on first use, like crewlevel.py's tables.
+REQ_TABLES_SQL = ("""CREATE TABLE IF NOT EXISTS SKID_TEAMREQ_TB(SERVERID numeric(18,0) NOT NULL,
+  TID numeric(18,0) NOT NULL, CID numeric(18,0) NOT NULL, TIME timestamp NOT NULL,
+  PRIMARY KEY (SERVERID, TID, CID))""",)
+REQ_STORE_SQL = ("INSERT INTO SKID_TEAMREQ_TB(SERVERID, TID, CID, TIME) VALUES (%s,%s,%s,GetDate())"
+                 " ON CONFLICT (SERVERID, TID, CID) DO UPDATE SET TIME=GetDate()")
+REQ_DROP_SQL = "DELETE FROM SKID_TEAMREQ_TB WHERE SERVERID=%s AND TID=%s AND CID=%s"
+REQ_PURGE_SQL = f"DELETE FROM SKID_TEAMREQ_TB WHERE SERVERID=%s AND TIME<GetDate() - interval '{APPLY_DAYS} days'"
+REQ_ROWS_SQL = ("SELECT a.CID, a.CNAME, 0, a.NLEVEL, r.TIME, b.CARTYPE, b.COLOR FROM SKID_TEAMREQ_TB r"
+                " JOIN SKID_CHARACTER_TB a ON a.SERVERID=r.SERVERID AND a.CID=r.CID AND a.STATE='P'"
+                " LEFT OUTER JOIN SKID_CAR_TB b ON a.SERVERID=b.SERVERID AND a.CID=b.CID AND a.CURCAR=b.CARID"
+                " WHERE r.SERVERID=%s AND r.TID=%s ORDER BY r.TIME")
+REQ_ONE_SQL = "SELECT COUNT(*) FROM SKID_TEAMREQ_TB WHERE SERVERID=%s AND TID=%s AND CID=%s"
 
 
 def _i(v, default=0):
@@ -134,6 +161,8 @@ async def team(tid):
         return None
     n, exp, money = await db.row(STATS_SQL, (db.server_id, tid))
     t.update(count=_i(n), exp=_i(exp), money=_i(money))
+    if t['state'] == 'A':
+        t['ranking'] = (await rankings()).get(tid, 0)
     from . import crewlevel
     if crewlevel.is_on():                       # 2016: crew EXP / research points / introduction (crewlevel.py)
         t['x2016'] = await crewlevel.extra(tid)
@@ -157,6 +186,32 @@ def crew_level(t):
     return 3 if v >= 500000 or t.get('wins', 0) else 2 if v >= 100000 else 1 if v >= 20000 else 0
 
 
+async def rankings():
+    """{tid: rank} for the server's open crews (1 = best), also written to SKID_TEAM_TB.TEAMRANKING. Recomputed at
+    most every RANK_TTL seconds. Ours: ordered by TEAMPOINT (the 2008 column; the original server's key is unknown)."""
+    global _rank_cache
+    when, table = _rank_cache
+    if table and now() - when < RANK_TTL:
+        return table
+    db = context.db
+    rows = await db.rows(RANK_SQL, (db.server_id,))
+    table = {}
+    for i, r in enumerate(rows, 1):
+        tid = int(r[0])
+        table[tid] = i
+        await db.execute(RANK_SET_SQL, (i, db.server_id, tid))
+    if table:
+        _rank_cache = (now(), table)
+    return table
+
+
+def rank_tier(rank):
+    """The crew's grade letter, the top byte of XiStrTeamInfo's u32 at +0xeb (the client reads the u32: 24 bits of
+    rank, the byte above them the grade). Ours, not measured: rank 1-3 -> 3 (S), 4-10 -> 2 (A), 11-20 -> 1 (B),
+    anything else 0 (no letter). The encoding S/A/B = 3/2/1 is a guess."""
+    return 3 if 1 <= rank <= 3 else 2 if 4 <= rank <= 10 else 1 if 11 <= rank <= 20 else 0
+
+
 def info_bytes(t):
     """XiStrTeamInfo, 2011 (384 bytes)."""
     if not t:
@@ -171,7 +226,7 @@ def info_bytes(t):
         if 0 <= ch < 24:
             out[0xd1 + ch] = 1
     out[0xe9] = ord(t['state'][:1] or 'A')
-    struct.pack_into('<I', out, 0xeb, t['ranking'] & 0xffffff)
+    struct.pack_into('<I', out, 0xeb, (t['ranking'] & 0xffffff) | (rank_tier(t['ranking']) << 24))
     struct.pack_into('<IIIqqI', out, 0xf0, t['point'], t['wins'], t['count'], t['exp'], t['money'], 0)
     struct.pack_into('<qq', out, 0x110, t['master'], t['master'])
     out[0x120:0x14a] = wstr(t['master_name'], 42)
@@ -304,6 +359,55 @@ async def member_frames(t, act, channel=0):
                   + b''.join(member_entry(r) for r in part)) for k, part in enumerate(pages)]
 
 
+async def ensure_requests():
+    global _req_ready
+    if not _req_ready:
+        for sql in REQ_TABLES_SQL:
+            await context.db.execute(sql)
+        _req_ready = True
+
+
+async def store_request(tid, cid):
+    """Keep the applicant's request for APPLY_DAYS (the Acceptance page's queue)."""
+    await ensure_requests()
+    db = context.db
+    await db.execute(REQ_PURGE_SQL, (db.server_id,))
+    await db.execute(REQ_STORE_SQL, (db.server_id, tid, cid))
+
+
+async def drop_request(tid, cid):
+    await ensure_requests()
+    db = context.db
+    await db.execute(REQ_DROP_SQL, (db.server_id, tid, cid))
+
+
+async def has_request(tid, cid):
+    await ensure_requests()
+    db = context.db
+    r = await db.row(REQ_ONE_SQL, (db.server_id, tid, cid))
+    return bool(r and r[0])
+
+
+async def request_frames(t, act, channel=0):
+    """0x358 for the Acceptance page: the same entry as a member (0x68ae50 fills the same list for acts 0x3f2 and
+    0x3f4), but from SKID_TEAMREQ_TB, the applicant's rank 0 (not a member)."""
+    await ensure_requests()
+    db = context.db
+    await db.execute(REQ_PURGE_SQL, (db.server_id,))
+    rows = await db.rows(REQ_ROWS_SQL, (db.server_id, t['tid']))
+    pages = [rows[i:i + PAGE] for i in range(0, len(rows), PAGE)] or [[]]
+    return [Frame(0x358, struct.pack('<iqiqHH', act, t['tid'], channel, t['master'], len(part), k)
+                  + b''.join(member_entry(r) for r in part)) for k, part in enumerate(pages)]
+
+
+async def list_frames(t, act, channel=0):
+    """The 0x358 answer for an act: 0x3f4 is the Acceptance page (2016), everything else the member list."""
+    from ..version import is_2016
+    if is_2016() and act == ACCEPT_ACT:
+        return await request_frames(t, act, channel)
+    return await member_frames(t, act, channel)
+
+
 @on(SVC, C2S, 0x357)
 async def team_members(session, frame):
     if len(frame.payload) < 16:
@@ -315,7 +419,7 @@ async def team_members(session, frame):
     p = session.state.get('player')
     if p and tid == p.char.team_id:
         session.state['crew_list_act'] = act       # the list the client has open (push_members)
-    send(session, *await member_frames(t, act, channel))
+    send(session, *await list_frames(t, act, channel))
 
 
 async def push_members(session, t):
@@ -326,7 +430,7 @@ async def push_members(session, t):
     from ..version import is_2016
     act = session.state.get('crew_list_act') if is_2016() else ACT_LIST
     if act:
-        send(session, *await member_frames(t, act))
+        send(session, *await list_frames(t, act))
 
 
 # ---- creating, names, URL, mark ---------------------------------------------------------------------------------
@@ -548,7 +652,7 @@ def bind_of(raw):
     return dict(tid=tid, cid=cid, serial=serial, name=read_wstr(raw, 0x14, 42), level=struct.unpack_from('<i', raw, 0x3e)[0])
 
 
-async def apply_checks(session, p, t):
+async def apply_checks(session, p, t, allow_offline=False):
     """The applicant's side of a join -> an error key or None."""
     c, db = p.char, context.db
     if c.team_id > 0 and await team(c.team_id):
@@ -567,7 +671,7 @@ async def apply_checks(session, p, t):
     r = await db.row(ACCOUNT_TEAM_SQL, (db.server_id, c.member, c.cid))
     if r and r[0]:
         return '20262'
-    if not online_member(t['master']):
+    if not allow_offline and not online_member(t['master']):
         return '20199'
     return None
 
@@ -576,19 +680,26 @@ async def apply(session, t, raw_bind):
     p = session.state.get('player')
     if not p:
         return
-    why = await apply_checks(session, p, t)
+    from ..version import is_2016
+    queued = is_2016()                     # 2016: the Acceptance page keeps the request, so an offline master still
+    why = await apply_checks(session, p, t, allow_offline=queued)
     if why:
         session.log.note(f'crew apply to {t["name"] if t else "?"}: refused ({why})')
         return error(session, why)
     c = p.char
     bind = (struct.pack('<qqI', t['tid'], c.cid, session.state.get('serial', 0)) + wstr(c.name, 42)
             + struct.pack('<i', c.level))
-    session.log.note(f'crew apply to {t["name"]!r}: sent to the master')
-    send(online_member(t['master']), Frame(0x367, bind))
-    from ..version import is_2016
-    if is_2016():           # 0x36e JoinTeamApplyAck (2016 only; handler 0x546720, 0x5e bytes): wchar[13] crew name @2,
-        send(session, Frame(0x36e, wstr(t['name'], 26) + bind))   # the bind @0x1c; text 10163 "You have requested
-                                                                   # to join %s Crew." with the name
+    master = online_member(t['master'])
+    if queued:
+        await store_request(t['tid'], c.cid)
+    session.log.note(f'crew apply to {t["name"]!r}: ' + ('sent to the master' if master else 'queued (master offline)'))
+    if master:
+        send(master, Frame(0x367, bind))
+    if queued:
+        send(session, Frame(0x36e, wstr(t['name'], 26) + bind))   # 0x36e JoinTeamApplyAck (2016 only; handler
+                                                                  # 0x546720, 0x5e bytes): wchar[13] crew name @2,
+                                                                  # the bind @0x1c; text 10163 "You have requested
+                                                                  # to join %s Crew." with the name
 
 
 @on(SVC, C2S, 0x367)
@@ -614,6 +725,28 @@ def reject_frame(master_name, cid, t):
                  + struct.pack('<q', t['tid']))
 
 
+async def approve(session, p, t, cid, name):
+    """A master's yes: the applicant becomes a member (rank 3). The applicant may be offline — the 2016 request is
+    kept for APPLY_DAYS — so the row is written and takes effect at their next login (ours: the 2008 server refused
+    an offline applicant with 20206)."""
+    s = online_member(cid)
+    if s:
+        why = await apply_checks(s, s.state['player'], t, allow_offline=True)
+        if why and why != '20199':
+            return error(session, '20203' if why == '20225' else why)
+    await save_char(cid, t['tid'], MEMBER, joined=1)
+    await recount(t['tid'])
+    t = await team(t['tid'])
+    if s:
+        set_char(s.state['player'], t, MEMBER)
+        for x in crew_sessions(t['tid']):
+            x.state['crew'] = t
+        send(s, Frame(0x34f, struct.pack('<i', 1) + info_bytes(t) + struct.pack('<H', age(s))))
+    session.log.note(f'crew {t["name"]!r}: {name} joined' + ('' if s else ' (offline)'))
+    notify(t['tid'], t['name'], 4, name, MEMBER, skip=s)
+    await push_members(session, t)
+
+
 @on(SVC, C2S, 0x368)
 async def join_team_confirm(session, frame):
     if len(frame.payload) < BIND + 4:
@@ -621,32 +754,44 @@ async def join_team_confirm(session, frame):
     b = bind_of(frame.payload)
     # the 2011 client sends 0x368 only for OK (its popup 0x52ff90 -> 0x804830), with the i32 left 0; Cancel sends 0x36c
     # (0x8048d0, reject_team_apply). Read as a result, every approval was a refusal (user, 2026-10-15).
-    yes = True
     got = await master_check(session, b['tid'])
     if not got:
         return
     p, t = got
-    s = online_member(b['cid'])
-    if not yes:
-        session.log.note(f'crew {t["name"]!r}: {b["name"]} refused')
-        if s:
-            send(s, reject_frame(p.char.name, b['cid'], t))
+    await drop_request(t['tid'], b['cid'])
+    await approve(session, p, t, b['cid'], b['name'])
+
+
+@on(SVC, C2S, 0x36f)
+async def team_apply_answer(session, frame):
+    """The 2016 Acceptance page's Accept / Reject. i64 applicant @2 + u8 result @0xa (11 bytes): the client's sender
+    0x868a00, its caller 0x679db0, from the page's buttons 0x1d4c40 (yes) / 0x1d4c41 (no) at 0x590255-0x5902b8. The
+    2011 client has no 0x36f sender at all."""
+    from ..version import is_2016
+    if not is_2016() or len(frame.payload) < 9:
         return
-    if not s:
-        return error(session, '20206')
-    why = await apply_checks(s, s.state['player'], t)
-    if why and why != '20199':
-        return error(session, '20203' if why == '20225' else why)
-    await save_char(b['cid'], t['tid'], MEMBER, joined=1)
-    await recount(t['tid'])
-    t = await team(t['tid'])
-    set_char(s.state['player'], t, MEMBER)
-    for x in crew_sessions(t['tid']):
-        x.state['crew'] = t
-    session.log.note(f'crew {t["name"]!r}: {b["name"]} joined')
-    send(s, Frame(0x34f, struct.pack('<i', 1) + info_bytes(t) + struct.pack('<H', age(s))))
-    notify(t['tid'], t['name'], 4, b['name'], MEMBER, skip=s)
-    await push_members(session, t)
+    cid, result = struct.unpack_from('<qb', frame.payload)
+    p = session.state.get('player')
+    if not p:
+        return
+    got = await master_check(session, p.char.team_id)
+    if not got:
+        return
+    p, t = got
+    if not await has_request(t['tid'], cid):
+        session.log.note(f'crew {t["name"]!r}: answer {result} for {cid} with no request kept')
+        return
+    await drop_request(t['tid'], cid)
+    db = context.db
+    r = await db.row("SELECT CNAME FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s", (db.server_id, cid))
+    name = _s(r[0]) if r else str(cid)
+    if result:
+        await approve(session, p, t, cid, name)
+        return
+    session.log.note(f'crew {t["name"]!r}: {name} refused from the Acceptance page')
+    s = online_member(cid)
+    if s:
+        send(s, reject_frame(p.char.name, cid, t))
 
 
 @on(SVC, C2S, 0x36c)
