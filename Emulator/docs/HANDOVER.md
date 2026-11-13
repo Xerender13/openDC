@@ -22,12 +22,22 @@ Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
 - **Crew EXP for testing**: `tools.gmctl crewexp NAME AMOUNT` and the chat command `gmcrewexp [name] amount` (GM only)
   give crew EXP + research points, so Team Level 1 (50 000) is reachable without grinding.
 
-- **Hurricane's second aero kit does not change the car's look** (user, 2026-11-13: "the 2nd aero doesn't change the
-  car look it should"). Suspect the ported aero set: `portorigin` builds the cars' aero sets from the source client's
-  VisualItem / VShopItem rows, so this is either a wrong VisualItem row (a set that has no model of its own), a
-  missing visual model file in `Data/vehicles.agt`, or the 2016 client not applying a set whose id the row's car
-  column does not name. Check the Hurricane's UID in VehicleList, its VisualItem rows and their `pc_*.nif` files,
-  then compare with the source client.
+- **Hurricane's second aero kit does not change the car's look** (user, 2026-11-13). Investigation (2026-11-13): the
+  server-side data is **correct and complete** — VisualItem rows 673/674/675 (ids 21934/21935/21936, models
+  `pc_0449s_01/02/03`) are flagged for cars 449/450/451, the client's own Init.agt has the same rows, VShopItem
+  1941/1942/1943 exist, and all three `.nif` plus `pc_0449s_map/mask/light` are in `Data/vehicles.agt`; the index
+  numbers match the Skid Rush source exactly. Two concrete findings:
+  1. **The A-type set (673) is the car's default part** — VShopItem 21934 has `Default Part = 1`, `SellStage = 0`,
+     price 0 — so equipping it is *supposed* to change nothing. The B-type (674) is the first paid set
+     (`SellStage = 1000`, 1 200 000 Mito), the C-type is Hancoin only.
+  2. **`pc_0449s_02.nif` and `pc_0449s_03.nif` are byte-identical in the source client** (md5 `cd3bb5f7f505`,
+     809 189 bytes, from patch.010 and patch.006), and the port copied that faithfully. So B and C must render the
+     same; only A (593 991 bytes) differs.
+  Next step: the client's own application of the aero slot — car model 0x471170 reads the category-6 value at +0x12
+  and validates with 0x769460; it is not established how it turns 674 into `pc_0449s_02`. Nothing was changed.
+- **Missing decal textures for the ported cars**: `decal\pc_XXXXs_decal01.dds` / `_decal02.dds` were not copied by
+  `portorigin` (it copies the `.dds` the *models* name, and the aero/body NIFs do not name the decals). Two are known
+  missing for the Hurricane (patch.006 / patch.007). A car's own decals would show blank.
 - **Crew "contribution rank" not implemented.** 0xcee (10 bytes, i64 @2, sender wrapper 0x86a3c0, its only caller
   0x719333) is answered by 0xcef (handler 0x52cd60: u32 @0xa -> window[conn+0x40c] +0x8, u32 @6 -> +0xc, byte @0xe);
   0xcf0 (6 bytes, u32 @2, wrapper 0x86a450, callers 0x796f43 / 0x816516 / 0x816967 / 0x819923 / 0x81a26b) by 0xcf2
