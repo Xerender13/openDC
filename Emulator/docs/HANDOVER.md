@@ -533,8 +533,8 @@ from the old device:
 |---|---|---|
 | The code | GitHub, or `Drift City US 2011/Emulator` + `Launcher` | `git clone https://github.com/Xerender13/openDC` |
 | The 2011 clients | `Drift City US 2011/Client US/` and `Client EU/` | Not on GitHub (shared on Google Drive). **Copy the Deck's folders**: `Client US/` has the text patches in `Patch/Patch.006` (12215 license name, 12216 coupon, 11413 / 12214 crew logon), `DriftCityUS.exe` and `DriftCityLauncher.ini`; `Client EU/` is the EU client (`DriftCityEU.exe` set by `Emulator/tools/eu_client.py`, `Data_EU_eng/`, the Km/h dial). Put them next to `Emulator/`. |
-| The game database | `Emulator/db/SKDBTW_2026-10-18.bak` (6 MB, 22:52) | All accounts and characters as of the handover. Make a newer one before moving: `./launch.sh backup-db`. Not in git (`db/*.bak` is ignored). |
-| `emulator.ini` | `Emulator/emulator.ini` | Is in git. Change `[database]` if your SQL Server differs; the ports and `[flags]` are set for this client. |
+| The game database | `Emulator/db/<name>_<date>.dump` (`pg_dump -Fc`) | All accounts and characters as of the handover. Make a newer one before moving: `./launch.sh backup-db`; load it with `./launch.sh restore-db F`. Not in git (`db/*.dump` is ignored; `db/postgres/` holds the clean seeds). An old SQL Server `.bak` is migrated once with `tools/pgport/migrate.py` (see `README.md`). |
+| `emulator.ini` | `Emulator/emulator.ini` | Is in git. Change `[database]` if your PostgreSQL differs; the ports and `[flags]` are set for this client. |
 | `.ticket_secret` | `Emulator/.ticket_secret` | Not needed: the server's key for login tickets, made again when missing (a client that is logged in at that moment logs in again). Not in git. |
 | `client_backup/` | `Emulator/client_backup/` | The client's original packs before the text patches. Not in git; keep a copy. |
 | Old stacks / research | `Server2008/`, `Handoff/`, `DriftCity Dev Ed/` | Not needed to run anything. `Server2008/client_image/DriftCity_2011_unpacked.bin` (the unpacked client, for disassembly) and `Server2008/server/ZoneServer.exe` (the 2008 server, the reference for server rules) are worth keeping for research. |
@@ -551,8 +551,8 @@ Layout (folder names matter: launch.sh / launch.bat look for `../Client US` and 
 
 ```sh
 cd Emulator
-./launch.sh setup                               # .venv with python-tds, copies the client's tables to server_data/
-./launch.sh restore-db db/SKDBTW_2026-10-18.bak # your characters (or: ./launch.sh init-db for an empty database)
+./launch.sh setup                               # .venv with pg8000, copies the client's tables to server_data/
+./launch.sh restore-db db/<name>_<date>.dump    # your characters (or: ./launch.sh init-db for an empty database)
 ./launch.sh                                     # database + emulator + client
 ```
 
@@ -561,15 +561,16 @@ cd Emulator
 ```bat
 cd Emulator
 launch.bat setup
-launch.bat restore-db db\SKDBTW_2026-10-18.bak
+launch.bat restore-db db\<name>_<date>.dump
 launch.bat
 ```
 
 In the container the emulator tells clients DCEMU_PUBLIC_HOST (default 127.0.0.1: a client on the same machine) as
 the lobby / game address; for players on the network set it to the machine's address (environment or `.env`).
 `launch.bat` / `launch.ps1` passed PowerShell's parser but have **not been run on real Windows yet**; expect to fix
-small things the first time. `./launch.sh restore-db` is new (2026-10-16) and was not run against the live
-database (`backup-db` was); it uses the same SQL as the Windows one, which was tested on a scratch database.
+small things the first time. `./launch.sh restore-db` was rewritten for PostgreSQL in session 42 (pg_restore from a
+`pg_dump -Fc` file, asks first); its SQL Server version was tested on a scratch database, the PostgreSQL one has not
+been run against the live database.
 
 The client: `Client US/DriftCityLauncher` (Linux, runs DriftCityUS.exe with Proton: `DriftCityLauncher.ini [client] exe`,
 `[linux]`; the EU client the same from `Client EU/`) or
