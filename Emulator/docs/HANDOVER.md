@@ -85,6 +85,19 @@ Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
   (handler 0x52cdd0: u32 @2 -> a bool + window[conn+0x3e8] 0x656630). Neither is implemented: **what they carry was not
   determined** — the handler reads only 3 fields and calls window setters, so they look like state notifications
   rather than a list. Do not guess the payload; find the window 0x40c / 0x3e8 owners first.
+  **Searched the client's own text table (Data/Localize.agt -> Localize\GlobalText.xlt, 3163 rows): there is NO
+  "contribution ranking" string.** The crew-contribution UI is a single label `12816 팀공헌도` and `12832 팀 연구
+  포인트`; the only ranking texts are the team ladder (12027 / 12721 / 11333) and the race rankings. So there is no
+  per-member contribution ranking list to fill — the feature is one number plus the shop's cost (12845 "<$contribpoint>
+  팀 공헌도"). The i64 at XiStrTeamInfo +0x290 is what the contribution panel shows with `%I64d` (0x676475 reads the
+  player's copy at +0x1d5c, i.e. record +0x290, base +0x1acc) and crews.fill() currently puts the **crew's research
+  points** there — a guess. Which label owns it (12816 or 12832) is not yet established.
+  **Menu opened in game (2026-11-13 22:34):** no new request — only `0x348` act 0x407 -> `0x349` and `0xce6` board
+  0x408 -> `0xce7` (the news board, now 4 entries). So the contribution view is fed entirely by the crew record, and
+  there is no separate message to implement. The record as it stands: crew EXP 500 000 000, level 17,
+  **+0x290 = 499 900 011** (our research points). The client reads +0x290 with `%I64d` at 0x676475 (contribution
+  panel) and 0x678cd5; nothing reads +0x298 (player +0x1d64). **Question to settle it:** which label does that big
+  number sit next to in the crew window — 12816 팀공헌도 or 12832 팀 연구 포인트?
 - **Team Research Lab is implemented but gated.** 0xce8 / 0xce9 (list), 0xcea (start), 0xcec (buy), 0xceb (donate) are
   in crewlevel.py and the client's own TeamResearchTable is sent. The 26 research rows need Team Level 1-9, and
   TeamLevelExpBuffTable makes **level 1 = 50,000 crew EXP**; crew EXP is 1% of members' EXP (progress.add_exp ->
