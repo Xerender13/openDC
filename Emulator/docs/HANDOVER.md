@@ -98,6 +98,16 @@ Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
   **+0x290 = 499 900 011** (our research points). The client reads +0x290 with `%I64d` at 0x676475 (contribution
   panel) and 0x678cd5; nothing reads +0x298 (player +0x1d64). **Question to settle it:** which label does that big
   number sit next to in the crew window — 12816 팀공헌도 or 12832 팀 연구 포인트?
+  **Screenshot (2026-11-13, user):** the crew window's **Team Research Point = 499 900 011**, so `+0x290` is the
+  research points and our fill is correct — no change needed there. The header shows **Team Contribution 50 000 000**,
+  which no record field equals (crew EXP 500 000 000 / 10; the client derives it). The **Contribution Rank** tab
+  (columns Ranking / Nickname / Point Distribution / Team Contributor / User Info) renders **"is feature is currently
+  unavailable"** and sends nothing to the game service. That string is in **no** client file: not
+  `Localize\GlobalText.xlt` (3163 rows), not `Localize\GlobalContent.xlt`, not `DriftCity.exe`, and `game.nui` holds
+  no plain strings at all (it has no "Contribution", "Ranking" or "Nickname" either), so its text table is packed.
+  `TeamSystemRenewalStep` is already 3 in GlobalContent and the ranking service (`native/ranking.py`) is an empty
+  stub that answers nothing. **Next hypothesis to test (cheap): the crew has 1 member** — a ranking of one may be
+  what the client calls unavailable; try with a second member before disassembling the tab.
 - **Team Research Lab is implemented but gated.** 0xce8 / 0xce9 (list), 0xcea (start), 0xcec (buy), 0xceb (donate) are
   in crewlevel.py and the client's own TeamResearchTable is sent. The 26 research rows need Team Level 1-9, and
   TeamLevelExpBuffTable makes **level 1 = 50,000 crew EXP**; crew EXP is 1% of members' EXP (progress.add_exp ->
