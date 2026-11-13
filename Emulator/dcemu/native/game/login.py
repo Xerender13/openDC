@@ -146,6 +146,14 @@ def content_flags(**overrides):
         # 1260000 / 1270000 / 1300000 / 1320000, which its game.nui ships empty (selector 0x68e890: flags +0xc
         # bit 28; Modify also needs GlobalContent UseUpgradeChanceTime = 1, as shipped)
         named['Main.NewItemUpgradeUI'] = 1
+        # Neo City (2016): the 2008 Contents.ini has no entry for the region, so it stayed off and the client kept
+        # Neo City unreachable. The client has City.NeoCity + one flag per city (flags_2016.tsv 0x14 bits 21-25,
+        # docs/NEOCITY.md). Main.NeoCityMainUI (above, 1) is the city main UI, not the gate.
+        named['City.NeoCity'] = 1
+        named['City.NeoOros'] = 1
+        named['City.NeoCras'] = 1
+        named['City.NeoKoinonia'] = 1
+        named['City.NeoMoonPalace'] = 1
     named.update({k.replace('_', '.', 1): v for k, v in overrides.items()})
     return pack_flags(named)
 

@@ -57,3 +57,26 @@ class NeoCityHpTest(unittest.TestCase):
         """The 2011 client has no 0xf4d sender."""
         version.configure({'version': '2011'})
         self.assertEqual(self.poll(), [])
+
+
+class NeoCityFlagsTest(unittest.TestCase):
+    """Stage 1: the region is gated by content flags the 2008 Contents.ini has no entry for."""
+    def tearDown(self):
+        version.configure({'version': '2011'})
+
+    def test_flags_exist_and_pack(self):
+        version.configure({'version': '2016'})
+        for name in ('City.NeoCity', 'City.NeoOros', 'City.Cras', 'City.NeoCras', 'City.NeoKoinonia',
+                     'City.NeoMoonPalace'):
+            self.assertIn(name, version.flag_table(), name)
+        out = version.pack_flags({'City.NeoCity': 1, 'City.NeoOros': 1})
+        value, = struct.unpack_from('<I', out, 0x14)     # flags_2016.tsv: City.NeoCity 0x14 bit 21
+        self.assertTrue(value & (1 << 21))
+        self.assertTrue(value & (1 << 22))
+
+    def test_2011_flag_offsets_differ(self):
+        """The 2011 client keeps the same names at another offset (0x10), so the tables must not be mixed."""
+        version.configure({'version': '2011'})
+        self.assertEqual(version.flag_table()['City.NeoCity'][:2], (0x10, 21))
+        version.configure({'version': '2016'})
+        self.assertEqual(version.flag_table()['City.NeoCity'][:2], (0x14, 21))

@@ -70,11 +70,35 @@ So the server must answer with the base XORed by the current durability. 20000 i
 
 1. **Entry and chapter state.** Find what marks the player as "in Neo City" (`[player+0x198]`) and which message starts a
    chapter; without it none of the combat messages are accepted.
+   **Done (2026-11-13): the region gate is content flags, not a message.** The client's own symbols name the whole
+   feature (`City.NeoCity`, `City.NeoOros/Cras/Koinonia/MoonPalace`, `Main.NeoCityMainUI`, and the `Cmd_Neo*` handlers
+   below). The flags are in `dcemu/data/flags_2016.tsv` (0x14 bits 21-25) and the emulator never sent them — the 2008
+   `Contents.ini` has no Neo entry — so `login.content_flags()` now sets all five for 2016. `[session+0x198]` is
+   **not** the Neo flag: the session constructor fills it from the `MissionBattleAdv` content flag (`0x946dbc`) and
+   `+0x199` from `UseHeadLight`, so the HP handler's guard is that flag, not Neo City.
 2. **Durability.** Keep a per-character Neo HP, answer `0xf4d`, and apply the damage the client reports.
 3. **Enemies.** Spider HUS / HUB / HUV / turrets: spawn lists and AI are server-side in the original (the client only
    draws and reports hits).
 4. **Gear and repair.** Plasma weapon use, armour, and `0x4c4`/`0x4c5` item repair (needs item durability, which the
    emulator does not keep yet).
 5. **Rewards.** Chapter / operation EXP and Mito, and the `0xef5`/`0xef6` chapter bonus.
+
+## The client's own names for the feature (strings in the exe)
+
+Reading the exe's symbol strings names everything, which is the map for the remaining work:
+
+- Flags: `City.NeoCity`, `City.NeoOros`, `City.NeoCras`, `City.NeoKoinonia`, `City.NeoMoonPalace`,
+  `Main.NeoCityMainUI`, `NeoItemDurableUI`.
+- Entry / chapter: `Cmd_NeoCitySuggest`, `Cmd_NeoCityAgree`, `Cmd_NeoCityReject`, `Cmd_NeoCityLoad`,
+  `Cmd_NeoChapterStartAck`, `Cmd_NeoChapterCompleteAck`, `Cmd_NeoChapterGiveUpAck`, `Cmd_NeoChapterRewardAck`,
+  `Cmd_NeoChapterBonusMissionAck`, `Cmd_MyNeoQuestListAck`, `Cmd_NeoQuestStartAck`, `Cmd_NeoQuestCompleteAck`,
+  `Cmd_NeoQuestFailAck`, `Cmd_NeoQuestGiveUpAck`, `Cmd_NeoQuestGoalPlaceAck`.
+- Combat: `Cmd_NeoPlayerHPReceiveAck` (the `0xf4e`), `Cmd_NeoHuvHit`, `Cmd_NeoHuvRes`, `Cmd_NeoHuvEnd`,
+  `Cmd_NeoHusExplosionAck`, `Cmd_NeoTurretRes`, `Cmd_NeoTurretSwitch`, `Cmd_NeoTurretFire`, `Cmd_NeoAggro`,
+  `Cmd_NeoHubTargeting`, `Cmd_NeoDyingMsgReq`, `Cmd_NeoPvpDamage`, `Cmd_NeoMissionCompleteAck`,
+  `Cmd_NeoMissionCompleteParamAck`, `Cmd_NeoWSlotExtended`, `Cmd_RepairNeoPartsAck`, `Cmd_ScriptNeoHuvDelRes`.
+- Data tables the client loads: `NeoAI.xlt`, `NeoHuvParam.xlt`, `NeoOros_PatrolPos.xlt`, `NeoCras_PatrolPos.xlt`,
+  `NeoKoinonia_PatrolPos.xlt`, `NeoMoonplace_PatrolPos.xlt`, `Neo_Prologue.nif`.
+
 
 Each step needs the corresponding handler read (`tools/re2016`), like the crew work in sessions 42-44.
