@@ -35,6 +35,14 @@ Details: EMULATOR_NOTES session 44. **Nothing tried in game.** 240 tests pass.
      same; only A (593 991 bytes) differs.
   Next step: the client's own application of the aero slot — car model 0x471170 reads the category-6 value at +0x12
   and validates with 0x769460; it is not established how it turns 674 into `pc_0449s_02`. Nothing was changed.
+  **Follow-up (user: "equipped the B aero and it looks exactly same as A; default car look is A"):** the item is the
+  *generic* set, not the car's own: SKID_VSITEM_TB has `pc_Aero` GID 100212 on car 8 (SKID_CAR_TB car 8 = type 449,
+  the Hurricane) with `ITEM_DATA = '          449121935'` = 10 reserved chars + car 449 + style 1 + VisualItem uid
+  21935 = `pc_0449s_02` (B). `misc.aero_model` decodes exactly that (`tail[-5:]` = 21935 -> `visuals[21935].index` =
+  674). So the server's value and the stored item both name B; the client still renders A. Also note the older rows
+  for cars 2 and 5 carry a **different ITEM_DATA format** (`'4020000011079220216'`, no 10-space prefix), so those may
+  decode to 0. The defect is therefore inside the client's own aero application (or in the generic-set decode), not in
+  the ported tables; the next step is that code, not the data.
 - **Missing decal textures for the ported cars**: `decal\pc_XXXXs_decal01.dds` / `_decal02.dds` were not copied by
   `portorigin` (it copies the `.dds` the *models* name, and the aero/body NIFs do not name the decals). Two are known
   missing for the Hurricane (patch.006 / patch.007). A car's own decals would show blank.
