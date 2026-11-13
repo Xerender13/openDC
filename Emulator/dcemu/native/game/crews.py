@@ -90,7 +90,10 @@ PAGE = 20
 ACT_LIST = 0x3f2
 ACCEPT_ACT = 0x3f4                       # 0x357 act of the 2016 Acceptance page (crew window sub-view 2)
 APPLY_DAYS = 7                           # text 12730: a join request is kept 7 days
-RANK_ORDER_SQL = "SELECT TID FROM SKID_TEAM_TB WHERE SERVERID=%s AND TEAMSTATE='A' ORDER BY TEAMPOINT DESC, TID"
+RANK_ORDER_SQL = ("SELECT TID FROM SKID_TEAM_TB WHERE SERVERID=%s AND TEAMSTATE='A'"
+                  " AND (ISNULL(CHANNELWINCNT, 0) > 0 OR ISNULL(TEAMPOINT, 0) > 0)"
+                  " ORDER BY ISNULL(CHANNELWINCNT, 0) DESC, ISNULL(TEAMPOINT, 0) DESC, TID")
+RANK_RESET_SQL = "UPDATE SKID_TEAM_TB SET TEAMRANKING=0 WHERE SERVERID=%s"
 RANK_SET_SQL = "UPDATE SKID_TEAM_TB SET TEAMRANKING=%s WHERE SERVERID=%s AND TID=%s"
 RANK_TTL = 60                            # seconds between two recomputations of TEAMRANKING
 _rank_cache = (0, {})
@@ -187,13 +190,19 @@ def crew_level(t):
 
 
 async def rankings():
-    """{tid: rank} for the server's open crews (1 = best), also written to SKID_TEAM_TB.TEAMRANKING. Recomputed at
-    most every RANK_TTL seconds. Ours: ordered by TEAMPOINT (the 2008 column; the original server's key is unknown)."""
+    """{tid: rank} for the server's ranked crews (1 = best), also written to SKID_TEAM_TB.TEAMRANKING. Recomputed at
+    most every RANK_TTL seconds.
+
+    Ours: ordered by CHANNELWINCNT then TEAMPOINT (the only scores the emulator awards: a crew gets a win when it wins
+    a channel battle, channels.py), and **a crew that has neither stays unranked (0)**. That is what the client
+    expects: its rank check is `rank <= 0 -> no grade`, so a brand-new crew has no grade letter and no S-grade red
+    nameplate just for being the only crew on the server."""
     global _rank_cache
     when, table = _rank_cache
     if table and now() - when < RANK_TTL:
         return table
     db = context.db
+    await db.execute(RANK_RESET_SQL, (db.server_id,))
     rows = await db.rows(RANK_ORDER_SQL, (db.server_id,))
     table = {}
     for i, r in enumerate(rows, 1):
@@ -206,9 +215,10 @@ async def rankings():
 
 
 def rank_tier(rank):
-    """The crew's grade letter, the top byte of XiStrTeamInfo's u32 at +0xeb (the client reads the u32: 24 bits of
-    rank, the byte above them the grade). Ours, not measured: rank 1-3 -> 3 (S), 4-10 -> 2 (A), 11-20 -> 1 (B),
-    anything else 0 (no letter). The encoding S/A/B = 3/2/1 is a guess."""
+    """The crew's grade, XiStrTeamInfo's u8 at +0xef (the ranking itself is the u32 at +0xeb; the client also uses it
+    as an index: `lea eax,[eax+eax*1+0xef]` at 0x536674, so it must stay a plain number). Ours, from the layout note
+    (new in 2011): rank 1-3 -> 3 (S), 4-10 -> 2 (A), 11-20 -> 1 (B), anything else 0 (no grade). The encoding
+    S/A/B = 3/2/1 is still a guess."""
     return 3 if 1 <= rank <= 3 else 2 if 4 <= rank <= 10 else 1 if 11 <= rank <= 20 else 0
 
 
@@ -226,7 +236,8 @@ def info_bytes(t):
         if 0 <= ch < 24:
             out[0xd1 + ch] = 1
     out[0xe9] = ord(t['state'][:1] or 'A')
-    struct.pack_into('<I', out, 0xeb, (t['ranking'] & 0xffffff) | (rank_tier(t['ranking']) << 24))
+    struct.pack_into('<I', out, 0xeb, t['ranking'] & 0xffffff)      # 24-bit rank; the client also indexes with it
+    out[0xef] = rank_tier(t['ranking'])                             # the grade byte, kept out of the rank dword
     struct.pack_into('<IIIqqI', out, 0xf0, t['point'], t['wins'], t['count'], t['exp'], t['money'], 0)
     struct.pack_into('<qq', out, 0x110, t['master'], t['master'])
     out[0x120:0x14a] = wstr(t['master_name'], 42)

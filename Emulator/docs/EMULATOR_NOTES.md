@@ -68,6 +68,13 @@ refused, 20199), and the crew grade letter and ranking showed 0. **Nothing was t
   UPDATE further down the module overwrote — `rankings()` then ran the 4-parameter UPDATE with 1 parameter, PostgreSQL
   refused it (08P01) and every `team()` call after a crew was created raised, so the 2016 client created the crew but
   got no 0x34b. Renamed to `RANK_ORDER_SQL`; `test_ranking_statements_are_distinct` guards it.
+  **Second in-game correction (user: "the crew is definitely not an S rank, because it's a new crew"; "S rank crew
+  has red color for nameplate"):** ranking every open crew 1..N made the only crew, with 0 points, rank 1 -> grade 3
+  (S). Now only a crew with a score is ranked — `CHANNELWINCNT` (a channel-battle win, channels.py) or `TEAMPOINT`
+  (never set by the emulator) — and every other crew is written back to `TEAMRANKING = 0`, which is the client's
+  "no grade" state. Also, the grade no longer rides in the top byte of the u32 at +0xeb: 0x536674 does
+  `lea eax,[eax+eax*1+0xef]`, i.e. the client uses that u32 as an index, so the rank is written plain at +0xeb and
+  the grade separately at +0xef (the documented layout).
 - **Grade letter:** `XiStrTeamInfo`'s u32 at +0xeb is 24 bits of rank with the grade in the top byte (+0xef), which is
   why nothing reads +0xef alone (a pass over both exes for `movzx reg, byte [reg+0xef]` finds none). `info_bytes` now
   packs `rank | rank_tier(rank) << 24`; `rank_tier` gives 1-3 S, 4-10 A, 11-20 B, else 0. **The S/A/B = 3/2/1 encoding

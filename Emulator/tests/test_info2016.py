@@ -136,19 +136,35 @@ class CrewRankingTest(unittest.TestCase):
         self.assertEqual([crews.rank_tier(r) for r in (0, 1, 3, 4, 10, 11, 20, 21)],
                          [0, 3, 3, 2, 2, 1, 1, 0])
 
-    def test_info_packs_the_grade_above_the_rank(self):
+    def test_info_keeps_the_grade_out_of_the_rank_dword(self):
+        """The client indexes with the u32 at +0xeb (`lea eax,[eax+eax*1+0xef]`, 0x536674), so the grade lives in
+        the separate byte at +0xef and must not be shifted into the rank."""
         t = dict(tid=1, mark=1, name='Crew', desc='', url='', created=0, closed=0, banish=0, channels='',
                  state='A', ranking=2, point=0, wins=0, count=1, exp=0, money=0, master=1, master_name='M')
         out = crews.info_bytes(t)
-        self.assertEqual(struct.unpack_from('<I', out, 0xeb)[0], 2 | (3 << 24))
+        self.assertEqual(struct.unpack_from('<I', out, 0xeb)[0], 2)
+        self.assertEqual(out[0xef], 3)
 
-    def test_rankings_numbers_by_team_point_and_stores(self):
+    def test_unranked_crew_has_no_grade(self):
+        t = dict(tid=1, mark=1, name='Crew', desc='', url='', created=0, closed=0, banish=0, channels='',
+                 state='A', ranking=0, point=0, wins=0, count=1, exp=0, money=0, master=1, master_name='M')
+        out = crews.info_bytes(t)
+        self.assertEqual(struct.unpack_from('<I', out, 0xeb)[0], 0)
+        self.assertEqual(out[0xef], 0)          # a crew that earned nothing is not an S grade
+
+    def test_rankings_numbers_by_score_and_stores(self):
         db = Mock(server_id=100, rows=AsyncMock(return_value=[(11,), (22,)]), execute=AsyncMock())
         crews._rank_cache = (0, {})
         with patch.object(crews.context, 'db', db), patch.object(crews, 'now', return_value=1000):
             table = asyncio.run(crews.rankings())
         self.assertEqual(table, {11: 1, 22: 2})
+        db.execute.assert_any_await(crews.RANK_RESET_SQL, (100,))
         db.execute.assert_any_await(crews.RANK_SET_SQL, (2, 100, 22))
+
+    def test_only_a_crew_that_earned_something_is_ranked(self):
+        """CHANNELWINCNT / TEAMPOINT is what the emulator awards; a new 0-point crew stays out of the ranking."""
+        self.assertIn('CHANNELWINCNT', crews.RANK_ORDER_SQL)
+        self.assertIn('> 0', crews.RANK_ORDER_SQL)
 
     def test_ranking_statements_are_distinct(self):
         """RANK_SQL is the member-rank UPDATE (4 parameters). The ordering SELECT needs its own name: an earlier
