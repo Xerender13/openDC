@@ -23,7 +23,8 @@ C>S 0xcea (0x46; 0x868f50): u32 0, wchar[32] research id -> start it (confirm te
     Point"); the client does not check the rank: the server allows the master only.
 C>S 0xcec (0x46; 0x868ff0): u32 0, wchar[32] the id of a finished research -> buy its item in the "Team Exclusive
     Item Shop" (12845: "Cost: <price> Team Contribution Point").
-C>S 0xceb (0x12; 0x869090): a donation (kind, amounts): donate() (Mito only; a reading, not proven in game).
+C>S 0xceb (0x12; 0x869090, ctor 0x860650): a donation from the contribution panel: u32 always 0 @2 (forced by the
+    wrapper at 0x8690db), u32 kind @6 (0 OMD Gold Mark / 1 Mito), u32 amount @0xa, u32 @0xe unused -> donate().
 C>S 0xce4 (0x34; 0x868ca0): the 2016 create-crew request: crews.create_team_2016.
 
 Rules (texts from the client; the amounts that are not in a text are ours):
@@ -338,30 +339,43 @@ async def buy_item(session, frame):
 
 @on(SVC, C2S, 0xceb)
 async def donate(session, frame):
-    """0xceb (sender 0x869090 from the contribution panel 0x674360, 0x12 bytes): u32 kind @2 (0 / 1, anything else
-    sent as 0 amounts), u32 @6, u32 @0xa. The panel's dialogs are 12842 "distribute %d OMD Gold Mark" and 12843
-    "distribute %s Mito"; 12838: "Gain 1 point per OMD Gold Mark contribution, 1 point per 100 Mito contribution".
-    Ours (worker 6's reading, not proven in game): kind 1 = Mito, the amount = the first non-zero of the two u32;
-    Mito taken, amount / 100 Team Research Points to the crew; kind 0 (OMD Gold Mark: no such balance here) logged."""
+    """0xceb (sender wrapper 0x869090, ctor 0x860650; 0x12 bytes): u32 always 0 @2 — the wrapper forces that field
+    (0x8690db: mov DWORD PTR [eax+0x2],0) — then u32 kind @6, u32 amount @0xa, u32 @0xe unused. The panel's dialogs
+    are 12842 "distribute %d OMD Gold Mark" and 12843 "distribute %s Mito"; 12838: "1 point per OMD Gold Mark
+    contribution, 1 point per 100 Mito contribution". So kind 0 = OMD Gold Mark (the account's G Coin / Hancoin),
+    kind 1 = Mito. Read from the 2016 exe after the user's in-game donation showed kind 0 / amount 2."""
     from .items import add_money
     from .login import stat_frames
     p, tid = crew_of(session)
-    if not is_on() or not tid or len(frame.payload) < 12:
+    if not is_on() or not tid or len(frame.payload) < 16:
         return
-    kind, a, b = struct.unpack_from('<3I', frame.payload)
-    amount = a or b
-    session.log.note(f'crew {tid}: donation kind {kind}, amounts {a} / {b}')
-    if kind != 1 or amount < 100:
-        return
-    amount -= amount % 100
-    if amount > p.char.mito or not await add_money(p.char, -amount):
-        return error(session, '20092')
+    _, kind, amount, _unused = struct.unpack_from('<4I', frame.payload)
+    session.log.note(f'crew {tid}: donation kind {kind}, amount {amount}')
     db = context.db
     await ensure()
+    if kind == 1:                                   # Mito: 1 point per 100
+        if amount < 100:
+            return
+        amount -= amount % 100
+        if amount > p.char.mito or not await add_money(p.char, -amount):
+            return error(session, '20092')
+        await db.execute(ENSURE_SQL, (db.server_id, tid))
+        await db.execute(GAIN_SQL, (0, amount // 100, db.server_id, tid))
+        send(session, Frame(0x8a, struct.pack('<iiqq', 1, 1, -amount, p.char.mito) + b'\0\0'))
+        for f in stat_frames(p):
+            send(session, f)
+        await event(tid, NEWS, f'{p.char.name} contributed {amount} Mito.')
+        await refresh_crew(tid)
+        return
+    if kind != 0:                                   # not a donation this server knows
+        return
+    from ..admin import add_coin                     # OMD Gold Mark = the account's G Coin
+    r = await db.row("SELECT COIN FROM SKID_UNALISCOIN_TB WHERE MEMBERID=%s", (p.char.member,))
+    if amount <= 0 or not r or _int(r[0]) < amount:
+        return error(session, '20092')
+    _account, balance = await add_coin(p.char.name, -amount)
     await db.execute(ENSURE_SQL, (db.server_id, tid))
-    await db.execute(GAIN_SQL, (0, amount // 100, db.server_id, tid))
-    send(session, Frame(0x8a, struct.pack('<iiqq', 1, 1, -amount, p.char.mito) + b'\0\0'))
-    for f in stat_frames(p):
-        send(session, f)
-    await event(tid, NEWS, f'{p.char.name} contributed {amount} Mito.')
+    await db.execute(GAIN_SQL, (0, amount, db.server_id, tid))      # 1 research point per Gold Mark
+    await event(tid, NEWS, f'{p.char.name} contributed {amount} OMD Gold Mark.')
     await refresh_crew(tid)
+    session.log.note(f'crew {tid}: {amount} OMD Gold Mark contributed, {balance} left')

@@ -182,6 +182,7 @@ class CrewWindow2016Test(unittest.TestCase):
             self.assertEqual(frames.await_args.args[1], crews.ACT_LIST)
 
     def test_mito_donation(self):
+        """0xceb payload: u32 always 0, then kind @4 (1 = Mito), amount @8."""
         context.data = SimpleNamespace(root='server_data_2016')
         context.db = db = FakeDb()
         crewlevel._ready = False
@@ -194,6 +195,27 @@ class CrewWindow2016Test(unittest.TestCase):
         with patch('dcemu.native.game.items.add_money', take), patch.object(crewlevel, 'send'), \
                 patch('dcemu.native.game.login.stat_frames', return_value=[]), \
                 patch.object(crewlevel, 'refresh_crew', AsyncMock()):
-            asyncio.run(crewlevel.donate(s, SimpleNamespace(payload=struct.pack('<3I', 1, 2550, 0))))
+            asyncio.run(crewlevel.donate(s, SimpleNamespace(payload=struct.pack('<4I', 0, 1, 2550, 0))))
         self.assertEqual(c.mito, 10000 - 2500)
         self.assertEqual(db.team[7][1], 25)
+
+    def test_gold_mark_donation(self):
+        """kind 0 = OMD Gold Mark: the account's G Coin, 1 research point each (12838). The in-game donation that
+        showed the layout was kind 0 / amount 2."""
+        context.data = SimpleNamespace(root='server_data_2016')
+        context.db = db = FakeDb()
+        crewlevel._ready = False
+        db.team[7] = [0, 0, '']
+        c = SimpleNamespace(cid=5, name='M', team_id=7, team_rank=crews.MEMBER, mito=0, member='acc')
+        s = SimpleNamespace(state={'player': SimpleNamespace(char=c)}, log=Mock())
+        spent = []
+
+        async def take(name, amount):
+            spent.append((name, amount))
+            return 'acc', 0
+        with patch.object(db, 'row', AsyncMock(return_value=(30,))), \
+                patch('dcemu.native.admin.add_coin', take), \
+                patch.object(crewlevel, 'send'), patch.object(crewlevel, 'refresh_crew', AsyncMock()):
+            asyncio.run(crewlevel.donate(s, SimpleNamespace(payload=struct.pack('<4I', 0, 0, 30, 0))))
+        self.assertEqual(spent, [('M', -30)])
+        self.assertEqual(db.team[7][1], 30)

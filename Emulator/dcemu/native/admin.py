@@ -201,7 +201,8 @@ async def command(cmd, args):
     """One GM command -> (done, text). kick NAME [days] | block NAME days | unblock NAME |
     chatblock NAME minutes (0 lifts it) | ban ACCOUNT-or-NAME | unban ACCOUNT-or-NAME | who |
     item NAME ITEM-ID [count] [+LEVEL] [A|B|C [TIER]] (as the chat command gmitem) | drift NAME DRIFT-ITEM-ID [days] (as gmdrift; 0 days
-    = for good); car NAME CAR-NAME [V1-V9] (as gmcar); for a character online | coin NAME-or-ACCOUNT amount (G Coin) | realmatch open | close | in MINUTES | auto | status"""
+    = for good); car NAME CAR-NAME [V1-V9] (as gmcar); for a character online | coin NAME-or-ACCOUNT amount (G Coin) |
+    crewexp NAME AMOUNT (crew EXP to that character's crew; 2016) | realmatch open | close | in MINUTES | auto | status"""
     from . import editor_admin
     if cmd in editor_admin.COMMANDS:
         return await editor_admin.command(cmd, args)
@@ -274,6 +275,32 @@ async def command(cmd, args):
         if not account:
             return False, f'no account or character {name!r}'
         return True, f'account {account}: {amount:+d} G Coin, now {balance}'
+    elif cmd == 'crewexp':
+        # Crew EXP of the crew a character belongs to (crewlevel.py): 1% of members' EXP is the normal source, so this
+        # is the way to reach Team Level 1 (50 000 EXP) and open the research lab without grinding.
+        try:
+            amount = int(args[1])
+        except (IndexError, ValueError):
+            return False, 'usage: crewexp NAME AMOUNT (crew EXP to the crew of that character)'
+        from .game import crewlevel
+        db = context.db
+        if not crewlevel.is_on():
+            return False, 'crew EXP is 2016 only (emulator.ini [client] version)'
+        r = await db.row("SELECT TEAMID FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND UCNAME=UPPER(%s)"
+                         " AND STATE IN ('P', 'R')", (db.server_id, name))
+        if not r or int(r[0]) <= 0:
+            return False, f'{name!r} is not in a crew'
+        tid = int(r[0])
+        await crewlevel.ensure()
+        old, points, _ = await crewlevel.extra(tid)
+        await db.execute(crewlevel.ENSURE_SQL, (db.server_id, tid))
+        await db.execute(crewlevel.GAIN_SQL, (amount, amount, db.server_id, tid))   # EXP and research points
+        level = crewlevel.level_of(old + amount)
+        if level > crewlevel.level_of(old):
+            await crewlevel.event(tid, crewlevel.NEWS, f'The crew reached Team Level {level}.')
+        await crewlevel.refresh_crew(tid)
+        return True, (f'crew {tid}: {amount:+d} crew EXP ({old} -> {old + amount}), '
+                      f'{points + amount} research points, team level {level}')
     elif cmd in ('ban', 'unban'):
         account = await ban(name, valid=cmd == 'unban')
         return bool(account), f'{cmd} account {account}' if account else f'no account or character {name!r}'
