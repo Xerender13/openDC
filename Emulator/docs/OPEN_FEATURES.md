@@ -18,14 +18,19 @@ are missed by the address scan). The lists below are the ones verified against t
 
 ## Requests the client really sent and we ignored (from the logs)
 
-| Type | Times | Shape | Guess |
+| Type | Times | What it is | Does the client wait for a reply? |
 |---|---|---|---|
-| `0x0f4d` | 23 294 | 4 bytes, constant `0x111a` | 2016 only, sent about once a second with a constant id — a keep-alive / session tick. Wrapper `0x866270`, one u32. |
-| `0x0e8d` | 89 | 4 bytes, `0.0` | Sent right after login; the wrapper `0x867b70` writes a **float** at +2. Also exists in the 2011 client. |
-| `0x02d5` | 42 (2016) / 70 (2011) | 12 bytes, 3 u32 | Both builds; wrapper `0x8655c0` takes three dwords (+2 / +6 / +0xa) and picks an object by an index. |
-| `0x0fc1` | 3 | — | 2016 only. |
-| `0x0fb4` | 1 | — | 2016 only. |
-| `0x0777` | 1 | — | DCGP range (0x776-0x778). |
+| `0x0f4d` | 23 294 | **Player HP sync for Neo City / HUS combat** (user: "the HP is probably part of Neo City", matching `0xf4e` already in the Neo HUS group): constant u32 `0x111a` (the XOR base). Its answer `0x0f4e` carries HP — the client's format string is literally `"Receive HP : %d"`, and `0x760910` stores `[player+0x1da4] = [player+0x1da0] ^ value`; only 0-20000 is accepted, anything else prints the message. The handler first tests `[player+0x198]`, so outside that mode it does nothing. | **yes** (`0x0f4e`) |
+| `0x0e8d` | 89 | 4 bytes, a **float** = 0.0, sent once right after login (`0x867b70` writes it at +2). Exists in the 2011 client too. | no |
+| `0x02d5` | 42 (2016), 70 (2011) | On the **barea** service, 124 bytes: u32 2, then a u32 that grows between sends (`0x0cd273` -> `0x0e1a4e`, a tick/time), then a record. `0x8655c0` picks an object by index and sends three dwords. | no |
+| `0x0fc1` | 3 | 13 bytes `0x88, 0x6b, 1` — GM event range; the client has handlers `0x0fc2` / `0x0fc3` (GMEventRush). | yes |
+| `0x0fb4` | 1 | 48 bytes, a record starting `213, 9, 1, 1, 0, 115, 0, 280`; handlers `0x0fb5` / `0x0fb6`. | yes |
+| `0x0777` | 1 | DCGP request (all zero in the visible part); handler `0x0778`. | yes |
+
+**Verdict:** `0x0f4d`/`0x0f4e` is the **Neo City / HUS player-HP pair** and belongs with the "Neo HUS combat" row below
+(it is the same feature as `0x0f4e` there), so it stays unimplemented until that mode is; the other three are DCGP
+(`0x0777`) and GM event (`0x0fc1`, `0x0fb4`), already on the list. `0x0e8d` and `0x02d5` expect no answer at all —
+ignoring them is safe.
 
 The 2011 build additionally shows `0x01b5` (43×, the 2008 server answers "Wrong Command: 437"), `0x02c8`, `0x021b`,
 `0x0214`, `0x00a4`, `0x0057`.
@@ -37,7 +42,7 @@ The 2011 build additionally shows `0x01b5` (43×, the 2008 server answers "Wrong
 | **DCGP** | `0x776`, `0x777`, `0x778` | Championship GP mode. |
 | **World Laptime** | `0x3c0`, `0xf51`-`0xf5e` | Lap-time ranking; 14 S>C types. |
 | **Honor ranking** | `0xfae`-`0xfb2` | `0xfae` -> `0xfaf` list, `0xfb0` -> `0xfb1` by name, `0xfb2` error (texts 12217-12220). The `0xc4` entry layout is still unknown. |
-| **Neo HUS combat** | `0xef3`, `0xf4e`, `0xf50`, `0xfc0` | Neo City HUS enemies. |
+| **Neo HUS combat** | `0xef3`, `0xf4e`, `0xf50`, `0xfc0`, and the `0x0f4d` request | Neo City HUS enemies. `0x0f4d` is the client's HP poll and `0x0f4e` the HP answer (`"Receive HP : %d"`, XOR base `[player+0x1da0]`, 0-20000), so the pair is the player-HP half of this mode. |
 | **Neo repair (parts)** | `0x4c4` -> `0x4c5` | No Neo part durability is kept, so the repair cannot be applied. |
 | **NeoChapterBonusMission** | `0xef5` -> `0xef6` | Neo chapters are not modelled. |
 | **PvpCollisionDamage** | `0xfbd` -> `0xfbe` | f32 damage; needs char flag `0x20` at `+0x2a4` and game mode 8. |
