@@ -73,6 +73,11 @@ def tracks():
 
 
 def pick_track(grade):
+    from . import worldmatch
+    if worldmatch.enabled():            # the WM race loader takes the track from 0x3c0: keep 0x528 the same track
+        season, _state = worldmatch.season_now()
+        if season and season.track:
+            return season.track
     cities = [c for c in table().get(grade, (0, 0, 0, [1]))[3] if c in tracks()] or list(tracks())
     return tracks()[random.choice(cities)] if cities else 0
 
@@ -165,6 +170,12 @@ async def lap_record(session, frame):
     lap = room.lap
     if lap_s > 0:
         lap.best[m.serial] = min(lap.best.get(m.serial, lap_s), lap_s)
+    if session.state.get('wm_try') is not None:      # a World Match try (worldmatch.py): its best lap counts
+        from . import worldmatch
+        if lap_ms > 0:
+            await worldmatch.record_lap(session, lap_ms)
+        if total and current >= total:
+            session.state.pop('wm_try', None)
     from .items import play_bonus
     _, exp, money, _ = table().get(lap.grade, (0, 0, 0, []))
     exp, money = play_bonus(player, exp, money)

@@ -34,7 +34,8 @@ Client (sizes from the type, 2011; the 2008 handlers in Server/tools/dev/dispatc
         saw nothing; it was dropped, and with the size 0x10 the rest of its frame too).
   0x239 BlockList (6), 0x07 ping (6): accepted, nothing answered.
 Undercity areas 100-103 (UC_AREAS; the client loads one after 0xff UnderCityLoad): each party has its own instance
-(game/undercity.uc_area_key), without city traffic.
+(game/undercity.uc_area_key), without city traffic. Neo City areas (2016; a session with state['neo_run']): one
+instance per run (game/neocity.neo_area_key), also without city traffic.
 BArea (races): the area is the room id (e.g. 909, any value); moves go to everyone in the room
 (the 2008 server's PvP areas: HashedVector::Scan<PvpMove>, no distance).
   0x238 SetAreaMap (0x2c, sent by the room owner at the start): u16 map (track number), u16 max
@@ -211,7 +212,11 @@ def enter_area(session, p):
     name = read_wstr(p, 2, 42)
     area, group, local = struct.unpack_from('<iii', p, 0x2c)
     uc = area in UC_AREAS and not world_of(session).pvp
-    if area < 0 or (area >= AREAS and not world_of(session).pvp and not uc):
+    neo = False
+    if not world_of(session).pvp:               # Neo City (2016): the game session keeps the run (game/neocity.py)
+        from .game.neocity import in_neocity
+        neo = in_neocity(serial) is not None
+    if area < 0 or (area >= AREAS and not world_of(session).pvp and not uc and not neo):
         session.log.note(f'enter area {area}: no such area')
         return
     car = car_of(session) or session.state.setdefault('car', Car(session, serial, name))
@@ -219,12 +224,16 @@ def enter_area(session, p):
     if group >= 0:
         car.group = group
     key = area
-    if uc:                                      # the Undercity: the party's own instance (game/undercity.py)
+    if neo:                                     # Neo City (2016): the run's own instance (game/neocity.py)
+        from .game.neocity import neo_area_key
+        key = neo_area_key(serial, area)
+    elif uc:                                    # the Undercity: the party's own instance (game/undercity.py)
         from .game.undercity import uc_area_key
         key = uc_area_key(serial, area)
     world_of(session).enter(car, key)
-    session.log.note(f'{name!r} (serial {serial}) enters area {area}, group {group}' + (f' ({key})' if uc else ''))
-    if session.service == 'area' and context.city_traffic and not uc:
+    session.log.note(f'{name!r} (serial {serial}) enters area {area}, group {group}'
+                     + (f' ({key})' if neo or uc else ''))
+    if session.service == 'area' and context.city_traffic and not uc and not neo:
         context.city_traffic.touch(area)
     session.to_client(Frame(0x233, struct.pack('<iiII', area, 1, local & 0xffffffff, tick()) + bytes(4)))
 

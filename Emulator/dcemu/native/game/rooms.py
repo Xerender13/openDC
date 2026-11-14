@@ -1837,6 +1837,8 @@ async def result(room):
                            + (f', team point {point}' if team_room(room.type) else ''))
         entries.append(pack_exp('<iIIQIfHH3III', end_type, m.serial, money, c.mito, exp, record, rank, c.level,
                                    c.exp, c.exp_next, c.exp_base, point, 0) + bytes(8))
+        from . import dcgp                  # 2016 DCGP (dcgp.py, off unless [dcgp] enabled): the race's team points
+        await dcgp.race_points(m.session, end_type == FINISHED and rank == 1, rank)
     room.state = WAIT
     room.waiting.clear()
     for m in room.members:

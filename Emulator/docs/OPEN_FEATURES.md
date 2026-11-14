@@ -20,7 +20,7 @@ are missed by the address scan). The lists below are the ones verified against t
 
 | Type | Times | What it is | Does the client wait for a reply? |
 |---|---|---|---|
-| `0x0f4d` | 23 294 | **Player HP sync for Neo City / HUS combat** (user: "the HP is probably part of Neo City", matching `0xf4e` already in the Neo HUS group): constant u32 `0x111a` (the XOR base). Its answer `0x0f4e` carries HP — the client's format string is literally `"Receive HP : %d"`, and `0x760910` stores `[player+0x1da4] = [player+0x1da0] ^ value`; only 0-20000 is accepted, anything else prints the message. The handler first tests `[player+0x198]`, so outside that mode it does nothing. | **yes** (`0x0f4e`) |
+| `0x0f4d` | 23 294 | **Player HP sync for Neo City / HUS combat** (user: "the HP is probably part of Neo City", matching `0xf4e` already in the Neo HUS group): u32 = the car's own HP (`0x111a` = 4378 here; corrected 2026-11-14, it is not a XOR base). Its answer `0x0f4e` stores the plain HP (`0x760910`, 1-20000), see docs/NEOCITY.md. Implemented (neocity.py). | **yes** (`0x0f4e`) |
 | `0x0e8d` | 89 | 4 bytes, a **float** = 0.0, sent once right after login (`0x867b70` writes it at +2). Exists in the 2011 client too. | no |
 | `0x02d5` | 42 (2016), 70 (2011) | On the **barea** service, 124 bytes: u32 2, then a u32 that grows between sends (`0x0cd273` -> `0x0e1a4e`, a tick/time), then a record. `0x8655c0` picks an object by index and sends three dwords. | no |
 | `0x0fc1` | 3 | 13 bytes `0x88, 0x6b, 1` — GM event range; the client has handlers `0x0fc2` / `0x0fc3` (GMEventRush). | yes |
@@ -39,15 +39,15 @@ The 2011 build additionally shows `0x01b5` (43×, the 2008 server answers "Wrong
 
 | Feature | Messages | Notes |
 |---|---|---|
-| **DCGP** | `0x776`, `0x777`, `0x778` | Championship GP mode. |
-| **World Laptime** | `0x3c0`, `0xf51`-`0xf5e` | Lap-time ranking; 14 S>C types. |
-| **Honor ranking** | `0xfae`-`0xfb2` | `0xfae` -> `0xfaf` list, `0xfb0` -> `0xfb1` by name, `0xfb2` error (texts 12217-12220). The `0xc4` entry layout is still unknown. |
-| **Neo HUS combat** | `0xef3`, `0xf4e`, `0xf50`, `0xfc0`, and the `0x0f4d` request | Neo City HUS enemies. `0x0f4d` is the client's HP poll and `0x0f4e` the HP answer (`"Receive HP : %d"`, XOR base `[player+0x1da0]`, 0-20000), so the pair is the player-HP half of this mode. |
+| ~~DCGP~~ | `0x776`, `0x777`, `0x778` | **Partly done in session 46, off by default** (`game/dcgp.py`, `[dcgp] enabled`): team / season / claim / points; the type-14 DCGP channels are not offered. |
+| ~~World Laptime~~ | `0x3c0`, `0xf51`-`0xf5e` | **Done in session 46, off by default** (`game/worldmatch.py`, `[worldmatch] enabled`). |
+| ~~Honor ranking~~ | `0xfae`-`0xfb2` | **Done in session 46** (`game/rankings.py`, flag `Main.New2011RankSystem`); data is ours. |
+| **Neo HUS combat** | `0xef3`, `0xf4e`, `0xf50`, `0xfc0`, and the `0x0f4d` request | Neo City HUS enemies. Implemented in session 46 (neocity.py, docs/NEOCITY.md): `0xc6`->`0xc7`, `0xcd`, `0xce`, `0xf4d`->`0xf4e`, `0xf4f`->`0xf50`; `0xfc0` is not sent (no server enemy AI). |
 | **Neo repair (parts)** | `0x4c4` -> `0x4c5` | No Neo part durability is kept, so the repair cannot be applied. |
 | **NeoChapterBonusMission** | `0xef5` -> `0xef6` | Neo chapters are not modelled. |
 | **PvpCollisionDamage** | `0xfbd` -> `0xfbe` | f32 damage; needs char flag `0x20` at `+0x2a4` and game mode 8. |
 | **GMEventRush** | `0xfc3` | GM event. |
-| **Rank pages** | `0xfa2`-`0xfa5` | Only `0xfa0`/`0xfa1` (character info) exist; the ranking pages and their `0xc4` entries are not built. |
+| ~~Rank pages~~ | `0xfa2`-`0xfa5`, `0xfaa`-`0xfad` | **Done in session 46** (`game/rankings.py`): they go over the ranking connection, opened only with `Main.New2011RankSystem` >= 1. |
 | **Crew contribution rank tab** | `0xcee`/`0xcef`, `0xcf0`/`0xcf2` | The client never sends these in any log, and the tab renders "is feature is currently unavailable" — the real gate is still unidentified. |
 
 ## Changed in size but never built (from the timeline audit)

@@ -8,6 +8,110 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 46 (2026-11-13/14, overnight): Neo City stages 2-3, rankings window, World Match Lap Time, DCGP, size audit
+
+**User:** "check what work was done on Neo City and then continue working on the whole gamemode and its systems throughout the
+night. Delegate most of the tasks to Deepseek." Worked while the user slept: **nothing tried in game**. Delegated to
+OpenCode DeepSeek (`opencode-go/deepseek-v4.1-flash`): the protocol decode of the entry / chapter / quest messages (A) and of
+combat (B), the stage-2 and stage-3 implementations (C, D) and a mission-progress / enemy-damage investigation (E). The lead
+extracted the handlers' disassembly for them, wrote the specs, re-checked the key addresses and reviewed every edit.
+Worker notes: `docs/neo_work/` (not in git, `.git/info/exclude`).
+
+**The client ships the whole mode's data.** `Data/World/neodata.agt` holds `NC_chapter` (8 chapters, all Neo Oros),
+`NC_quest` (17), `NC_mission` (182 rows), `NC_object` (346 spawns), `NC_objectDef`, `NC_HuvRand`; `Init/NeoAI.xlt`,
+`NeoHuvParam.xlt` (580 enemies) and `WeaponList.xlt` are in server_data_2016 already. Only `neooros.agt` has a map, so Neo
+Oros is the only Neo city that can be played. Copied to `server_data_2016/NeoData/` for the server.
+
+**Chapter keys (lead, verified).** The client's `NC_chapter` loader (`0x7ae1a0`) keys chapters by their 0-based data-row
+order (`[chapter+4] = row counter`, map `[0x9e5b70+0x148]`); quests are numbered within their chapter (`0x7aa9b0`, counter
+reset per chapter; `quest+0xc0` = chapter key). Both workers had read that key as a "player serial" (the map lookups
+`0x7a9790`/`0x7a97d0` looked like a player list); the specs and the code use the key. Unlocks are client side
+(`0x7abee0`: level range and the previous chapter, from `0xee6`).
+
+**Map load (lead, verified).** `S>C 0xe89` @6 is the map: `0x788860` jump table `0x788a2c` 6 NeoOros / 7 NeoCras /
+8 NeoKoinonia / 9 NeoMoonPalace (field ids 0x54-0x57); its handler sends `0xed8` itself. `0xc7` is accepted only in
+app state 0x13 or areas 84-99 (`0x53bb05`), so Neo Oros is area 84.
+
+**Implemented** (`game/neocity.py`; layouts in its docstring and docs/NEOCITY.md): party suggest / agree / reject and
+load (Undercity pattern, 15 s), chapter start, quest start, goals, missions, quest rewards (NC_quest exp / Mito / items ->
+`0xedf`, 58 bytes, 3 x u64 exp counters), chapter clear (`0xeda` -> `0xedb`, 0xcb bytes; exp / Mito parsed from the
+summary text; SKID_QUEST_TB `neo_<chapter_ID>`, FAILNUM = clears), cleared list `0xee7` -> `0xee6` (never during a run: its
+handler drops the client's activity), give-ups, death `0xef2` -> `0xef3`, enemy spawns `0xc6` -> `0xc7` (the client asks,
+the server fills serial / chapter key / quest and sends it to the run), hit / kill / aggro / targeting relays, kill rewards
+(NeoHuvParam level x 10 exp and Mito: **our amounts**, plus the enemy's reward group roll), turrets `0xf41` -> `0xf42`, part
+repair `0x4c4` -> `0x4c5` (free), log-only handlers for `0xc8 0xd1 0xf40 0xf49 0xf4a 0xf4c 0xf4f 0xfbf`. area.py: one area
+instance per run, no city traffic. Lead fixes in review: a party with an old finished run could not suggest again;
+`0xee8` / `0xef5` answered outside a run. 269 unit tests pass (`python -m unittest discover -s tests -t .`; pytest is
+not installed in the venv). Emulator restarted 2026-11-14 00:23 (pid 1694842).
+
+**Mission progress (investigation E, lead-checked).** Mission types (client `0x75b020`): start 1, move 2, escort 4,
+escort_pass 5, collect 6, investigate 7, patrol 8, patrol_pass 9, end 10, destroy 11. A quest's mission index counts its
+NC_mission rows without start / *_pass rows (start only sets the quest's start position, `0x7ae8e1`; a new mission object
+per remaining row, counter reset per quest, `0x7aed04`). Stage 2 answered every `0xeeb` with `0xeea` result 1, which sets
+`[activity+0x9c] = 3` (`0x534005`) while the per-frame mission tick needs 2 (`0x7a5ae8`): it would have frozen patrol /
+collect / investigate / destroy. Now: `0xeeb` -> `0xeec` (param1 = the client's value: a patrol point is only set there,
+`0x538de0`), and `0xeee` when a collect count reaches param_2 or an investigate reports 1; a destroy hit report (`+0x12` /
+`+0x16` set) gets nothing; destroy completes from the client's own `0xeef`. `0xeea` is never sent. Enemy damage: an
+explosion reaching the *driving* client's own car is applied locally (`0x4e5bf0`-`0x4e5cc8`); one reaching another player's
+car comes as `C>S 0xf4f`, forwarded to that player as `0xf50` (victim serial, sort 1 *(guess)*, the 12 bytes). Emulator
+restarted 00:57 (pid 1710881), 277 tests pass.
+
+**HP pair corrected (lead).** `0xf4d` carries the car's own HP (`0x4430d0`: getter `0x760900` = `[+0x1da4] ^ [+0x1da0]`,
+sent via `0x54c740` -> `0x866270`); `0xf4e` stores its value as is (`push edx; call 0x760910`, the setter XORs with its own
+key). Stage 1's `base ^ hp` (= 24378) was always refused (> 20000), so it did nothing. Now the last report is kept and
+echoed; a Neo load or a revival forgets it (the new car reports again; `0x4b5320` gives a new car the stored HP or, at -1,
+its max HP).
+
+**Open.** Whether Neo HUVs fire weapons at all
+(no HUV weapon code was found), `0xeed` -> `0xeec` not answered, `0xedb` body / `0xee9` slots / `0xef6` are guesses, `0xe80`/`0xe82` -> `0xe81` weapon slots, Neo gear.
+How a player opens the Neo City window in game is not known: try the main menu (flag `Main.NeoCityMainUI`). The
+`0xe88` handler auto-rejects unless app state `[0x442790()+0xc4]` is 9; state 9 is requested from several generic places
+(`0x5210c6`, `0x5aa7e0`, `0x60b10d`), so it is probably the plain in-city state, not a Neo window (worker A's label).
+
+
+**Rankings window (2016; workers G decode, H connection, I implementation; lead-checked).** The 2016 window's requests
+(`0xfa2/0xfa4` character, `0xfaa/0xfac` crew, `0xfae/0xfb0` honor, `0xfa1` refresh) go over the **ranking connection**
+(`[net+0x160]`), which the client opens only when the content flag `Main.New2011RankSystem` (flags +0xc bits 25-26) is
+>= 1 (`0x54dea3`: `and edx,0x6000000; cmp edx,0x2000000; jb`); the emulator never sent it, so no 2016 client ever
+connected to our ranking service (the 2011 client connects regardless). Now `login.content_flags()` sends 1 for 2016, and
+`game/rankings.py` answers on `native:ranking` and `native:game`: pages of 12, signature dwords `0x00ff0000` (page replies,
+`+0xe`) / `0x0000ff01` (search replies, `+0x16`) without which the client ignores the reply, `0xfb2` codes 2 (bad page) /
+4 (not on the ranking). Data is **ours**: characters by EXP (every category and measure), honor by level, crews by
+TEAMPOINT / CHANNELWINCNT (only TEAMSTATE 'A': the user's CoolCrew is 'C', closing). Real queries checked against
+skdb2016test (2 characters). 297 tests pass. Layouts in the module docstring; research in `docs/neo_work/RANK_*.md`.
+
+**World Match Lap Time (2016; workers J decode, L blob, K implementation; lead-checked; OFF by default).** The
+battle zone's seasonal time trial: nickname (`0xf55` -> `0xf54`, then `0xf56`), refresh (`0xf53` -> `0x3c0`, `0xf59`
+season, `0xf5c` daily tries, `0xf58` own record, `0xf51` list, `0xf57` rank 1), tries (`0xf5c` + `0xf5d`, or `0xf5e`
+"max daily counts"). There is no WM race protocol: the race is the ordinary Lap Time room (`laptime.py`). `0x3c0`'s two
+blocks are **the stat frame** (the body of `0x2f8`: its handler `0x521cc0` hands msg+2 / +0x72 to the same `0x784470`,
+size `0x9e`), not an area record as the first decode said; `+0x9e` = PVPTrackInfo Id (70-73), `+0xa0` = city 1-4. With
+`BattleZone.WorldMatch` set the race loader (`0x7caad5`) takes **every** lap-time race through `0x3c0`, so the flag is
+only sent with `emulator.ini [worldmatch] enabled = 1`, and then `laptime.pick_track` races the season's track. Ours:
+the season table ends in 2014, so the last season (5, track 73 Oros) keeps running; 5 tries a day; records in the new
+SKID_WMLAPTIME_TB (created on first use, **not yet created / tried against the database**). 322 tests pass.
+
+**DCGP (2016; worker N decode, O implementation; lead-checked; OFF by default).** A West / East faction season of the
+battle zone: `0x776` team (11), `0x777` season state (154: phase, season, two u64 totals, three Unix times, two
+reward-group names), `0x778` reward claim (6: the handler returns 6 at `0x52b6a3` although it reads nothing - the worker's
+2-byte ack was fixed), points via `0x89` NotifyEvent event 40. The flag `BattleZone.DCGP` (+0x3c bits 3-4) only gates UI.
+`game/dcgp.py` with `[dcgp] enabled = 0`; ours: season / phase from the ini, 10 points a won battle-zone race and 2 for
+any other (hook in `rooms.result`), both reward groups `rw_dcgp_common`, SKID_DCGP_TB created on first use. Not done: the
+DCGP Stadium channels (type 14, `DCGP_*X_Level_Min/Max`), the room's team field. Research: `docs/neo_work/DCGP_PROTOCOL.md`.
+
+**Neo collect missions (lead).** NC_mission collect rows say `param_1 = "0 neo_q_00001 100482 100 n/a"`, `param_2 = 5`:
+read as item, enemy (Huv Param ID, the same 100482 the destroy rows name), chance % *(guess)*. A kill of that enemy during
+the quest now gives one item until the count is held (`neocity.collect_drop`); the client reports the count with `0xeeb`
+and gets `0xeee` at 5. Without it "Build a defense system" (c_0005 Q2) could never finish.
+
+**Size audit (worker M, lead-checked).** Every S>C frame in `logs/2016/*.msgs.txt` (147 types, 158 617 frames) was
+walked command by command with the sizes the 2016 client's handlers return (decoded per handler from the exe; logged
+length = 2 + type + payload): 126 types match, 10 have no 2016 handler, 11 were wrong only in logs before 2026-10-20 12:39
+(2011-sized frames, fixed since). The script is `docs/neo_work/tmp/size_audit.py` (not in git); rerun it after protocol
+work. The same check on the frames tonight's Neo / ranking / World Match tests build found one real bug: **`0xf51` sizes
+n = 0 as 1** (`0x53b9bb`: `(max(n,1)-1)*0x35+0x3b`), so an empty list must still carry one zero record (fixed in
+worldmatch.py). The other variable replies (`0xee6`, `0xc7`, `0xf42`, `0xfa3`..`0xfb1`) wrap to the header size at n = 0.
+
 ## Session 45 (2026-11-13): in-game test round — crew create / grade / donations, aero port, Neo City start
 
 **User tested in game throughout.** 250 tests pass. Emulator left running (2016, 111xx, skdb2016test).

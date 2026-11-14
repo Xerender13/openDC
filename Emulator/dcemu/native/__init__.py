@@ -150,6 +150,9 @@ class Context:
     rush_start_members = 2   # [rush] start_members (City.RushTimeStartMember)
     rush_countdown = 60      # [rush] countdown: seconds from reaching start_members to the start (client text: 1 min)
     rush_test_health = 0     # [rush] test_health: every rush HUV's health (for testing; 0 = the client's table)
+    worldmatch = {}          # emulator.ini [worldmatch] (game/worldmatch.py): enabled, daily_tries
+    dcgp = {}                # emulator.ini [dcgp] (game/dcgp.py): enabled, season, phase, win_points, play_points,
+                             # winner, loser
 
 
 context = Context()

@@ -4,7 +4,53 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 45 (2026-11-13): 2016 in-game test round — crew, cars, aero, Neo City start — resume here
+## Session 46 (2026-11-13/14, overnight): Neo City stages 2-3, rankings, World Match, DCGP — resume here
+
+**Worked while the user slept; nothing tried in game, nothing committed.** Delegated to OpenCode DeepSeek
+(`opencode-go/deepseek-v4.1-flash`); the lead extracted the evidence, wrote the specs, re-checked the key client addresses
+and reviewed every edit. 278 tests pass (`.venv/bin/python -m unittest discover -s tests -t .`: **pytest is not
+installed in the venv**). The emulator was restarted with the new code (2016, 111xx). Details: EMULATOR_NOTES session 46,
+`docs/NEOCITY.md`, the module docstring of `dcemu/native/game/neocity.py`.
+
+### Done, not yet confirmed in game
+
+- **Neo City entry / chapters / quests** (`neocity.py`): suggest / agree / reject / load (`0xe88`-`0xe8c`, `0xe89`),
+  chapter start, quests, missions (patrol / collect / investigate / destroy rules from the client), quest and chapter
+  rewards from the client's own `NC_quest` / `NC_chapter` (copied to `server_data_2016/NeoData/`), chapter clears in
+  SKID_QUEST_TB (`neo_c_0000` ...), give-ups, death. One area instance per run (area.py; Neo Oros is area 84).
+- **Neo enemies**: the client asks (`0xc6`), the server places them for the run (`0xc7`), hits / kills / aggro relayed,
+  kill rewards (level x 10 exp and Mito: **our amounts**, plus the enemy's reward group), turrets, free part repair,
+  explosion damage to another player forwarded (`0xf4f` -> `0xf50`).
+- **HP pair corrected**: `0xf4d` reports the car's HP; `0xf4e` takes a plain HP. Stage 1's `base ^ hp` was refused by
+  the client (> 20000), so it never did anything.
+
+- **Rankings window** (`game/rankings.py`, flag `Main.New2011RankSystem` = 1 for 2016): the client now connects to the
+  ranking service (11151) and gets character / crew / honor pages. The data is ours (EXP order; crews by points).
+
+- **World Match Lap Time** (`game/worldmatch.py`), **off**: set `emulator.ini [worldmatch] enabled = 1` and restart to
+  try it (battle zone > World Match button). Off means nothing changed for the normal Lap Time.
+
+- **DCGP** (`game/dcgp.py`), **off**: `[dcgp] enabled = 1` shows the DCGP tab; team choice, season window, points
+  from ordinary battle-zone races (ours), reward claim. No DCGP Stadium channels yet.
+- **Crew contribution rank tab**: retry it now that the ranking connection exists (`Main.New2011RankSystem`).
+
+### To try in game (in this order)
+
+0. Open the Ranking window (each tab, a page, a name search). Expect a `ranking` connection in the newest log.
+
+1. Log in a level 40+ character on 2016 and look for the Neo City entry: the main menu (`Main.NeoCityMainUI`), the
+   minimap / city menu, or an NPC in Oros. Nothing tells yet how the Neo window opens; `grep -n neocity` in the newest
+   `logs/2016/*.msgs.txt` shows every Neo message the client sent.
+2. Start chapter 1 alone ("The Future Mitron Island", solo, level 40). Expect `0xe89` then the client loading Neo Oros.
+3. Drive the first quest: patrol posts should tick off, enemies should appear (`0xc6` / `0xc7` in the log).
+
+### Open
+
+- How the Neo window opens; `0xeed` -> `0xeec`, the `0xedb` body, `0xee9` reward slots and `0xef6` are guesses; Neo gear
+  items / weapon slots (`0xe80`/`0xe82` -> `0xe81`); whether Neo enemies fire weapons at all.
+- Everything in the session 45 "Open" list below except the Neo City items.
+
+## Session 45 (2026-11-13): 2016 in-game test round — crew, cars, aero, Neo City start
 
 **User tested in game all session.** 250 tests pass. Everything below is committed and pushed (`99865f8` at the end).
 The emulator was left **running** (pid 1658250, 2016 ports 111xx, database `skdb2016test`) and the **client closed**.

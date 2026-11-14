@@ -179,6 +179,19 @@ def native_setup(cp):
         for k in ('exp', 'mito'):
             if pk.get(k, '').strip():
                 context.pickem[k] = int(pk[k])
+    if cp.has_section('worldmatch'):
+        wm = cp['worldmatch']
+        context.worldmatch['enabled'] = wm.get('enabled', '0').strip() not in ('0', 'no', 'off', '')
+        context.worldmatch['daily_tries'] = int(wm.get('daily_tries', '5').strip() or 5)
+    if cp.has_section('dcgp'):
+        dg = cp['dcgp']
+        context.dcgp['enabled'] = dg.get('enabled', '0').strip() not in ('0', 'no', 'off', '')
+        for k in ('season', 'phase', 'win_points', 'play_points'):
+            if dg.get(k, '').strip():
+                context.dcgp[k] = int(dg[k])
+        for k in ('winner', 'loser'):
+            if dg.get(k, '').strip():
+                context.dcgp[k] = dg[k].strip()
     if cp.has_section('championship'):
         ch, c = cp['championship'], context.championship
         c['enabled'] = ch.get('enabled', '1').strip() not in ('0', 'no', 'off')

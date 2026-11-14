@@ -26,45 +26,65 @@ Sources: namu.wiki `스키드러쉬/게임 모드` §1.9 (the fullest), ko.wikip
 - **Rewards.** EXP and Mito per chapter (5 000-10 000 originally, raised to 30 000-50 000) and per operation
   (150 000 / 200 000 / 250 000). Chapters also feed the crew research / contribution systems.
 
-## The client's messages (measured; `pair` = the C>S request it answers)
+## The client's messages (2016 exe; names from its own handler registrations, `tools/re2016/handlers_2016.json`)
 
-| C>S | S>C handler | Subsystem |
+Full layouts with addresses: the module docstring of `dcemu/native/game/neocity.py` (sessions 46). The research notes
+the workers wrote (`docs/neo_work/NEO_PROTOCOL_A.md`, `_B.md`) are kept out of git (`.git/info/exclude`) and call
+the chapter key a "player serial" in many places: **that is wrong** (see "Chapter keys" below).
+
+| C>S | S>C (handler) | What |
 |---|---|---|
-| `0xee2` | `0xee3` (`0x526db0`) | Neo combat state |
-| `0xee4` | `0xee5` (`0x526e10`) | Neo combat state |
-| `0xee7` | `0xee6` (`0x52ea00`) | Neo combat state |
-| `0xee8` | `0xee9` (`0x526d80`) | Neo combat state |
-| `0xeeb` | `0xeea` (`0x533fb0`) | Neo combat state |
-| `0xeed` | `0xeec` (`0x53cee0`) | Neo combat state |
-| `0xeef` | `0xeee` (`0x521940`) | Neo combat state |
-| `0xef0` | `0xef1` (`0x533e70`) | Neo combat state |
-| `0xef2` | `0xef3` (`0x526ec0`) | Neo combat state |
-| `0xef5` | `0xef6` (`0x5218e0`) | **NeoChapterBonusMission**: sends u32, u32; the answer shows "n / 10" (text 12699) |
-| `0x4c4` | `0x4c5` (`0x52a870`) | **Neo item repair**: u32 id @2 -> u32 id, u32 result (1 = done) |
-| `0xf4d` | `0xf4e` (`0x53e630`) | **Player HP/durability sync** (see below) |
-| `0xf4f` | `0xf50` (`0x53ecb0`) | Neo combat state |
-| `0xf3e` | `0xf3f` (`0x5259f0`) | Neo combat state |
-| `0xf40` / `0xf41` | `0xf42` (`0x53edd0`) / `0xf44` (`0x53ee40`) | Neo combat state |
-| `0xf43` | `0xf44` | Neo combat state |
-| `0xf49` (454 bytes) | `0xf4b` (`0x537e30`) | Neo combat state |
-| `0xf4a` | `0xf4b` | Neo combat state |
-| `0xf4c` | — | Neo combat state |
-| `0xfbf` | `0xfc0` (`0x53eb50`) | Neo combat state |
-| `0xfc1` (13 bytes: `0x88, 0x6b, 1`) | `0xfc2` (`0x52d5f0`) / `0xfc3` (`0x545330`) | GM event |
+| `0xe88` (68) | `0xe88` Cmd_NeoCitySuggest (`0x53e440`) | party suggestion of a chapter; the S>C copy carries the leader's name @0x1a |
+| `0xe8c` (18) / `0xe8b` (14) | `0xe8c` Cmd_NeoCityAgree (`0x53e3c0`) / `0xe8b` Cmd_NeoCityReject (`0x53e6c0`) | answers, broadcast to the party; reject reasons 0-4 -> texts 12315-12319 |
+| — | `0xe89` Cmd_NeoCityLoad (`0x53e400`) | **loads the map**: @6 map 6-9 (NeoOros/Cras/Koinonia/MoonPalace, `0x788a2c`), @0xa chapter key, @0xe run id |
+| `0xed8` (10) | `0xed9` Cmd_NeoChapterStartAck (`0x526ce0`) | sent by the client from the `0xe89` handler itself; creates the chapter activity |
+| `0xedc` (10) | `0xedd` Cmd_NeoQuestStartAck (`0x526d30`) | quest start (chapter key, quest index) |
+| `0xeeb` (26) | `0xeea` Cmd_NeoQuestGoalPlaceAck (`0x533fb0`) | goal placed, result 1 |
+| `0xeef` (14) | `0xeee` Cmd_NeoMissionCompleteAck (`0x521940`) | mission done |
+| `0xeed` (14) | `0xeec` Cmd_NeoMissionCompleteParamAck (`0x53cee0`) | per mission type counters (not decoded: not answered) |
+| `0xede` (14) | `0xedf` Cmd_NeoQuestCompleteAck (`0x533cb0`) | quest reward: exp, Mito, 3 x u64 exp counters, level, 3 items |
+| `0xeda` (10) | `0xedb` Cmd_NeoChapterCompleteAck (`0x52e960`) | sent by the client itself after the last quest; 0xcb bytes for one record |
+| `0xee8` (10) | `0xee9` Cmd_NeoChapterRewardAck (`0x526d80`) | 16 reward slots of 16 bytes |
+| `0xee7` (18) | `0xee6` Cmd_MyNeoQuestListAck (`0x52ea00`) | cleared chapters (key @0, u16 count @0x14); **drops the client's activity** |
+| `0xee2` / `0xee4` / `0xef0` | `0xee3` QuestFail / `0xee5` QuestGiveUp / `0xef1` ChapterGiveUp | `0xef1` @6 = the giver's serial; its own client leaves the area and sends `0xe8a` |
+| `0xef2` (14) | `0xef3` Cmd_NeoDyingMsgReq (`0x526ec0`) | death (flag 0) / alive again (flag 1) |
+| `0xef5` (10) | `0xef6` Cmd_NeoChapterBonusMissionAck (`0x5218e0`) | "n / 10" bonus count @0xa |
+| `0xe8a` (6) | — | the client left the Neo area |
+| `0xc6` (0xa+0x40n) | `0xc7` Cmd_NeoHuvRes (`0x53baf0`) | the client asks for its enemies; the server places them (gate: app state 0x13 or area 84-99) |
+| `0xcd` (42) | `0xcd` Cmd_NeoHuvHit (`0x525a10`) | hit; the S>C copy adds Mito @0x1a, i64 @0x1e, exp @0x26 |
+| `0xce` (64) | `0xce` Cmd_NeoHuvEnd (`0x525d60`) | kill (Huv Param ID @0x36, killer @0x3e) |
+| `0xcf` (11) / `0xd0` (16) | `0xcf` Cmd_NeoHubTargeting / `0xd0` Cmd_NeoAggro | targeting / hate, relayed |
+| `0xf41` (22) | `0xf42` Cmd_NeoTurretRes (`0x53edd0`) | turrets; `0xf44` Cmd_NeoTurretSwitch changes their controller |
+| `0xf3e` (2) | `0xf3f` Cmd_ScriptNeoHuvDelRes (`0x5259f0`) | delete the scripted HUVs |
+| `0x4c4` (6) | `0x4c5` Cmd_RepairNeoPartsAck (`0x52a870`) | Neo part repair, code 1 = done |
+| `0xf4d` (6) | `0xf4e` Cmd_NeoPlayerHPReceiveAck (`0x53e630`) | player HP sync (below) |
+| — | `0xfc0` Cmd_NeoPvpDamage (`0x53eb50`), `0xf50` Cmd_NeoHusExplosionAck (`0x53ecb0`) | **the only ways an enemy damages a player**: server-driven, needs server enemy AI |
+| — | `0xe81` Cmd_NeoWSlotExtended (`0x52d0f0`) | weapon slot extension (u8, u32 expiry ms) |
 
-Neighbouring messages that are **not** Neo City, for the record: `0xf51`-`0xf5e` are World Laptime rankings,
-`0xfb0`/`0xfb1`/`0xfb2` honor ranking, `0xfb3` WhisperDeny, `0xfb9`/`0xfba` Valentine, `0xfbd`/`0xfbe`
-PvpCollisionDamage.
+**Not Neo** (corrected 2026-11-14): `0xf4b` is Cmd_PartyPing, `0xfc2` is Cmd_AssistTransferUseAck, `0xfc3`
+Cmd_GMEventRush, `0xfbe` Cmd_PvpCollisionDamage.
 
-## The one message whose layout is known: `0xf4d` -> `0xf4e` (player HP)
+### Chapter keys
 
-- `0xf4d`: one u32, the client's **XOR base** for this player (observed constant `0x111a`), sent about once a second
-  while the HP mode is active.
-- `0xf4e`: one u32 = `base ^ hp`. The handler (`0x53e630`) first tests `[player+0x198]` (the Neo mode flag) and does
-  nothing when it is 0; it accepts `0 < hp <= 0x4e20` (**0-20000**), stores `[player+0x1da4] = [player+0x1da0] ^ value`
-  (`0x760910`) and otherwise prints `"Receive HP : %d"` (format string `0x956c90`).
+The client loads `World/NeoData/NC_chapter.xlt` itself (`0x7ae1a0`) and keys each chapter by its **0-based data-row
+order** (`[chapter+4] = row counter`), in the map `[0x9e5b70+0x148]`. Every Neo message field that the research notes
+call "player serial" in `0xe89`, `0xed8`/`0xed9`, `0xedc`/`0xedd`, `0xedf`, `0xeea`, `0xeee`, `0xeda`/`0xedb`,
+`0xee3`, `0xee4`/`0xee5` @2, `0xef0` @2, `0xef2` @2, the `0xee6` records and the `0xc7` record @0x30 is this key.
+Quests: 0-based order of a chapter's rows in `NC_quest.xlt` (`0x7aa9b0` with a counter reset per chapter, `quest+0xc0` =
+chapter key). Unlocking is client side (`0x7abee0`): level within need-level_low..high and the previous chapter cleared
+(from `0xee6`). Only Neo Oros has a map in the 2016 client (`Data/World/neooros.agt`); all 8 chapters are Neo Oros.
 
-So the server must answer with the base XORed by the current durability. 20000 is the client's own upper bound.
+## The player HP pair: `0xf4d` -> `0xf4e` (corrected 2026-11-14)
+
+- `0xf4d`: one u32 = **the car's current HP** (`0x4430d0` reads it with the getter `0x760900` and sends it through
+  `0x54c740` -> `0x866270`, about once a second, only while it is > 0 and the app flag `[0x442790()+0x198]`,
+  the MissionBattleAdv content flag, is set). The `0x111a` (4378) in every 2016 log is an HP, not a XOR base.
+- `0xf4e`: one u32 HP, stored **as is** by the setter `0x760910` (which XORs it with the object's own key at
+  `+0x1da0`) when 0 < HP <= 20000 (`0x53e663`); 0 / -1 store -1; else `"Receive HP : %d"` (`0x956c90`). The stored
+  HP is given to the car when it is created (`0x4b5320`; -1 = max HP, vtable `+0x60`).
+
+Stage 1 had answered `0x111a ^ 20000` = 24378, which the client refused. Now the server keeps the last report and
+echoes it.
 
 ## Staged plan
 
@@ -76,12 +96,17 @@ So the server must answer with the base XORed by the current durability. 20000 i
    `Contents.ini` has no Neo entry — so `login.content_flags()` now sets all five for 2016. `[session+0x198]` is
    **not** the Neo flag: the session constructor fills it from the `MissionBattleAdv` content flag (`0x946dbc`) and
    `+0x199` from `UseHeadLight`, so the HP handler's guard is that flag, not Neo City.
-2. **Durability.** Keep a per-character Neo HP, answer `0xf4d`, and apply the damage the client reports.
-3. **Enemies.** Spider HUS / HUB / HUV / turrets: spawn lists and AI are server-side in the original (the client only
-   draws and reports hits).
-4. **Gear and repair.** Plasma weapon use, armour, and `0x4c4`/`0x4c5` item repair (needs item durability, which the
-   emulator does not keep yet).
-5. **Rewards.** Chapter / operation EXP and Mito, and the `0xef5`/`0xef6` chapter bonus.
+2. **Entry, chapters, quests, rewards** (session 46, 2026-11-14, **not yet tried in game**): `0xe88`-`0xe8c` party
+   suggest / agree / reject, `0xe89` load, `0xed8` -> `0xed9`, quests `0xedc`-`0xedf`, goals / missions `0xeeb`, `0xeef`,
+   chapter clear `0xeda` -> `0xedb` (kept in SKID_QUEST_TB as QUESTID `neo_<chapter_ID>`, FAILNUM = clear count),
+   `0xee7` -> `0xee6`, give-ups, death `0xef2` -> `0xef3`. Rewards: quest exp / Mito / items from NC_quest, chapter exp /
+   Mito parsed from NC_chapter's summary text. One area instance per run (`area.py`, `neocity.neo_area_key`).
+3. **Enemies** (session 46, not yet tried in game): the client asks for its own enemies (`0xc6`), the server places
+   them (`0xc7`) for the run, relays hits / kills / aggro, rewards kills; turrets `0xf41` -> `0xf42`; repair `0x4c4`
+   -> `0x4c5` (free: no part durability is kept).
+4. **Open.** Enemies never damage players (the server has no Neo enemy AI; `0xfc0` / `0xf50` are never sent).
+   `0xeed` -> `0xeec` counters, the `0xedb` body, `0xee9` reward slots, `0xef6` count, `0xe80`/`0xe82` -> `0xe81`
+   weapon slots. Neo gear (plasma weapons, armour) items and their durability.
 
 ## The client's own names for the feature (strings in the exe)
 

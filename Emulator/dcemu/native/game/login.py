@@ -154,6 +154,19 @@ def content_flags(**overrides):
         named['City.NeoCras'] = 1
         named['City.NeoKoinonia'] = 1
         named['City.NeoMoonPalace'] = 1
+        # the ranking window's data (rankings.py): with this flag 0 the 2016 client never connects to the ranking
+        # service, so the window can ask for nothing. Flags +0xc bits 25-26 (a 2-bit value); the connect at
+        # 0x54dea3 needs >= 1 (and no connection yet), the panel refresh 0x6b2f0a only != 0 (session 46)
+        named['Main.New2011RankSystem'] = 1
+        # World Match Lap Time (worldmatch.py), only when emulator.ini [worldmatch] enabled = 1: flags +0x3c bits
+        # 0-1. It un-greys the battle zone's WM button (0x5c3b58) and makes EVERY lap-time race load through 0x3c0
+        # (0x7caad5 tests only the flag), so it stays off unless that module runs
+        if context.worldmatch.get('enabled'):
+            named['BattleZone.WorldMatch'] = 1
+        # DCGP (dcgp.py): flags +0x3c bits 3-4, a UI gate only (DCGP tab / button; 0x5d3457 switches the battle zone
+        # to channel type 14, which is not offered yet), so it stays off unless [dcgp] enabled = 1
+        if context.dcgp.get('enabled'):
+            named['BattleZone.DCGP'] = 1
     named.update({k.replace('_', '.', 1): v for k, v in overrides.items()})
     return pack_flags(named)
 
@@ -250,6 +263,8 @@ async def load_char(session, frame):
     if is_2016():
         send(session, rentals.list_frame(p))
         session.state['rental_ready'] = True
+        from . import dcgp                 # 2016 DCGP: the phase the DCGP button tests (0x5ceb0f); nothing when off
+        await dcgp.send_state(session)
     from .items import bonus_update
     send(session, bonus_update(p))
     for car in c.cars:                  # a timed V upgrade on a car: the grade it shows (vshop.after_change)
