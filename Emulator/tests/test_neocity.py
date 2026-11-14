@@ -357,6 +357,25 @@ class NeoCityFlowTest(unittest.TestCase):
             self.assertEqual(struct.unpack('<III', frames[0].payload), (0, 0, 0))
         self.assertEqual(r.deaths, 1)
 
+    def test_revival_item_revives(self):
+        """The revival item while destroyed -> 0xef3 (key, 1, 0) once; the client's next 0xef2 (its "alive again"
+        notice) is not a death; not destroyed -> nothing."""
+        r = self.enter(key=0)
+        self.sent = []
+        with patch.object(neocity, 'send', side_effect=lambda to, *fs: self.sent.extend(fs)):
+            self.assertFalse(neocity.revive(self.s))                         # alive: no revive
+        self.assertEqual(self.sent, [])
+        self.handle(neocity.dying, Frame(0xef2, struct.pack('<III', 0, 0, 1)))
+        self.sent = []
+        with patch.object(neocity, 'send', side_effect=lambda to, *fs: self.sent.extend(fs)):
+            self.assertTrue(neocity.revive(self.s))
+            self.assertFalse(neocity.revive(self.s))                        # once per death
+        self.assertEqual([(f.type, struct.unpack('<III', f.payload)) for f in self.sent], [(0xef3, (0, 1, 0))])
+        frames = self.handle(neocity.dying, Frame(0xef2, struct.pack('<III', 0, 1, 2)))   # alive notice
+        self.assertEqual(struct.unpack('<III', frames[0].payload), (0, 0, 0))
+        self.assertEqual(r.deaths, 1)
+        self.assertNotIn('neo_dead', self.s.state)
+
     def test_mission_params_completes(self):
         """0xeed (key, quest, mission) after a checkpoint scene -> 0xeee once."""
         r = self.enter(key=0)

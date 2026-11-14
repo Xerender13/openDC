@@ -808,6 +808,9 @@ async def use_item(session, frame):
     if upgrade:
         from .cars import roll_upgrade_item
         await roll_upgrade_item(session, p, p.car, upgrade, info)
+    if info.kind == 'revival':                      # 2016 Neo City revival item (neo_i_00005): 0xef3 revive
+        from .neocity import revive
+        revive(session)
     if info.kind == 'instant':                      # Line Ball / Mecha Watch / Exodus Quake Mission Battle (instant.py)
         from .instant import offer_mission_battle
         offer_mission_battle(session, info.value)

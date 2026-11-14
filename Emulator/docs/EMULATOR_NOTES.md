@@ -34,6 +34,23 @@ Applied to `Emulator/` (2016 and the GitHub copy) and `Emulator 2011/` (nation.p
 [nation], tests/test_nation_rules.py). Tests: 347 OK in `Emulator/`; `Emulator 2011/` has two old failures in
 test_client2016 (the 2016 exe's checksum since the car-limit patch), unrelated. **Not yet confirmed in game.**
 
+### Neo City revival item (NEO Retry) revives the car (user: "The NEO retry item doesn't work properly")
+
+**Log** 20261114-190203: 19:57:22 C>S 0xef2 (destroyed) -> 0xef3 (0, 0, 0); 19:57:28 the revival item `neo_i_00005`
+(use kind 0x5a) -> 0x1a2, 0x192, and then nothing: the car stayed destroyed.
+
+**Client:** the revive routine 0x787f10 has two callers only: the 0xef3 handler (0x526ed6, when +6 != 0) and a chapter
+script command (0x61d24d). The item's effect does not revive. The 0xef2 builder 0x84e830 writes +2 and +0xa only (its
+2nd argument is never stored: the leftover +6). Senders: 0x788f5d (argument 0) while the car is destroyed, which then
+opens the Retry dialog (UI 0x3c, 0x788f80) and sets [+0x60]; 0x78907b (argument 1) once the car has HP again (the
+check at 0x788e10) with the flag set, clearing it. So the 0xef2 after a revive is an "alive again" notice. Answering
+every 0xef2 with a revive was the earlier revive / die loop.
+
+**Fix:** items.use -> neocity.revive for kind `revival`: while destroyed in a run (set by the 0xef2 handler, `neo_dead`)
+-> 0xef3 (key, 1, 0) once, HP forgotten until the next report; an 0xef2 within 3 s after it is the alive notice (no
+death counted). Used while not destroyed: no revive (the item is still used up). 377 tests pass. **Not yet confirmed
+in game.**
+
 ### 2016 Drift Booster: the visual item's assist slots were 4 bytes early (user: "fix the drift booster")
 
 **Report:** the Drift Booster (i_d_passive_02, category 58) does nothing while equipped on the current car.

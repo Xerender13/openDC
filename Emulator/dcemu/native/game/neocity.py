@@ -1296,7 +1296,12 @@ async def dying(session, frame):
     0x526ec0): u32 key, u32 revive @+6, u32 0 - always 0 here: a non-zero +6 runs the revive routine 0x787f10, and
     answering every 0xef2 with it made a destroyed car revive and die again in a loop (5516 messages in 34 s, user
     2026-11-14: "Resurrected!!" / "YOU ARE DESTROYED"). The NEO Retry is the client's own dialog (12 items, 5 minutes).
-    A death is counted once per burst."""
+    A death is counted once per burst.
+    The two senders (0xef2 builder 0x84e830, which never writes its 2nd argument, hence the leftover +6): 0x788f5d
+    (argument 0) while the car is destroyed, then it opens the Retry dialog (UI 0x3c, 0x788f80) and sets [+0x60];
+    0x78907b (argument 1) once the car has HP again (0x788e10) and the flag is set, clearing it. So an 0xef2 right
+    after a revive is the "alive again" notice, not a death. The revive itself comes only from the server: the
+    revival item (neo_i_00005, use kind 0x5a) answers its 0x1a2 and then 0xef3 +6 = 1 (revive below)."""
     if not _player(session, frame, 0xc):
         return
     r = run_of(session)
@@ -1304,11 +1309,38 @@ async def dying(session, frame):
         return
     key, _, count = struct.unpack_from('<III', frame.payload)
     now = time.monotonic()
+    if now - session.state.get('neo_revived', -99.0) < REVIVE_NOTICE:
+        session.log.note(f'neocity: alive again after the revival (0xef2 from 0x78907b) in run {r.id}')
+        session.state.pop('neo_revived', None)
+        send(session, Frame(0xef3, struct.pack('<III', key, 0, 0)))
+        return
+    session.state['neo_dead'] = True
     if now - getattr(r, 'last_death', 0.0) > 5.0:
         r.deaths += 1
         session.log.note(f'neocity: destroyed in run {r.id} (chapter key {key}, count {count})')
     r.last_death = now
     send(session, Frame(0xef3, struct.pack('<III', key, 0, 0)))
+
+
+REVIVE_NOTICE = 3.0      # s after a revive in which an 0xef2 is the client's "alive again" notice (0x78907b)
+
+
+def revive(session):
+    """The revival item (use kind 0x5a) in a run while the car is destroyed: S>C 0xef3 (key, 1, 0), the only server
+    path to the client's revive routine 0x787f10 (0x526ed6; the other caller is a chapter script command, 0x61d24d).
+    The client does not revive by itself after the item (log 20261114-190203 19:57:28: 0x1a1 / 0x1a2 and nothing
+    else; user: "The NEO retry item doesn't work properly"). -> True when sent."""
+    r = run_of(session)
+    if not r:
+        return False
+    if not session.state.pop('neo_dead', False):
+        session.log.note(f'neocity: revival item used while not destroyed in run {r.id}: no revive')
+        return False
+    session.state['neo_revived'] = time.monotonic()
+    forget_hp(session)
+    send(session, Frame(0xef3, struct.pack('<III', r.chapter['key'], 1, 0)))
+    session.log.note(f'neocity: revived with the revival item in run {r.id}: 0xef3 +6 = 1')
+    return True
 
 
 @on(SVC, C2S, 0xef5)
