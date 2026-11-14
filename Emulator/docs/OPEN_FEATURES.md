@@ -23,8 +23,8 @@ are missed by the address scan). The lists below are the ones verified against t
 | `0x0f4d` | 23 294 | **Player HP sync for Neo City / HUS combat** (user: "the HP is probably part of Neo City", matching `0xf4e` already in the Neo HUS group): u32 = the car's own HP (`0x111a` = 4378 here; corrected 2026-11-14, it is not a XOR base). Its answer `0x0f4e` stores the plain HP (`0x760910`, 1-20000), see docs/NEOCITY.md. Implemented (neocity.py). | **yes** (`0x0f4e`) |
 | `0x0e8d` | 89 | 4 bytes, a **float** = 0.0, sent once right after login (`0x867b70` writes it at +2). Exists in the 2011 client too. | no |
 | `0x02d5` | 42 (2016), 70 (2011) | On the **barea** service, 124 bytes: u32 2, then a u32 that grows between sends (`0x0cd273` -> `0x0e1a4e`, a tick/time), then a record. `0x8655c0` picks an object by index and sends three dwords. | no |
-| `0x0fc1` | 3 | 13 bytes `0x88, 0x6b, 1` — GM event range; the client has handlers `0x0fc2` / `0x0fc3` (GMEventRush). | yes |
-| `0x0fb4` | 1 | 48 bytes, a record starting `213, 9, 1, 1, 0, 115, 0, 280`; handlers `0x0fb5` / `0x0fb6`. | yes |
+| `0x0fc1` | 3 | the Part Option Extractor (extractor.py; answered since then — corrected session 47). | yes |
+| `0x0fb4` | 1 | the rental capsule (rentals.py; answered since then — corrected session 47). | yes |
 | `0x0777` | 1 | DCGP request (all zero in the visible part); handler `0x0778`. | yes |
 
 **Verdict:** `0x0f4d`/`0x0f4e` is the **Neo City / HUS player-HP pair** and belongs with the "Neo HUS combat" row below
@@ -45,16 +45,17 @@ The 2011 build additionally shows `0x01b5` (43×, the 2008 server answers "Wrong
 | **Neo HUS combat** | `0xef3`, `0xf4e`, `0xf50`, `0xfc0`, and the `0x0f4d` request | Neo City HUS enemies. Implemented in session 46 (neocity.py, docs/NEOCITY.md): `0xc6`->`0xc7`, `0xcd`, `0xce`, `0xf4d`->`0xf4e`, `0xf4f`->`0xf50`; `0xfc0` is not sent (no server enemy AI). |
 | **Neo repair (parts)** | `0x4c4` -> `0x4c5` | No Neo part durability is kept, so the repair cannot be applied. |
 | **NeoChapterBonusMission** | `0xef5` -> `0xef6` | Neo chapters are not modelled. |
-| **PvpCollisionDamage** | `0xfbd` -> `0xfbe` | f32 damage; needs char flag `0x20` at `+0x2a4` and game mode 8. |
-| **GMEventRush** | `0xfc3` | GM event. |
+| ~~PvpCollisionDamage~~ | `0xfbd` -> `0xfbe` | **Done in session 47, off by default** (`rooms.collision`, `[battlezone] attack_player`): 0xfbd is the id of the car hit, not damage. |
+| ~~GMEventRush~~ | `0xfc3` | **Done in session 47**: GM command `gmrushevent`; the client reacts only for GM accounts. |
 | ~~Rank pages~~ | `0xfa2`-`0xfa5`, `0xfaa`-`0xfad` | **Done in session 46** (`game/rankings.py`): they go over the ranking connection, opened only with `Main.New2011RankSystem` >= 1. |
 | **Crew contribution rank tab** | `0xcee`/`0xcef`, `0xcf0`/`0xcf2` | The client never sends these in any log, and the tab renders "is feature is currently unavailable" — the real gate is still unidentified. |
 
 ## Changed in size but never built (from the timeline audit)
 
-`0x22b` (#555), `0xaa` DormantEvent (6 -> 94), `0x1c5` StatEnchantRes (154 -> 166), `0x1d3` RoomNotifyChange
-(236 -> 240), `0x241` ReplaceCarAck (68 -> 72), `0x69` RentCarAck, `0x5d5` GetCarAck, `0x6af` AuctionCarBuyAck
-(+1 car record). The timeline gives names and sizes only, not field layouts.
+**Session 47:** built `0xaa` (promotion.py), `0x1d3` (rooms.notify_change), `0x241` (area.replace_car, for C>S
+`0x240`); `0x1c5` and `0x5d5` are empty stubs in the client (nothing to build); `0x69` is not needed (the rentals
+use `0xfb5`), but its neighbour C>S `0x6c` ReturnRentCar is now answered; `0x6af` was already right. Left: `0x22b`
+(#555: no 2016 handler registered; an area message). Details: EMULATOR_NOTES session 47.
 
 ## Done since the session-40 list (do not re-report these)
 

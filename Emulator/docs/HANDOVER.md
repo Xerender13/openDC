@@ -13,6 +13,9 @@ says what to copy, how to set up, how the work is done, and what is open.
   login (memory only) and swaps in EU copies of the client tables. **After any change to the client tables or the
   EU lines of emulator.ini, run `.venv/bin/python -m tools.eu_rules build` (2016) and
   `.venv/bin/python -m tools.eu_rules build "../Client US"` (2011)**, else the launcher keeps the US tables.
+- **New, off by default (2016):** PvP collision damage (`[battlezone] attack_player = 1`), welcome-back popup
+  (`[promotion] enabled = 1`, reward groups optional); on: GM `gmrushevent [name] [hp]` (GM accounts only see it),
+  0x1d3 car change in Real Match rooms, 0x240 ReplaceCar answer, 0x6c return rental car.
 - To try: start each client with `--eu`: part tooltips "Required Grade", Newbie / Pro buttons by V grade, channel
   battle minimum grades; the emulator log shows `client nation 8 (EU eng)` at the login; then `--us` (tables back:
   the launcher log says "US tables put back"). Details: EMULATOR_NOTES session 47.
@@ -135,7 +138,9 @@ Details: EMULATOR_NOTES session 44. 240 tests pass.
 - **Crew EXP for testing**: `tools.gmctl crewexp NAME AMOUNT` and the chat command `gmcrewexp [name] amount` (GM only)
   give crew EXP + research points, so Team Level 1 (50 000) is reachable without grinding.
 
-- **Hurricane's second aero kit does not change the car's look** (user, 2026-11-13). Investigation (2026-11-13): the
+- **SOLVED** (user, 2026-11-14; the aero index renumbering of session 45, confirmed in game there). The record below
+  is kept for reference.
+  **Hurricane's second aero kit does not change the car's look** (user, 2026-11-13). Investigation (2026-11-13): the
   server-side data is **correct and complete** — VisualItem rows 673/674/675 (ids 21934/21935/21936, models
   `pc_0449s_01/02/03`) are flagged for cars 449/450/451, the client's own Init.agt has the same rows, VShopItem
   1941/1942/1943 exist, and all three `.nif` plus `pc_0449s_map/mask/light` are in `Data/vehicles.agt`; the index

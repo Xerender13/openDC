@@ -571,3 +571,28 @@ for _svc in ('area', 'barea'):
     on_open(_key)(keepalive)
     for _t in SIZES:
         on(_key, C2S, _t)(dispatch)
+
+
+# ---- 0x240 ReplaceCar -> 0x241 ReplaceCarAck (SIZED_PROTOCOL section 5) ------------------------------------------
+# C>S 0x240 (18 bytes; 2016 builder 0x85db30, filled by 0x865c70; 2008 barea PacketParser::Cmd_ReplaceCar,
+# BS_PktReplaceCar): u16 OldSerial @2, u16 NewSerial @4, u16 CarSort @6, u16 HuvType @8, u8 Health @0xa, f32 Time
+# @0xe. S>C 0x241 (2016 handler 0x545860, 72 bytes; 2011 68): the same four u16, u8 health, 3 bytes, then an XiCarMove
+# (0x3a / 0x36). Only the client whose serial is NewSerial acts on it (0x545870), and the ack is what swaps its car:
+# it finds or creates the car keyed CarSort << 16 | OldSerial (0x558e40 with the move's car sort @+2 and XiCarAttr
+# @+4) and places it at the move. Answered with the player's last move, its car sort set to the request's (guess:
+# the 2008 server's move source is not read). No log has shown the client sending 0x240 yet.
+@on('native:area', C2S, 0x240)
+@on('native:barea', C2S, 0x240)
+async def replace_car(session, frame):
+    p = frame.payload
+    car = car_of(session)
+    if len(p) < 9:
+        return
+    old, new, sort, huv, health = struct.unpack_from('<HHHHB', p)
+    if car is None or car.move is None:
+        session.log.note(f'replace car {old} -> {new} (sort {sort}, huv {huv}): no move of this car yet, not answered')
+        return
+    move = bytearray(car.move[:carmove_size()].ljust(carmove_size(), b'\0'))
+    struct.pack_into('<H', move, 2, sort)
+    session.to_client(Frame(0x241, struct.pack('<HHHHB3x', old, new, sort, huv, health or 1) + bytes(move)))
+    session.log.note(f'replace car {old} -> {new} (sort {sort}, huv {huv}): answered')

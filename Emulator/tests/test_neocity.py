@@ -264,22 +264,57 @@ class NeoCityFlowTest(unittest.TestCase):
         """0xeda: 'neo_c_0000' STATE 2 FAILNUM 1, the chapter's 5000 exp / 5000 Mito, 0xedb 203 bytes, once."""
         r = self.enter(key=0)
         patches = self.reward_patches()
+        patches.append(patch.object(neocity, 'roll_item', return_value=None))
+        r.failed, r.deaths = 1, 0
+        r.kills[neocity.serial_of(self.s)] = {'HUV': 15, 'HUB': 4}
         frames = self.handle(neocity.chapter_complete, Frame(0xeda, struct.pack('<II', 0, r.id)), patches)
-        self.assertEqual([f.type for f in frames], [0x7d1, 0x7d2, 0xedb])
-        frame = frames[-1]
-        self.assertEqual(len(frame.payload) + 2, 203)
-        self.assertEqual(struct.unpack_from('<IHHB', frame.payload), (0, 1, 0, 0))
-        self.assertEqual(frame.payload[9:], bytes(192))
+        r.pick_task.cancel()
+        self.assertEqual([f.type for f in frames], [0x7d1, 0x7d2, 0xedb, 0xee9])
+        frame = frames[2]
+        self.assertEqual(len(frame.payload) + 2, 203)                  # one row: n * 0x10 + 0xbb (0x52e969)
+        key, n, prev, seconds, failed, deaths, grade = struct.unpack_from('<IIBIIII', frame.payload)
+        self.assertEqual((key, n, prev, failed, deaths, grade), (0, 1, 0, 1, 0, 1))
+        row = struct.unpack_from('<7I', frame.payload, 0x19)
+        self.assertEqual(row, (neocity.serial_of(self.s), self.c.level, 15, 4, 0, 5000, 5000))
+        self.assertEqual(len(frames[3].payload) + 2, 262)              # 0xee9: u32 0 + 16 x 16 (0x526d80)
         update, insert = self.db.saved[0]
         self.assertEqual(update, (2, 1, 2016, 7, 'neo_c_0000'))       # STATE 2, FAILNUM 1
         self.assertEqual(insert[3:6], ('neo_c_0000', 2, 1))
         self.add_exp.assert_awaited_once()
         self.add_money.assert_awaited_once()
         self.play_mode.assert_awaited_once_with(self.c, 'NEOCITY', exp=5000, money=5000)
-        self.handle(neocity.chapter_complete, Frame(0xeda, struct.pack('<II', 0, r.id)), patches)
+        frames = self.handle(neocity.chapter_complete, Frame(0xeda, struct.pack('<II', 0, r.id)), patches)
+        self.assertEqual([f.type for f in frames], [0xedb, 0xee9])      # shown again, nothing given
         self.assertEqual(len(self.db.saved), 1)                       # once per run
         self.add_exp.assert_awaited_once()
         self.assertEqual(self.p.neo_cleared[0], 1)
+
+    def test_bonus_card_pick(self):
+        """0xee8 (u32 0, u32 slot): the card's item to the picker, 0xee9 with its serial; one card each."""
+        r = self.enter(key=0)
+        r.cards = [[1, 100 + i, 1, 0] for i in range(16)]
+        r.card_items = [f'item_{i}' for i in range(16)]
+        give = AsyncMock(return_value=(SimpleNamespace(items=[]), []))
+        with patch('dcemu.native.game.rewards.give', give):
+            frames = self.handle(neocity.chapter_reward, Frame(0xee8, struct.pack('<II', 0, 5)))
+            self.assertEqual([f.type for f in frames], [0xee9])
+            self.assertEqual(struct.unpack_from('<4I', frames[0].payload, 4 + 5 * 16),
+                             (1, 105, 1, neocity.serial_of(self.s)))
+            give.assert_awaited_once()
+            self.handle(neocity.chapter_reward, Frame(0xee8, struct.pack('<II', 0, 6)))    # a second card: no
+            give.assert_awaited_once()
+
+    def test_bonus_mission_count(self):
+        """0xef5 key -> 0xef6 key, 0, clears % 10."""
+        self.p.neo_cleared = {2: 13}
+        frames = self.handle(neocity.bonus_mission, Frame(0xef5, struct.pack('<II', 2, 0)))
+        self.assertEqual(struct.unpack('<III', frames[0].payload), (2, 0, 3))
+
+    def test_kill_class(self):
+        self.assertEqual(neocity.kill_class(0, 'HUB-SL'), 'HUB')
+        self.assertEqual(neocity.kill_class(1, 'HUS-QC'), 'HUS')
+        self.assertEqual(neocity.kill_class(1, 'HUV-HMG'), 'HUV')
+        self.assertEqual(neocity.kill_class(2, 'HUV ELITE'), 'HUV')
 
     def test_2011_no_answer(self):
         """The 2011 client speaks none of these messages."""

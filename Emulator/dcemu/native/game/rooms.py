@@ -162,6 +162,8 @@ class Member:
         self.ready = False
         self.loaded = False
         self.end = None             # (end type, end time, record, rank) once the race is over for it
+        self.hp = 100.0             # PvP collision damage (collision): the race HP the server keeps, 0..100
+        self.last_hit = 0.0         # when this member last hit someone (loop time), for the 1 s limit
 
     @property
     def player(self):
@@ -708,6 +710,18 @@ def enter_real_match(session, m):
         session.state['real_match_car'] = True
         m.car_attr = car_attr_of(car)
         drive(session, car)
+        room = room_of(session)
+        if room:
+            room.cast(notify_change(m))
+
+
+def notify_change(m):
+    """0x1d3 RoomNotifyChange: a member's car changed in the room (2016 handler 0x5402e0, 240 bytes; 2011 0x52a800,
+    236): u32 serial, u16 age (not read), XiCarAttr (16 / 12), XiStrPlayerInfo (0xd8). The client looks the
+    member's car up by serial (0x556c10), applies the car attributes and rebuilds the model (0x4c8bb0), and hands the
+    car to the room window (vfunc +0x5c). The 2008 server sent it to the room after a member change
+    (RoomNotifyChange 0x679780); here when a member's car is switched (Real Match). SIZED_PROTOCOL section 4."""
+    return Frame(0x1d3, struct.pack('<IH', m.serial, m.age) + sized(m.car_attr, car_attr_size()) + m.info())
 
 
 def exit_real_match(session):
@@ -1632,6 +1646,8 @@ async def progress(room):
         room.cancel_timer()
         room.state = RACING
         room.waiting = set(room.racers) | {a.serial for a in room.ais}    # the AIs' ends come from their driver
+        for m in room.humans:
+            m.hp, m.last_hit = 100.0, 0.0
         room.refresh_observers()
         if year() != 2016:
             room.assign_ais()           # 2011: the track is loaded now (start_request)
@@ -1752,6 +1768,54 @@ async def race_end(session, frame):
         room.cancel_timer()
         room.timer = asyncio.ensure_future(after(room, finish_ms / 1000 + RESULT_GRACE, RACING))
     room.cast(*frames)
+    room.waiting.discard(m.serial)
+    await progress(room)
+
+
+# ---- PvP collision damage (2016 BattleZone.AttackPlayer; docs/BATTLEZONE.md) ------------------------------------
+# C>S 0xfbd (6 bytes): u32 id of the car this racer collided with = [actor+0x41c0], sent by the race object 0x7d01f0
+# (one call site 0x4916d1 in the collision routine 0x4910c0; at most once a second, only while the flag is on). The
+# id is (client-local counter << 16) | the racer's own serial (net+0x3d41c, which 0x7e JoinChannelAck sets from
+# frame +0x36 = login.join_channel's serial; client 0x45654c / 0x5247df): the low half names the racer that was hit.
+# S>C 0xfbe (6 bytes, handler 0x540f90): f32 damage, subtracted from the RECEIVING client's own race HP (f32
+# [race+0x110], 100 at the start, clamped 0..100, shown by 0x5d4310) when the flag is on and the race is in mode 8;
+# the client never reports its HP or retires on 0, so the server keeps the HP (Member.hp) and ends the race for a
+# racer at 0 (emulator.ini [battlezone] attack_retire). Damage per hit: attack_damage (ours; the client sends no
+# speed). The attacker gets nothing (0xfbe to it would cost its own HP).
+COLLISION_COOLDOWN = 1.0
+
+
+@on(SVC, C2S, 0xfbd)
+async def collision(session, frame):
+    cfg = context.attack
+    room = room_of(session)
+    if not cfg.get('enabled') or not room or room.state != RACING or len(frame.payload) < 4:
+        return
+    me = room.member(session)
+    target = struct.unpack_from('<I', frame.payload)[0] & 0xffff
+    victim = room.by_serial(target)
+    if not me or me.end or victim is None or victim is me or not getattr(victim, 'session', None) or victim.end:
+        session.log.note(f'collision 0x{struct.unpack_from("<I", frame.payload)[0]:08x}: no racer hit')
+        return
+    now = asyncio.get_running_loop().time()
+    if now - me.last_hit < COLLISION_COOLDOWN:
+        return
+    me.last_hit = now
+    damage = max(0.0, min(100.0, cfg.get('damage', 10.0)))
+    victim.hp = max(0.0, victim.hp - damage)
+    send(victim.session, Frame(0xfbe, struct.pack('<f', damage)))
+    session.log.note(f'room {room.id}: {me.name!r} hit {victim.name!r}: -{damage:g} HP, {victim.hp:g} left')
+    if victim.hp <= 0 and cfg.get('retire', True):
+        await retire(room, victim, 'out of HP')
+
+
+async def retire(room, m, why):
+    """The race ends for m as retired (end type 2), as its own 0x1eb would (the extra 54 bytes zero)."""
+    if m.end or room.state != RACING:
+        return
+    m.end = (RETIRED, 0, 0.0, 0)
+    m.session.log.note(f'room {room.id}: {m.name!r} retired by the server ({why})')
+    room.cast(Frame(0x1eb, struct.pack('<IiifI', m.serial, RETIRED, 0, 0.0, 0) + bytes(0x4a - 0x14)))
     room.waiting.discard(m.serial)
     await progress(room)
 

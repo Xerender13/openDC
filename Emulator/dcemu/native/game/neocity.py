@@ -217,13 +217,14 @@ import os
 import random
 import re
 import struct
+import time
 
 from ...handlers import on, on_open
 from ...protocol import C2S
 from ...wire import Frame
 from .. import context
 from .items import add_money
-from .login import SVC, send, stat_frames
+from .login import SVC, send, serial_of, stat_frames
 from .progress import add_exp, play_mode
 from .records import pack_exp
 
@@ -361,7 +362,8 @@ def chapters():
             exp, mito = _summary(_cell(r, 9))
             out.append(dict(key=key, id=_cell(r, 4), title=_cell(r, 5), city=_cell(r, 2),
                             member_check=_int(_cell(r, 11)), level_low=_int(_cell(r, 16)),
-                            level_high=_int(_cell(r, 17), 999), exp=exp, mito=mito))
+                            level_high=_int(_cell(r, 17), 999), exp=exp, mito=mito,
+                            reward_group=_cell(r, 18)))           # result_rewardGroup (NEO_CLEAR_PROTOCOL 8.3)
         _chapters = out
     return _chapters
 
@@ -424,9 +426,21 @@ def huv_params():
         for r in _rows(os.path.join(context.data.root, 'Init', HUV_FILE)):
             i = _int(_cell(r, 1))
             if i:
-                out[i] = dict(level=_int(_cell(r, 2)), name=_cell(r, 4), reward=_cell(r, 18))
+                out[i] = dict(level=_int(_cell(r, 2)), name=_cell(r, 4), reward=_cell(r, 18),
+                              kind=kill_class(_int(_cell(r, 5)), _cell(r, 4)))
         _huvs = out
     return _huvs
+
+
+def kill_class(huv_type, name):
+    """The CHAPTER CLEARED window's kill column of an enemy: NeoHuvParam "Huv Type" 0 = HUB, else HUV, with the HUS
+    (type 1 like the HUV) told apart by its name (NEO_CLEAR_PROTOCOL 8.1)."""
+    n = (name or '').strip().upper()
+    if n.startswith('HUS'):
+        return 'HUS'
+    if huv_type == 0 or n.startswith('HUB') or 'HUB' in n.split():
+        return 'HUB'
+    return 'HUV'
 
 
 # ---- the chapter clears kept in SKID_QUEST_TB ------------------------------------------------------------
@@ -476,6 +490,16 @@ class Run:
         self.effects_dropped = False                # an 0xf4f without a victim was already logged
         self.cleared = False                        # 0xeda taken
         self.over = False
+        # the CHAPTER CLEARED window (0xedb, NEO_CLEAR_PROTOCOL 2): what the run did, per member serial
+        self.t0 = time.monotonic()
+        self.failed = 0                             # 0xee2
+        self.deaths = 0                             # 0xef2 flag 0
+        self.kills = {}                             # serial -> {'HUV': n, 'HUB': n, 'HUS': n}
+        self.gained = {}                            # serial -> [exp, Mito] this run paid
+        self.clear_item = {}                        # serial -> item TableIdx of the Reward column
+        self.cards = None                           # the 16 Chapter Bonus Item cards: [kind, TableIdx, count, picker]
+        self.card_items = []                        # the cards' item ids
+        self.pick_task = None
         for s in self.members:
             s.state['neo_run'] = self
 
@@ -494,6 +518,12 @@ class Run:
             s.log.note(f'neocity: {text}')
 
 
+def gained(r, session, exp=0, money=0):
+    g = r.gained.setdefault(serial_of(session), [0, 0])
+    g[0] += exp
+    g[1] += money
+
+
 def run_of(session):
     r = session.state.get('neo_run')
     return r if r and not r.over and runs.get(r.id) is r else None
@@ -502,6 +532,9 @@ def run_of(session):
 def drop_run(r):
     """The run is over: its members leave it (their session.state['neo_run'] goes)."""
     r.over = True
+    if r.pick_task:
+        r.pick_task.cancel()
+        r.pick_task = None
     if r.task:
         r.task.cancel()
         r.task = None
@@ -812,6 +845,7 @@ async def quest_reward(session, frame):
         from .rewards import give
         gains, given = await give(p, [(info.item_id, 1) for info in items])
         await play_mode(c, 'NEOCITY', exp=exp, money=money)
+        gained(r, session, exp, money)
         session.log.note(f'neocity: quest {quest} ({q["id"]}) done in {seconds:.1f} s: {exp} exp, {money} Mito, '
                          f'items {[(i.item_id, n) for i, n in given]}')
     table_idx = [info.table_idx for info in items][:3]
@@ -826,7 +860,8 @@ async def quest_reward(session, frame):
 
 @on(SVC, C2S, 0xeda)
 async def chapter_complete(session, frame):
-    """0xeda -> 0xedb: the chapter cleared, its exp / Mito, SKID_QUEST_TB 'neo_<chapter>' FAILNUM + 1."""
+    """0xeda -> 0xedb CHAPTER CLEARED (the run's summary) + 0xee9 the Chapter Bonus Item cards. The chapter's exp /
+    Mito and one item of its result_rewardGroup (the Reward column) are given; SKID_QUEST_TB 'neo_<chapter>' + 1."""
     p = _player(session, frame, 8)
     if not p:
         return
@@ -835,7 +870,8 @@ async def chapter_complete(session, frame):
         return
     key, run_id = struct.unpack_from('<II', frame.payload)
     c = p.char
-    if r.cleared:
+    me = serial_of(session)
+    if me in r.clear_item:
         session.log.note(f'neocity: chapter key {key} was completed already in run {r.id}: nothing given')
     else:
         r.cleared = True
@@ -850,21 +886,147 @@ async def chapter_complete(session, frame):
             await add_money(c, money)
             send(session, Frame(0x7d2, struct.pack('<qq', c.mito, money)))
         await play_mode(c, 'NEOCITY', exp=exp, money=money)
+        gained(r, session, exp, money)
+        item = await give_rolled(session, p, r.chapter.get('reward_group'))
+        r.clear_item[me] = item.table_idx if item else 0
         session.log.note(f'neocity: chapter {r.chapter["id"]} (key {key}, run {run_id}) cleared {count} time(s): '
-                         f'{exp} exp, {money} Mito')
+                         f'{exp} exp, {money} Mito, item {item.item_id if item else None}')
         for f in stat_frames(p):
             send(session, f)
-    send(session, Frame(0xedb, struct.pack('<IHHB', key, 1, 0, 0) + bytes(0xc0)))   # 0xcb with the type (0x52e969)
+    send(session, clear_frame(r, key))
+    if r.cards is None:
+        roll_cards(r)
+        r.pick_task = asyncio.ensure_future(auto_pick(r))
+    send(session, cards_frame(r))
+
+
+GRADES = 5                          # 0xedb grade index 0..4 -> one of five letters (0 = S: a guess, section 2.1)
+PICK_SECONDS = 18                   # the client closes the window after 20 s (0x788ae0 from 0x71ef60)
+CARDS = 16
+CHAPTER_CARDS = 4                   # ours: cards from the chapter's own result_rewardGroup, the rest elite HUV items
+
+
+def grade_of(r):
+    """Ours: S with no failed quest and no death, then one letter down per two mishaps (the video: 0 / 0 -> S)."""
+    return min(GRADES - 1, (r.failed + r.deaths + 1) // 2)
+
+
+def clear_frame(r, key):
+    """S>C 0xedb (handler 0x52e960 -> window 0x71f2b0; NEO_CLEAR_PROTOCOL 2): u32 chapter key, u32 n rows, u8 0, u32
+    seconds (0x71f43a), u32 quests failed, u32 deaths, u32 grade 0..4, four rows of 0x2c (u32 serial, level, HUV / HUB
+    / HUS kills, exp, Mito, the Reward item TableIdx twice, 0, 0; 0x71f5de, stride 0x71f959), then 0x10 per extra
+    row (the handler's size: n * 0x10 + 0xbb)."""
+    members = [m for m in r.members if m.state.get('player')][:4]
+    n = max(1, len(members))
+    rows = []
+    for m in members:
+        serial, c = serial_of(m), m.state['player'].char
+        k = r.kills.get(serial, {})
+        exp, money = r.gained.get(serial, (0, 0))
+        item = r.clear_item.get(serial, 0)
+        rows.append(struct.pack('<7I4I', serial, c.level, k.get('HUV', 0), k.get('HUB', 0), k.get('HUS', 0),
+                                exp, money, item, item, 0, 0))
+    rows += [bytes(0x2c)] * (4 - len(rows))
+    seconds = int(time.monotonic() - r.t0)
+    return Frame(0xedb, struct.pack('<IIBIIII', key, n, 0, seconds, r.failed, r.deaths, grade_of(r))
+                 + b''.join(rows) + bytes(0x10 * (n - 1)))
+
+
+def elite_group(chapter):
+    """The elite HUV reward items of the chapter's level tier (RewardGroup rw_neo_elite_huv_45/60/80/100_item: the
+    recovery capsules, booster recharges, enhancers and drift items the video's cards show)."""
+    level = chapter.get('level_low', 40)
+    tier = 45 if level < 60 else 60 if level < 80 else 80 if level < 100 else 100
+    return f'rw_neo_elite_huv_{tier}_item'
+
+
+def roll_item(group):
+    """One rolled NormalItem / SkidItem of a group that this server's tables know -> (item id, count) or None."""
+    from .driftuse import roll
+    if not group or group in ('n/a', '0'):
+        return None
+    for _ in range(8):
+        won = [w for w in roll(group) if w[0] in ('NormalItem', 'SkidItem') and w[1] in context.data.item_index]
+        if won:
+            return won[0][1], max(_int(won[0][3]), 1)
+    return None
+
+
+async def give_rolled(session, p, group):
+    """One item of the group to the player (rewards.give + items.mod_list) -> its ItemInfo, or None."""
+    got = roll_item(group)
+    if not got:
+        return None
+    from .rewards import give
+    gains, given = await give(p, [got])
+    if gains and gains.items:
+        from .items import mod_list
+        send(session, mod_list(*gains.items))
+    return given[0][0] if given else None
+
+
+def roll_cards(r):
+    """The 16 Chapter Bonus Item cards of the run (the same grid for every member): CHAPTER_CARDS from the chapter's
+    result_rewardGroup, the rest from its elite HUV tier group (ours: the real mix is not known; duplicates happen,
+    as in the video)."""
+    r.cards, r.card_items = [], []
+    for i in range(CARDS):
+        got = roll_item(r.chapter.get('reward_group') if i < CHAPTER_CARDS else None) or roll_item(elite_group(r.chapter))
+        item, count = got or ('', 0)
+        info = context.data.item_info(context.data.item_index[item]) if item else None
+        r.cards.append([1 if info else 0, info.table_idx if info else 0, count if info else 0, 0])
+        r.card_items.append(item if info else '')
+
+
+def cards_frame(r):
+    """S>C 0xee9 (handler 0x526d80, 262 bytes; NEO_CLEAR_PROTOCOL 3.1): u32 0, then 16 x {u32 kind (1 item), u32 item
+    TableIdx, u32 count, u32 serial of the member who picked it (0: face down)}."""
+    return Frame(0xee9, struct.pack('<I', 0) + b''.join(struct.pack('<4I', *card) for card in r.cards))
+
+
+async def pick(r, session, slot):
+    """A member takes card `slot` (one card each): the item is given and every member sees the new grid."""
+    me = serial_of(session)
+    if r.cards is None or not 0 <= slot < CARDS or r.cards[slot][3] or any(c[3] == me for c in r.cards):
+        return False
+    r.cards[slot][3] = me
+    item = r.card_items[slot]
+    p = session.state.get('player')
+    if item and p:
+        from .rewards import give
+        gains, given = await give(p, [(item, max(r.cards[slot][2], 1))])
+        if gains and gains.items:
+            from .items import mod_list
+            send(session, mod_list(*gains.items))
+    r.cast(cards_frame(r))
+    session.log.note(f'neocity: bonus card {slot} picked: {item} x{r.cards[slot][2]}')
+    return True
+
+
+async def auto_pick(r):
+    """"If you don't choose a reward item within a given time, it will be automatically selected." (GlobalText 11799)"""
+    await asyncio.sleep(PICK_SECONDS)
+    r.pick_task = None
+    for m in list(r.members):
+        if r.cards and not any(c[3] == serial_of(m) for c in r.cards):
+            free = [i for i, c in enumerate(r.cards) if not c[3]]
+            if free:
+                await pick(r, m, random.choice(free))
 
 
 @on(SVC, C2S, 0xee8)
 async def chapter_reward(session, frame):
-    """0xee8 -> 0xee9: 16 empty reward slots (the per-slot meaning is not decoded)."""
-    if not _player(session, frame, 4):
+    """0xee8 (sender 0x84ef10): u32 0, u32 the card slot the player clicked -> the card's item, 0xee9 to the run."""
+    if not _player(session, frame, 8):
         return
-    value, = struct.unpack_from('<I', frame.payload)
-    send(session, Frame(0xee9, struct.pack('<I', value) + bytes(256)))
-    session.log.note(f'neocity: chapter reward slots for {value} (16 empty)')
+    r = session.state.get('neo_run')
+    _, slot = struct.unpack_from('<II', frame.payload)
+    if not r or r.cards is None:
+        session.log.note(f'neocity: bonus card {slot} picked outside a cleared run: ignored')
+        return
+    if not await pick(r, session, slot):
+        session.log.note(f'neocity: bonus card {slot}: not available')
+        send(session, cards_frame(r))
 
 
 @on(SVC, C2S, 0xee2)
@@ -873,6 +1035,7 @@ async def quest_fail(session, frame):
     if not _player(session, frame, 8) or not run_of(session):
         return
     key, quest = struct.unpack_from('<II', frame.payload)
+    run_of(session).failed += 1
     send(session, Frame(0xee3, struct.pack('<II', key, quest)))
     session.log.note(f'neocity: quest {quest} (chapter key {key}) failed')
 
@@ -917,17 +1080,23 @@ async def dying(session, frame):
         forget_hp(session)
         session.log.note(f'neocity: alive again in run {r.id} (chapter key {key}, value {value})')
     else:
+        r.deaths += 1
         send(session, Frame(0xef3, struct.pack('<III', 0, 1, 0)))
         session.log.note(f'neocity: died in run {r.id} (chapter key {key}, value {value})')
 
 
 @on(SVC, C2S, 0xef5)
 async def bonus_mission(session, frame):
-    """0xef5 -> 0xef6: the bonus-mission count ("n / 10"); the values are a guess."""
-    if not _player(session, frame, 8):
+    """0xef5 (the Chapter List window; u32 chapter key) -> 0xef6 u32 key, u32 0, u32 n: the "n / 10" of "By completing
+    10 rounds of each mission, you'll receive the same rewards again!" (only +0xa is read, the 10 is the client's;
+    NEO_CLEAR_PROTOCOL 5). n = the chapter's clears modulo 10 (ours)."""
+    p = _player(session, frame, 4)
+    if not p:
         return
-    send(session, Frame(0xef6, struct.pack('<III', 0, 0, 0)))
-    session.log.note(f'neocity: bonus mission request {frame.payload[:8].hex()} (0xef6 answered 0/10, a guess)')
+    key, = struct.unpack_from('<I', frame.payload)
+    n = (await cleared(p)).get(key, 0) % 10
+    send(session, Frame(0xef6, struct.pack('<III', key, 0, n)))
+    session.log.note(f'neocity: bonus mission count of chapter key {key}: {n} / 10')
 
 
 # ---- stage 3: enemies, turrets, part repair --------------------------------------------------------------
@@ -1030,6 +1199,9 @@ async def enemy_kill(session, frame):
     if not info:
         session.log.note(f'neocity: kill of enemy {hi}:{lo}: unknown Huv Param ID {huv_id}, relayed only')
         return
+    k = r.kills.setdefault(serial_of(session), {})
+    kind = info.get('kind', 'HUV')
+    k[kind] = k.get(kind, 0) + 1
     c = p.char
     exp, money = info['level'] * KILL_EXP_PER_LEVEL, info['level'] * KILL_MITO_PER_LEVEL
     if exp:
@@ -1048,6 +1220,7 @@ async def enemy_kill(session, frame):
             from .rewards import give
             gains, given = await give(p, [(item, 1)])
     await play_mode(c, 'NEOCITY', exp=exp, money=money)
+    gained(r, session, exp, money)
     session.log.note(f'neocity: killed {info["name"] or huv_id} (Huv Param {huv_id}, level {info["level"]}) in '
                      f'run {r.id}: {exp} exp, {money} Mito, items {[i.item_id for i, _ in given]}')
     for f in stat_frames(p):

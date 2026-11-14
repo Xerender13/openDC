@@ -31,7 +31,7 @@ from ...wire import Frame, read_wstr
 from .. import admin, context, now
 from . import player
 from .channels import battle_time
-from .login import SVC, error, send, sessions, stat_frames
+from .login import SVC, error, send, serial_of, sessions, stat_frames
 from .progress import CHAR_EXP_SQL, add_exp
 
 CHAR_INFO_ACK = 844
@@ -352,6 +352,10 @@ async def game_stream(session, frame):
         ok, reply = await admin.command('coin', args)
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
+    if cmd == 'gmrushevent':                    # gmrushevent [name] [hp]: GM rush event, that car is the monster (2016)
+        reply = gm_rush_event(session, args)
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
     if cmd == 'gmcrewexp':                      # gmcrewexp [name] amount: crew EXP to that character's crew (2016)
         if len(args) == 1:
             args = [session.state['player'].char.name] + args
@@ -365,6 +369,38 @@ async def game_stream(session, frame):
     ok, reply = await gm(session, cmd, args)
     session.log.note(f'GM {text!r}: {reply}')
     admin.message(session, reply)
+
+
+RUSH_EVENT_HP = 10000
+
+
+def gm_rush_event(session, args):
+    """0xfc3 GMEventRush (2016 only; handler 0x545330, 8 bytes: u32 HP @2, u16 serial @6; SIZED_PROTOCOL section 1):
+    a GM rush event in the GM's area, with one player's car as the rush monster. Each client shows the rush panel
+    (boss HP bar) and "GM Event rush time start. GM HP:%d"; the one whose serial it is also "I am rush monster." and
+    takes the HP. The handler returns at once unless the receiving character's PType is below 'N' (0x545344: the GM
+    check the client also uses for its debug lines), so only GM accounts see it. No stop message exists."""
+    from ..version import is_2016
+    from ..area import worlds
+    if not is_2016():
+        return 'gmrushevent: 2016 only'
+    hp = int(args[-1]) if args and args[-1].isdigit() else RUSH_EVENT_HP
+    name = ' '.join(a for a in args if not a.isdigit()) or session.state['player'].char.name
+    target = online(name)
+    if target is None:
+        return f'gmrushevent: {name} is not online'
+    by_serial = {s.state.get('serial'): s for s in sessions.values() if s.state.get('serial') is not None}
+    me = session.state.get('serial')
+    area = next((c.area for cars in worlds['area'].areas.values() for c in cars.values()
+                 if c.serial == me and c.area is not None), None)
+    if area is None:
+        return 'gmrushevent: you are not in an area'
+    serials = {c.serial for c in worlds['area'].cars(area).values()}
+    frame = Frame(0xfc3, struct.pack('<IH', hp, serial_of(target) & 0xffff))
+    told = [by_serial[x] for x in serials if x in by_serial]
+    for s in told:
+        send(s, frame)
+    return f'GM rush event in area {area}: {target.state["player"].char.name} is the monster, HP {hp} ({len(told)} players)'
 
 
 GM_PART_MAX_LEVEL = 20          # ItemUpgradeClient.tdf has 20 steps (players enhance up to upgrade.MAX_LEVEL 15)
@@ -517,7 +553,7 @@ async def gm(session, cmd, args):
     from .items import add_money, mod_list
     if cmd not in GM_USAGE:
         return False, (f'unknown GM command {cmd!r}: gmitem, gmlevel, gmexp, gmmoney, gmdrift, gmsets, gmgate, '
-                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcbstart, gmtour, gmcoin, gmcrewexp, gmcar, gm' + ', gm'.join(ADMIN_COMMANDS))
+                       f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcbstart, gmtour, gmcoin, gmcrewexp, gmrushevent, gmcar, gm' + ', gm'.join(ADMIN_COMMANDS))
     target = session
     if args and not args[0].lstrip('-').isdigit() and args[0] not in context.data.item_index:
         target = online(args[0])

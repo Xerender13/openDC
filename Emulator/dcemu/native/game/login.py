@@ -167,6 +167,10 @@ def content_flags(**overrides):
         # to channel type 14, which is not offered yet), so it stays off unless [dcgp] enabled = 1
         if context.dcgp.get('enabled'):
             named['BattleZone.DCGP'] = 1
+        # PvP collision damage (rooms.collision): flags +0x3c bit 5 (flags_2016.tsv:5). It makes every racer damageable
+        # (client 0x7cf760 sets the race object's +0x58 only with it) and lets the 0xfbe handler 0x540f90 apply damage
+        if context.attack.get('enabled'):
+            named['BattleZone.AttackPlayer'] = 1
     named.update({k.replace('_', '.', 1): v for k, v in overrides.items()})
     return pack_flags(named)
 
@@ -265,6 +269,8 @@ async def load_char(session, frame):
         session.state['rental_ready'] = True
         from . import dcgp                 # 2016 DCGP: the phase the DCGP button tests (0x5ceb0f); nothing when off
         await dcgp.send_state(session)
+        from . import promotion             # 2016 0xaa welcome / welcome-back popup ([promotion])
+        await promotion.on_login(session)
     from .items import bonus_update
     send(session, bonus_update(p))
     for car in c.cars:                  # a timed V upgrade on a car: the grade it shows (vshop.after_change)

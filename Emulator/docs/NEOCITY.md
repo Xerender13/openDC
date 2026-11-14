@@ -26,6 +26,41 @@ Sources: namu.wiki `스키드러쉬/게임 모드` §1.9 (the fullest), ko.wikip
 - **Rewards.** EXP and Mito per chapter (5 000-10 000 originally, raised to 30 000-50 000) and per operation
   (150 000 / 200 000 / 250 000). Chapters also feed the crew research / contribution systems.
 
+## What a real server did (gameplay video, 2026-11-14)
+
+A YouTube recording of Neo Oros **chapter 2, solo** (user's file `Drift-City-Neo-City-Chapter-2-SOLO-Tutorial`, 14:36,
+level 96 player; frames read every 5 s, key frames in `docs/neo_work/video_*.jpg`, not in git). What it shows:
+
+- **Entry: the NEO GATE.** A gate object in the city (Oros; marked "NEO GATE" on the minimap) is driven into; that
+  opens the **Chapter List** window: city drop-down "Neo Oros", chapter tiles 1-4 (Lv 40 / 44 / 48 / 52, "NEW" on
+  the newest) and "Operation" 1-3 (Lv 40 / 50 / 60), "Bonus Mission Neo Mission Clear — By completing 10 rounds of each
+  mission, you'll receive the same rewards again!", a bonus count "0/10" (0xef6), and **Enter City**. (Answers the
+  open "how the Neo window opens".)
+- **Neo gear in the inventory**: four Neo slots under the car (booster, weapon, armour, fuse) and "NEO Performance Info":
+  HP 7880 ("increases with Car & Parts Points and Level"), Defense 300 (Parts Option, Armor Panel, Level), Weapon
+  Attack 1215-1361 (Weapon, Coil, Parts Option, Level), Crashing Attack 153-442 (Fuse, Parts Option, Level); "Neo
+  Performance can vary due to the Chapter Difficulty and the Driving Conditions". A part: "R Fuse 40, Neo Fuse Parts,
+  [NEO] Fuse (Rare), Required Level 40, Booster Gauge consumed upon weapon use -1%, **Durability 600/600**" — Neo parts
+  wear, so the repair (`0x4c4`) has something to repair. The HUD shows the Neo HP bar everywhere (6260 / 7880 in the
+  city): the `0xf4d` HP.
+- **In the chapter**: an NPC briefing (Driver HyeYoung: "Let's start with the basic recon-type HUB", "Good start!"),
+  quest "Q1. Enemies of Neo Oros" with sub-goals in order: 1) Destroy the Patrol HUB 0/3, 2) Destroy the HUV-HMG 0/3,
+  3) Destroy the HUV-APS 0/3, 4) Destroy the HUV-RPG(?) 0/3, 5) Destroy the Elite HUV 0/1 (a boss with a big model).
+  After each goal the player drives into a yellow striped beacon (a checkpoint) before the next starts; the last one
+  says STOP. Enemies are fought with the car's weapon (a slot on the HUD; target bracket with "1329 Damage"), each
+  kill shows "n KILL" + "Get Item" and often "+200 HP"; **enemies shoot the player** ("-36 HP", the screen goes red
+  under heavy fire). Drift combos run as usual. The video's own caption: "*V has no effect on weapon damage".
+- **CHAPTER CLEARED!!** (`0xedb`): CLASS letter (S), Time Elapsed "14 min(s) 8 sec(s).", "The number of quest failed
+  0", "The number of character died 0"; rows P1..P4: Party, Level, Driver's Name, **HUV Kill 15, HUB Kill 4, HUS Kill 0**,
+  EXP 22070, MITO 23366, Reward (an item). **Chapter Bonus Item** (`0xee9`): 16 face-down cards, revealed after the
+  pick (V3 / V2 Car Upgrade, Booster Recharge 20 / 30, Recovery Capsule 100, Ultra Durability Parts Component, Tina,
+  Plasma, Enigma, Devil, Mitron Enhancer PLUS, Party Recovery Kit 100); the picked card carries the player's name;
+  "If you don't choose a reward item within a given time, it will be automatically selected." Then back to the city
+  at the gate.
+
+Built from this (session 47): the 0xedb summary, the 0xee9 / 0xee8 bonus cards and the 0xef6 count, see
+EMULATOR_NOTES session 47 and `neocity.clear_frame` / `roll_cards`.
+
 ## The client's messages (2016 exe; names from its own handler registrations, `tools/re2016/handlers_2016.json`)
 
 Full layouts with addresses: the module docstring of `dcemu/native/game/neocity.py` (sessions 46). The research notes

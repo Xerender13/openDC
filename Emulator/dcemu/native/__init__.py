@@ -86,6 +86,10 @@ class Context:
     realmatch_car = (50, 9)  # the car everyone drives in a Real Match: car type, grade; None = own cars
     realmatch_effect = 1     # Etc.RealMatchEffect while a player is in a Real Match room (0 = never)
     laptime_level_limit = False  # Lap Time: laptimeinfo.txt's level limit per arena
+    promotion = {}           # emulator.ini [promotion] (game/promotion.py): enabled, dormant_days, new_reward,
+                             # dormant_reward
+    attack = {}              # emulator.ini [battlezone] attack_* (2016 PvP collision damage, rooms.collision):
+                             # enabled, damage, retire
     sticker_upload = 'all'   # who may upload stickers: all or gm
     sticker_daily_limit = 0  # stickers a character may upload per day (0 = no limit)
     drink_exp = 30           # EXP drink: % more exp from play (2008 CalcExperience: x 0.3; item text: 30%)

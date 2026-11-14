@@ -153,37 +153,67 @@ async def expire(session, p):
     fallback = next((c for c in p.char.cars if not c.rental), None)
     if not expired or not fallback:
         return
-    db = context.db
     for car in expired:
-        if p.char.cur_car == car.car_id:
-            p.char.cur_car = fallback.car_id
-            await db.execute('UPDATE SKID_CHARACTER_TB SET CURCAR=%s WHERE SERVERID=%s AND CID=%s',
-                             (fallback.car_id, db.server_id, p.char.cid))
-        from .items import mod_list, REMOVED, CHANGED
-        gear = [it for it in p.items if it.car_id == car.car_id and it.item_id.startswith('r_type_')]
-        # Return cosmetics and any non-rental gear to inventory, then remove the rental.
-        await db.transaction(lambda cur, car_id=car.car_id: remove_in_db(cur, db.server_id, p.char.cid, car_id))
-        for it in gear:
-            p.items.remove(it)
-        moved = [it for it in p.items if it.car_id == car.car_id]
-        visuals = [it for it in p.vsitems if it.car_id == car.car_id]
-        for it in moved + visuals:
-            it.car_id, it.state = 0, 0
-        if session.state.get('rental_ready'):
-            if moved:
-                send(session, mod_list(*((it, CHANGED) for it in moved)))
-            if visuals:
-                from .vshop import vs_mod_list
-                send(session, vs_mod_list(*((it, CHANGED) for it in visuals)))
-        if gear and session.state.get('rental_ready'):
-            send(session, mod_list(*((it, REMOVED) for it in gear)))
-        p.char.cars.remove(car)
-        if session.state.get('rental_ready'):
-            send(session, Frame(0x6d, struct.pack('<I', car.car_id) + p.car.encode()))
+        await return_car(session, p, car, fallback)
+    refresh(session, p)
+
+
+async def return_car(session, p, car, fallback):
+    """A rental car goes back: the current car falls back to an own car, its rental gear is removed, the other parts
+    and drift items go to the inventory, and 0x6d ReturnRentCarAck (u32 car id + the car record now driven)."""
+    db = context.db
+    if p.char.cur_car == car.car_id:
+        p.char.cur_car = fallback.car_id
+        await db.execute('UPDATE SKID_CHARACTER_TB SET CURCAR=%s WHERE SERVERID=%s AND CID=%s',
+                         (fallback.car_id, db.server_id, p.char.cid))
+    from .items import mod_list, REMOVED, CHANGED
+    gear = [it for it in p.items if it.car_id == car.car_id and it.item_id.startswith('r_type_')]
+    # Return cosmetics and any non-rental gear to inventory, then remove the rental.
+    await db.transaction(lambda cur, car_id=car.car_id: remove_in_db(cur, db.server_id, p.char.cid, car_id))
+    for it in gear:
+        p.items.remove(it)
+    moved = [it for it in p.items if it.car_id == car.car_id]
+    visuals = [it for it in p.vsitems if it.car_id == car.car_id]
+    for it in moved + visuals:
+        it.car_id, it.state = 0, 0
+    if session.state.get('rental_ready'):
+        if moved:
+            send(session, mod_list(*((it, CHANGED) for it in moved)))
+        if visuals:
+            from .vshop import vs_mod_list
+            send(session, vs_mod_list(*((it, CHANGED) for it in visuals)))
+    if gear and session.state.get('rental_ready'):
+        send(session, mod_list(*((it, REMOVED) for it in gear)))
+    p.char.cars.remove(car)
+    if session.state.get('rental_ready'):
+        send(session, Frame(0x6d, struct.pack('<I', car.car_id) + p.car.encode()))
+
+
+def refresh(session, p):
     if session.state.get('rental_ready'):
         p.apply_paints()
         from .cars import visual_update
         send(session, *stat_frames(p), list_frame(p), visual_update(session, p.car))
+
+
+@on(SVC, C2S, 0x6c)
+async def return_request(session, frame):
+    """0x6c ReturnRentCar (6 bytes: u32 car id @2; client wrapper 0x863b90 <- 0x61ab12 / 0x64829d with the current
+    car's id, 0x76d2e3 behind a timer compare): the player gives the rental car back before it runs out (2016;
+    SIZED_PROTOCOL section 6). Answered as an expiry: 0x6d + the refreshed garage."""
+    p = session.state.get('player')
+    if not is_2016() or not p or len(frame.payload) < 4:
+        return
+    car_id = struct.unpack_from('<I', frame.payload)[0]
+    car = next((c for c in p.char.cars if c.car_id == car_id and c.rental), None)
+    fallback = next((c for c in p.char.cars if not c.rental), None)
+    if not car or not fallback:
+        session.log.note(f'return rental car {car_id}: ' + ('not a rental car' if not car else 'no own car to drive'))
+        return
+    async with LOCK:
+        await return_car(session, p, car, fallback)
+    refresh(session, p)
+    session.log.note(f'return rental car {car_id}: returned')
 
 
 @on(SVC, C2S, 0xfb4)

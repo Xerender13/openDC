@@ -183,6 +183,12 @@ def native_setup(cp):
         wm = cp['worldmatch']
         context.worldmatch['enabled'] = wm.get('enabled', '0').strip() not in ('0', 'no', 'off', '')
         context.worldmatch['daily_tries'] = int(wm.get('daily_tries', '5').strip() or 5)
+    if cp.has_section('promotion'):
+        pm = cp['promotion']
+        context.promotion = {'enabled': pm.get('enabled', '0').strip() not in ('0', 'no', 'off', ''),
+                             'dormant_days': int(pm.get('dormant_days', '30').strip() or 30),
+                             'new_reward': pm.get('new_reward', '').strip(),
+                             'dormant_reward': pm.get('dormant_reward', '').strip()}
     if cp.has_section('dcgp'):
         dg = cp['dcgp']
         context.dcgp['enabled'] = dg.get('enabled', '0').strip() not in ('0', 'no', 'off', '')
@@ -272,6 +278,10 @@ def native_setup(cp):
         context.realmatch_car = ((int(rm_car[0]), int(rm_car[1]) if len(rm_car) > 1 else 9)
                                  if rm_car and int(rm_car[0]) else None)
         context.realmatch_effect = int(cp['battlezone'].get('realmatch_effect', '1'))
+        bz = cp['battlezone']
+        context.attack = {'enabled': bz.get('attack_player', '0').strip() not in ('0', 'no', 'off', ''),
+                          'damage': float(bz.get('attack_damage', '10') or 10),
+                          'retire': bz.get('attack_retire', '1').strip() not in ('0', 'no', 'off', '')}
         for key, value in cp['battlezone'].items():
             f = [v.strip() for v in value.split(',')]
             if key.startswith(('section.', 'eu.section.')) and len(f) >= 4:

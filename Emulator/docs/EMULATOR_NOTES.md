@@ -34,6 +34,75 @@ Applied to `Emulator/` (2016 and the GitHub copy) and `Emulator 2011/` (nation.p
 [nation], tests/test_nation_rules.py). Tests: 347 OK in `Emulator/`; `Emulator 2011/` has two old failures in
 test_client2016 (the 2016 exe's checksum since the car-limit patch), unrelated. **Not yet confirmed in game.**
 
+### Neo City from a gameplay video: the CHAPTER CLEARED window and the bonus cards
+
+**User:** "inspect the Neo City gameplay video and try to implement mechanics according to it" (a 14-minute solo run
+of Neo Oros chapter 2; what it shows is in docs/NEOCITY.md "What a real server did"). It answers two open questions:
+the Neo window opens by driving into the city's NEO GATE (client side), and Neo enemies do shoot (still no server AI:
+`0xfc0` unsent). What the server had left empty and the video shows filled: the CHAPTER CLEARED summary and the 16
+Chapter Bonus Item cards. DeepSeek decoded the three messages (`docs/neo_work/NEO_CLEAR_PROTOCOL.md`); the lead
+re-read the key reads (0x71f43a seconds vs 0xe10, 0x71f533 failed @+4, 0x71f55d grade @+0xc, row stride 0x71f959
+0x2c, 0x526d80 262 bytes with slots from +6).
+
+- **0xedb** (`neocity.clear_frame`): u32 key, u32 n, u8 0, u32 seconds, u32 quests failed, u32 deaths, u32 grade 0..4,
+  four 0x2c rows (serial, level, HUV / HUB / HUS kills, exp, Mito, Reward item TableIdx x2, 0, 0), + 0x10 per extra
+  row. The run now keeps its start time, `0xee2` failures, `0xef2` deaths, kills per class (NeoHuvParam "Huv Type" 0
+  = HUB, the HUS by name; `kill_class`) and the exp / Mito it paid each member. Grade: S with no failure or death,
+  one letter down per two (ours; 0 = S is a guess). The Reward column = one item of the chapter's
+  `result_rewardGroup` (NC_chapter column 18, now read), given at the clear.
+- **0xee9** 16 cards {kind 1, TableIdx, count, picker serial} (`roll_cards`): 4 from the chapter's group, 12 from
+  `rw_neo_elite_huv_<45|60|80|100>_item` by the chapter's level (ours; that group holds exactly the video's cards:
+  Recovery Capsule 100, Party Recovery Kit 100, Booster Recharge 20 / 30, Devil, Enigma, Mitron Enhancer PLUS).
+  **0xee8** is u32 0, u32 slot (the old code read the 0): the card's item is given, every member gets 0xee9 with the
+  picker's serial (the name under the card); one card each; after 18 s the server picks for whoever has not (the
+  client closes the window at 20 s; GlobalText 11799).
+- **0xef6** u32 key, 0, n: the "n / 10" of the Chapter List = the chapter's clears modulo 10 (ours).
+
+Tests: test_neocity 38 (new: clear layout, card pick, bonus count, kill class). **Not yet tried in game.**
+
+### PvP collision damage, GM rush event, the never-built messages (user: "implement 1, 2 and 4")
+
+DeepSeek findings (reviewed; key addresses re-read by the lead): `docs/neo_work/PVP_PROTOCOL.md`, `SIZED_PROTOCOL.md`.
+
+**PvP collision damage** (`rooms.collision`, `[battlezone] attack_player = 0` default, `attack_damage = 10`,
+`attack_retire = 1`). The content flag is `BattleZone.AttackPlayer` (0x3c bit 5 = `[net+0x2a4] & 0x20`): without it
+`0x7cf760` never makes a racer damageable. C>S 0xfbd (6) is NOT damage: it is the id of the car hit, `[actor+0x41c0]`
+(sent once a second at most by the race object 0x7d01f0, call site 0x4916d1). Lead check: the id is
+`(local counter << 16) | WORD [net+0x3d41c]` (0x45654c), and `net+0x3d41c` is the serial 0x7e JoinChannelAck gives
+(frame +0x36, 0x5247df; login.join_channel), so the low half is the racer's serial: resolved to a member of the same
+racing room, anything else dropped. S>C 0xfbe (6, handler 0x540f90): f32 damage, subtracted from the RECEIVER's race HP
+(100 at the start, 0..100) when the race is in mode 8 (a phase the client reaches itself); it never reports HP or
+retires, so the server keeps `Member.hp` and retires a racer at 0 (0x1eb end type 2, zero extras, `rooms.retire`).
+The "Beaten damage:%f" line and its `[rec+0x9e] < 'N'` test are the client's GM-only debug output (PType), not a
+logger level. Damage per hit is ours. Not yet tried in game (open: whether the refresh 0x7d4b90 keeps the HP).
+
+**GM rush event** (`gmrushevent [name] [hp]`, misc.gm_rush_event): 0xfc3 (8: u32 HP, u16 serial) to everyone in
+the GM's area; the client shows the rush panel and "GM Event rush time start. GM HP:%d", the named car's client
+"I am rush monster.". Lead check: the handler returns at once unless the receiving character's PType < 'N'
+(0x545344), so only GM accounts see it. `0xfc1` and `0xfb4` (once listed as GM events) are the Part Option Extractor
+and the rental capsule, both implemented earlier: OPEN_FEATURES was stale.
+
+**The size-changed messages:**
+- 0x1c5 StatEnchantRes and 0x5d5 GetCarAck: the 2016 handlers are only `mov ax,size; ret` (0x540c80, 0x52cd50; 2011
+  the same): nothing to build.
+- 0x1d3 RoomNotifyChange is one member's car (serial, age, XiCarAttr, PlayerInfo; 240 / 2011 236), not room
+  settings (those are 0x26d, done): `rooms.notify_change`, cast when a Real Match switches a member's car.
+- 0x241 ReplaceCarAck (72 fixed; the n+4 handler 0x545c80 is type 0x1's): answer to C>S 0x240 ReplaceCar on the
+  area / barea services, with the player's last move (car sort set to the request's; guess). The client swaps its
+  car only in this ack. Never seen in a log yet.
+- 0xaa DormantEvent (94): `game/promotion.py`, `[promotion]` (off): new character's first login -> 11282, a login
+  after `dormant_days` -> 11283, with an optional RewardGroup gift (the texts promise equipment). Logins kept in
+  SKID_PLAYMODE_TB MODEID 'LOGIN' (nothing keeps the character's LASTDATE).
+- 0x69 RentCarAck (52 = a 2016 car record, the same handling as 0xfb5): not sent, the rental flow keeps 0xfb5
+  (sending both would add the car twice). Found on the way: C>S 0x6c ReturnRentCar (u32 car id; wrapper 0x863b90)
+  had no handler: `rentals.return_request` -> 0x6d (the expiry path, now `rentals.return_car`).
+- 0x6af AuctionCarBuyAck was already right (2 + serial + price + 50-byte car = 60).
+
+Tests: test_collision2016 (5), test_sized2016 (6); all pass. **Not yet tried in game.**
+
+**Closed (user, 2026-11-14):** the Hurricane's B / C aero kits looking like A (HANDOVER session 44) is solved: the
+aero index renumbering of session 45.
+
 ### EU client retired: the US client plays either rule set
 
 **User:** "Get rid of EU client after that and have the US client being able to be started as either EU or US rules",
