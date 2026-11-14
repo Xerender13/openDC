@@ -113,6 +113,16 @@ class Visual:
     value: str = ''          # column 6: what it gives ("i_n_00058 10" = 10 x that item, Mito, a passive id, ...)
 
 
+def _neo_durability(row):
+    """ItemClient column 23 of a Neo part ('500 0.7': max durability, wear) -> 500.0; 0.0 for other rows."""
+    if not row or not row[0].startswith('neo_') or len(row) <= 23:
+        return 0.0
+    try:
+        return float(row[23].split()[0])
+    except (ValueError, IndexError):
+        return 0.0
+
+
 @dataclass
 class ItemInfo:
     """An item row: ItemClient.tdf (id 2, kind 0, cost 12, sell 13, shop 15) or UseItemClient.tdf
@@ -136,6 +146,8 @@ class ItemInfo:
     base_range: tuple = (0, 0)   # ItemClient columns 10 / 11: the random base bonus of a dropped part (items.roll_base)
     tradeable: bool = True   # ItemClient column 17 / UseItemClient column 15 (False: rental and hyper parts, coupons,
                              # ...; car keys are True: they go with the car in a car auction)
+    durability: float = 0.0  # ItemClient column 23 "max wear" of the 2016 Neo parts (neo_weapon / neo_armor / neo_fuse
+                             # ...: "500 0.7", "600 0.1"): the max durability, records.Item.encode sends it
 
 
 # ItemClient column 15 / UseItemClient column 13, sold in the parts shop: 2011 'True'; the 2016 tables name the
@@ -378,7 +390,8 @@ class Tables:
             r = parts[table_idx]
             return ItemInfo(table_idx, r[2], r[0], PART_TYPES.get(r[0], DOCK_TYPE if r[0].startswith('dock_') else OTHER_TYPE),
                             _num(r[12]), _num(r[13]), r[15] in SHOP_MARKS, 1, r[6], _num(r[7]), req_grade=_num(r[8]), name=r[4],
-                            tradeable=len(r) > 17 and r[17] == 'True', base_range=(_num(r[10]), _num(r[11])))
+                            tradeable=len(r) > 17 and r[17] == 'True', base_range=(_num(r[10]), _num(r[11])),
+                            durability=_neo_durability(r))
         k = table_idx - len(parts)
         if 0 <= k < len(use):
             r = use[k]

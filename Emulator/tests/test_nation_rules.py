@@ -96,6 +96,20 @@ class LoginNationTest(unittest.TestCase):
     def test_us_rules(self):
         self.assertEqual(self.login(False), nation.US)
 
+    def test_kmh_flag(self):
+        """0x7cf 0x10001: US rules (nation 1), km/h (the launcher's units = kph); kept for the account."""
+        s = Session()
+        s.state['login_member'] = 'tester'
+        asyncio.run(nation.nation(s, Frame(nation.NATION, struct.pack('<I', 0x10001))))
+        self.assertEqual((s.state['nation'], nation.kmh(s)), (1, True))
+        self.assertTrue(nation._login_kmh['tester'])
+        self.assertFalse(nation.is_eu(s))
+        from dcemu.native.game import championship
+        with mock.patch.object(championship, 'cfg', return_value={'touring_a': 361, 'touring_b': 341}):
+            self.assertEqual(championship.speed_flags(s)['BattleZone_TouringASpeed'], 361)
+            s.state['kmh'] = False
+            self.assertEqual(championship.speed_flags(s)['BattleZone_TouringASpeed'], round(361 / championship.MILE))
+
     def test_texts_stay_us(self):
         p = type('P', (), {'nation': 8})()
         self.assertFalse(nation.eu_client(p))

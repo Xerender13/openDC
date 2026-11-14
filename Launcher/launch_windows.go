@@ -156,8 +156,11 @@ func patch(h syscall.Handle, ip string) []string {
 			if n := writeAddress(winRead(h), winWrite(h), ip); n > 0 {
 				address = true
 				note(fmt.Sprintf("address (%d slots)", n))
-				if euRules && !clientEU {
+				if sendsNation() && !clientEU {
 					note(writeNationSend2011(winRead(h), winWrite(h)))
+				}
+				if kph {
+					note(writeUnits2011(winRead(h), winWrite(h)))
 				}
 			}
 		} else if ob := readMem(h, ggObject, 4); ob != nil && binary.LittleEndian.Uint32(ob) != 0 {

@@ -16,6 +16,11 @@ says what to copy, how to set up, how the work is done, and what is open.
 - **New, off by default (2016):** PvP collision damage (`[battlezone] attack_player = 1`), welcome-back popup
   (`[promotion] enabled = 1`, reward groups optional); on: GM `gmrushevent [name] [hp]` (GM accounts only see it),
   0x1d3 car change in Real Match rooms, 0x240 ReplaceCar answer, 0x6c return rental car.
+- **Open (user, 2026-11-14):** Oros city traffic was missing on the first entry on the 2016 client and came back after
+  re-entering the city. The server had sent normal traffic all along (checked: right lanes, models, record size), so it
+  looks like a first-entry timing issue in the client (traffic sent before the city finished loading?). Watch for it.
+- **Fixed, confirmed in game:** the 2016 Drift Booster (`i_d_passive_02`): the 2016 visual item record has its assist
+  slots at +0x50, not +0x4c (client 0x783457 / 0x69ff30); see EMULATOR_NOTES session 47.
 - To try: start each client with `--eu`: part tooltips "Required Grade", Newbie / Pro buttons by V grade, channel
   battle minimum grades; the emulator log shows `client nation 8 (EU eng)` at the login; then `--us` (tables back:
   the launcher log says "US tables put back"). Details: EMULATOR_NOTES session 47.

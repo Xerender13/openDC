@@ -147,10 +147,30 @@ async def wait_detected(session, timeout=WAIT_SECONDS):
 
 
 _login_nation = {}     # account (lower case) -> the nation of its last accepted login
+_login_kmh = {}        # account (lower case) -> its client shows km/h (0x7cf bit 16, the launcher's units = kph)
+KMH_FLAG = 0x10000
 
 
-def remember(member, n):
+def kmh(x):
+    """The client of x (a session or a Player) shows km/h: the EU program, or a US client started with the launcher's
+    [client] units = kph (0x7cf bit 16, user 2026-11-14). Its speed texts then want km/h values."""
+    if eu_client(x):
+        return True
+    if hasattr(x, 'state'):
+        if 'kmh' in x.state:
+            return x.state['kmh']
+        member = (x.state.get('member') or x.state.get('login_member') or '').lower()
+        p = x.state.get('player')
+        if not member and p is not None:
+            member = (getattr(p.char, 'member', '') or '').lower()
+        return _login_kmh.get(member, False)
+    return getattr(x, 'kmh', False)
+
+
+def remember(member, n, kmh=None):
     _login_nation[member.lower()] = n
+    if kmh is not None:
+        _login_kmh[member.lower()] = kmh
 
 
 def known(session, member):
@@ -246,17 +266,20 @@ async def eu_report(session, frame):
 @on('native:area', C2S, NATION)
 @on('native:barea', C2S, NATION)
 async def nation(session, frame):
-    """0x7cf Nation (u32): the EU client's nation, sent on each connection."""
-    n = int.from_bytes(frame.payload[:4], 'little')
+    """0x7cf Nation (u32): the EU client's nation, sent on each connection; from the US client with the launcher's
+    rules = eu / units = kph once after the login (Launcher/eurules.go): the low byte is the nation, bit 16 km/h."""
+    value = int.from_bytes(frame.payload[:4], 'little')
+    n, unit = value & 0xff, bool(value & KMH_FLAG)
     first = session.state.get('nation') is None
     session.state['nation'] = n
+    session.state['kmh'] = unit
     if session.state.get('login_member') and allowed(n):     # auth: a login answered without waiting for this
-        remember(session.state['login_member'], n)
+        remember(session.state['login_member'], n, unit)
     p = session.state.get('player')
     if p is not None:
         p.nation = n
     if first:
-        session.log.note(f'client nation {n} ({name(n)})')
+        session.log.note(f'client nation {n} ({name(n)})' + (', km/h' if unit else ''))
     if session.state.get('member') and not allowed(n):     # it came after a check-in that let it through
         session.log.note(f'client nation {n} ({name(n)}) is not allowed here: closed')
         session.close()

@@ -115,7 +115,8 @@ class VersionTest(unittest.TestCase):
         it = item()
         old, new = it.encode(2011), it.encode(2016)
         self.assertEqual((len(old), len(new)), (0x5c, 0x60))
-        self.assertEqual(new[:0x50], old[:0x50])
+        self.assertEqual(new[:0x4c], old[:0x4c])
+        self.assertGreater(struct.unpack_from('<f', new, 0x4c)[0], 0)     # 2016: the part's durability (records.Item)
         self.assertEqual(new[0x50:0x54], bytes(4))
         self.assertEqual(struct.unpack_from('<II', new, 0x54), (456, 123))
         for year, stride in ((2011, 0x60), (2016, 0x64)):

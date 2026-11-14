@@ -151,9 +151,11 @@ def content_flags(**overrides):
         # docs/NEOCITY.md). Main.NeoCityMainUI (above, 1) is the city main UI, not the gate.
         named['City.NeoCity'] = 1
         named['City.NeoOros'] = 1
-        named['City.NeoCras'] = 1
-        named['City.NeoKoinonia'] = 1
-        named['City.NeoMoonPalace'] = 1
+        # only Neo Oros has a map in the client (Data/World/neooros.agt): the other Neo cities stay off, so the Chapter
+        # List's city list shows Neo Oros alone (user, 2026-11-14)
+        named['City.NeoCras'] = 0
+        named['City.NeoKoinonia'] = 0
+        named['City.NeoMoonPalace'] = 0
         # the ranking window's data (rankings.py): with this flag 0 the 2016 client never connects to the ranking
         # service, so the window can ask for nothing. Flags +0xc bits 25-26 (a 2-bit value); the connect at
         # 0x54dea3 needs >= 1 (and no connection yet), the panel refresh 0x6b2f0a only != 0 (session 46)

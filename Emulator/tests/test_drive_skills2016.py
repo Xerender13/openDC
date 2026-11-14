@@ -49,6 +49,23 @@ class DriveSkills2016Test(unittest.TestCase):
         self.assertEqual(slots[0], assist_index('a_00002'))
         self.assertTrue(all(x == 0 for x in slots[1:]))
 
+    def test_drift_booster_slot_offset(self):
+        """2016 record 0x78: the ten assist slots at +0x50 (slot loop 0x783457 reads object +0x58 = record +0x50,
+        time check 0x69ff30), the 4 new bytes at +0x4c; at +0x4c the Drift Booster's a_00118 was never read."""
+        from dcemu.native.game.convert import assist_index
+        rec = self.skill(20785).encode()
+        self.assertEqual(len(rec), 0x78)
+        self.assertEqual(struct.unpack_from('<iiI', rec), (1, 1, 20785))
+        self.assertEqual(struct.unpack_from('<I', rec, 0x4c)[0], 0)
+        self.assertEqual(struct.unpack_from('<I', rec, 0x50)[0], assist_index('a_00118'))
+        version.configure({'version': '2011'})
+        try:
+            rec = self.skill(20785).encode()
+        finally:
+            version.configure({'version': '2016'})
+        self.assertEqual(len(rec), 0x74)
+        self.assertEqual(struct.unpack_from('<I', rec, 0x4c)[0], assist_index('a_00118'))     # 2011 unchanged
+
     def test_replacement_deletes_previous_skill_only_on_same_car(self):
         old, other, new = self.skill(), self.skill(20787, 63, 2), self.skill(20785, 64, 0, 0)
         self.p.vsitems = [old, other, new]

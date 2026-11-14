@@ -131,7 +131,7 @@ async def answer_login(session, member, password_field):
             if result == OK:
                 # what the client has said by now: in the no-wait path its 0x7cf may have come during the check
                 n = n if session.state.get('nation') is None else nation.detected(session)
-                nation.remember(member, n)
+                nation.remember(member, n, session.state.get('kmh', False))
             else:
                 if session.state.get('nation') is None:     # answered without waiting: the texts depend on it
                     n = await nation.wait_detected(session)

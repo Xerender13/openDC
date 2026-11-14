@@ -215,6 +215,14 @@ class Item:
             info = context.data.item_info(self.table_idx) if context.data else None
             days = (self.random or 1) if info and info.kind == 'rent_car_capsule' else 0
             out = out[:0x50] + struct.pack('<I', days) + out[0x50:]
+            from ..data import USE_TYPE
+            if info and info.type != USE_TYPE:
+                # a 2016 part's current durability, a float at record +0x4c (the item object keeps the record from
+                # +8: 0x77a236 rep movs; getter 0x5eec00 reads +0x54 while content flag City.NeoCity (0x14 bit 21 =
+                # [net+0x27c] & 0x200000) is on, i.e. for every part everywhere; 0.0 refuses the equip, GlobalText
+                # 12233 "You cannot equip an item with zero durability", 0x637830). Neo parts: the ItemClient maximum
+                # (no wear kept yet); other parts have no durability in the table: 1.0 (user, 2026-11-14)
+                out = out[:0x4c] + struct.pack('<f', info.durability or 1.0) + out[0x50:]
         return out
 
     def data(self):
@@ -242,12 +250,18 @@ class VisualItem:
         return wstr(t if t.strip() else '', 40)
 
     def encode(self, version=None):
-        # 2016: 0x78 bytes (0x4b1 handler 0x52efb0 steps 0x78, 2011 0x74; 0x4b2 0x7c with the state): the 2011
-        # fields keep their offsets (the tooltip 0x6a5fc8 reads the Aero points @0x4e as 2011), 4 more bytes at the
-        # end (0 here). The 2011 size sent to 2016 was logged by the client: "Wrong Packet Size. CMD(1201/1202)".
+        # 2016: 0x78 bytes (0x4b1 handler 0x52efb0 steps 0x78, 2011 0x74; 0x4b2 0x7c with the state). The fields up
+        # to the Aero points (@0x44, the tooltip 0x6a5fc8 reads them as 2011) keep their offsets; the 4 new bytes are
+        # @0x4c (0 here), so the ten assist slots move from @0x4c to @0x50: the 2016 slot loop 0x783457 reads
+        # object +0x58 = record +0x50 and the time check 0x69ff30 counts record +0x50.. (2011: 0x7295de +0x54 /
+        # 0x6529d0 +0x4c). Sent at @0x4c, every slot was read one place late and a drift item's first assist (the
+        # Drift Booster's a_00118) was lost (user, 2026-11-14). The 2011 size sent to 2016 was logged by the client:
+        # "Wrong Packet Size. CMD(1201/1202)".
+        slots = self.assist_slots()
+        if layout(version).year == 2016:
+            slots = slots[:8] + bytes(4) + slots[8:]
         return (struct.pack('<iiII', self.car_id, self.state, self.table_idx, self.inven_idx) + self.plate()
-                + struct.pack('<iii', self.period, self.utime, self.ctime) + self.assist_slots()
-                + bytes(4 if layout(version).year == 2016 else 0))
+                + struct.pack('<iii', self.period, self.utime, self.ctime) + slots)
 
     def assist_slots(self):
         """The 48 bytes new in 2011 (@0x44): @0x4c ten assist slots (Assist_Client row + 1), which the client
@@ -287,6 +301,7 @@ class Stats:
     equip: tuple = (0, 0, 0, 0)
     char: tuple = (0, 0, 0, 0)
     item_use: tuple = (0, 0, 0, 0)
+    neo: tuple = (0, 0, 0, 0, 0, 0)     # combat(): the 2016 Neo City values (Player.stats, neo_combat)
 
     def total(self):
         return tuple(sum(g[i] for g in (self.based, self.equip, self.char, self.item_use)) for i in range(4))
@@ -297,8 +312,10 @@ class Stats:
         and [23] = random extra of the player's own attack in the weapon path (0x7c8a10); Dev Ed texts
         name HP / Defense (SP) / Crash Damage. No reference for the real values: sent as 0 (as the 2008
         server). Ram damage on HUVs does not use them: it comes from the stats x Main.StatApply (see
-        handlers/game.NEW_FLAGS)."""
-        return (0, 0, 0, 0, 0, 0)
+        handlers/game.NEW_FLAGS). 2016: Neo City reads them (NEO Performance Info: HP, Defense, Weapon Attack,
+        Crashing Attack; the car's max HP = [20] + the parts' own Neo option sum, client 0x788750, and in Neo City
+        a [20] of 0 left the car at "0 / 0", destroyed on arrival: user 2026-11-14): Player.stats fills self.neo."""
+        return tuple(self.neo)
 
     def encode(self, version=None):
         return struct.pack('<26i', *self.based, *self.equip, *self.char, *self.item_use, *self.total(),

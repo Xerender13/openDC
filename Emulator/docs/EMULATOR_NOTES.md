@@ -34,6 +34,95 @@ Applied to `Emulator/` (2016 and the GitHub copy) and `Emulator 2011/` (nation.p
 [nation], tests/test_nation_rules.py). Tests: 347 OK in `Emulator/`; `Emulator 2011/` has two old failures in
 test_client2016 (the 2016 exe's checksum since the car-limit patch), unrelated. **Not yet confirmed in game.**
 
+### 2016 Drift Booster: the visual item's assist slots were 4 bytes early (user: "fix the drift booster")
+
+**Report:** the Drift Booster (i_d_passive_02, category 58) does nothing while equipped on the current car.
+
+**Cause:** the server's record was right in content (log 16:41:07 0x4b1: car 5, state 1, TableIdx 20785, slot 146 =
+a_00118) but not in place. The 2016 visual item record (0x78) has its 4 new bytes at **+0x4c**, before the ten assist
+slots, which start at **+0x50**:
+- slot loop for drift items on the current car: 0x783457 `add esi,0x58` (object +0x58 = record +0x50, object = record + 8;
+  2011: 0x7295de `add esi,0x54`);
+- time check 0x69ff30 counts record +0x50..+0x74 (2011: 0x6529d0 +0x4c..);
+- category 40 / 41 loop: 0x7834e7 `[esi+0x58]` (the same);
+- the Aero points stay at +0x44 (tooltip 0x6a5fc8 `[esi+0x4e]`).
+We sent the slots at +0x4c and padded at the end, so the client read every slot one place late and slot 0 (the
+booster's assist) was lost. This also hit the 2016 PassiveAssist items and the Aero Mk.2 option assists.
+
+**Fix:** records.VisualItem.encode puts 4 zero bytes at +0x4c for 2016 (2011 unchanged: 0x74, slots at +0x4c).
+Test: test_drive_skills2016.test_drift_booster_slot_offset (374 tests pass). **Confirmed in game** (user, 2026-11-14:
+"Confirmed, works now"). The PassiveAssist items and Aero Mk.2 options were not checked separately.
+
+### Neo City start dialogue in the red circle: 0xeea result 3 (user: "The start still skips the first checkpoint")
+
+**Report:** the Korean server's screenshot shows "Quest Ready" (퀘스트 Ready) in the top bar and the Q1 `start` row's
+talk (Call Sign Radio, "Rrrrr~ Rrrrr~ Tsk~ Tsk~", SPACE Next) while the car is in the red circle. We started the quest
+(0xedd) as soon as the car entered the circle, so the talk never played.
+
+**Cause / client:** S>C 0xeea (handler 0x533fb0, key / quest / mission must equal activity +0x24 / +0x28 / +0x2c)
+has two scene results:
+- result 1: phase 3 and the current mission's scene from activity +0x10 (NULL in phase 0: the earlier crash at 0x53408c);
+- result 3 (0x5340a2): `0x532d60` picks the quest (phase 0/1: the chapter's first quest, phase 2/3/7/8 the current
+  one, phase 5 the next one), `0x532de0` its script entry (activity +0x18, 0x14-byte entries), and `0x79ee90` runs it
+  with `0x532c70`, the script runner (each command's virtual call until one has to wait). The phase is not changed.
+
+**Fix (neocity.goal_zone / start_quest):** the first flag-3 report of a pending quest is answered with 0xeea
+(key, quest, mission, 3). The quest then starts (0xedd + its enemies) on the client's 0xedc, or on the next flag-3
+report (the car re-enters the circle) if the client sends nothing after the talk. `start_quest` runs once per quest.
+Script-tested (373 tests). **Confirmed in game** (user, 2026-11-14: "It works now!"): the talk plays in the red
+circle, and when it ends the client itself sends 0xedc (log 16:41:33 0xeea result 3 -> 16:41:42 C>S 0xedc -> 0xedd +
+the enemies). The re-entry fallback is not needed but kept.
+
+### Neo City enemies: the server builds the quest's spawn records (user: "Enemies don't appear at all")
+
+**Report:** no enemy in chapter 1; the video shows HUVs roaming the map during the quests.
+
+**Cause (DeepSeek trace docs/neo_work/NEO_SPAWN.md, addresses checked by the lead):**
+- The client's 0xc6 bulk request (one message per NC_object row of the quest's `object_group_ID` with
+  `create_type = Q_START`, `object_num` records) only came in the runs where 0xe89 / 0xed9 +0xe was 0, which skipped
+  the first objective. With START_ENTRY = 1 the client asks for nothing (8 logged runs).
+- Even then, `enemy_request` forced record +0x0a to 0, and the 0xc7 handler skips a record whose +0x0a is 0
+  (`cmp word [ebx-0x32],0` / `jbe 0x53bfbb` at 0x53bd0c, the record being `ebx-0x3c`, 0x53bd3d). So no relayed
+  enemy could ever spawn. The client itself writes 1 there for its NEO_HUB rows.
+
+**Fix (neocity.py):**
+- `objects()`, `huv_rand()`, `pick_huv()`, `spawn_records()`, `spawn()`. When the start zone starts a quest (0xedd),
+  the server sends the quest's Q_START enemies (NEO_HUB / NEO_HUV rows) as 0xc7 to every run member, built from
+  NC_object + NC_HuvRand (weighted pick) + NeoHuvParam (level col 2, model col 3, HP col 13), +0x0a = 1, +0x3c = 0,
+  chapter key and quest at +0x30 / +0x34. The client is already in area 84 by then, so the area gate passes.
+- A record rebuilt for row 135 / Huv Param 100561 is byte-identical to the client's own logged record (except
+  +0x30 / +0x34, which the client leaves 0). Chapter 1 Q1 gives 6 messages of 4,4,4,4,6,3 = the client's own burst.
+- The relay sets +0x0a = 1 when 0.
+- Not handled yet: Q_END rows (spawned at a quest end in the old log), BUILDING / TURRET rows, delete_type.
+- Script-tested (test_neocity: chapter start -> start zone -> 0xedd + 6 x 0xc7; 372 tests pass).
+- **In game (user):** "Enemies show up on the UI now, but not seen in the game itself". Cause (DeepSeek
+  NEO_VISIBLE.md, addresses checked by the lead): the client's actor key is `(record +0x0a << 16) | record +0x08`
+  (0x523483 -> createInfo +0, 0x558e65-0x558e77 get-or-create in conn+0x178). Every record had +0x0a 1 and +0x08 2, so
+  one actor was made and the other 24 hit "Already huv have control" (client GameLog, 0x45e7c2). +0x08 = the
+  receiver's own serial takes the owner branch (0x5237d1 -> 0x45e7b0: the local HUV control that runs the AI), so it
+  stays the owner's serial (DeepSeek proposed unique +0x08 values instead; that would have taken the network-driven
+  branch 0x5238f5, which has nobody to drive it in a solo run). Fix: +0x0a = the run's enemy number from
+  ENEMY_FIRST 0x100, unique per run, also for relayed 0xc6 records. 374 tests pass. **Confirmed in game** (user:
+  "Other than that everything worked correctly"): enemies visible, roaming, attacking.
+- **Open (user):** "Game crashed on attacking a HUB opponent". Log 20261114-172008 17:53:09-10: three C>S 0xc6 of 4
+  kind-3 records each (the HUB's summons: model 19102, Huv Param 100510, +0x16 0xffff, +0x38 = the parent's actor
+  key 0x01010002 / 0x01250002 / 0x014c0002); the client stopped within 5 ms of relaying the third. The parents are
+  the Q1, Q2 and Q3 HUBs, stacked at the same position (rows 135 / 151 / 157, 1084(1719.6,5623.5)), because earlier
+  quests' enemies are never removed (delete_type Q_END not handled). Traced by DeepSeek (NEO_HUBCRASH.md), checked
+  by the lead:
+  - the client wrote a crash dump, `DriftCity Dev Ed/DriftCity.exe.npd` ("NPluto Crash Dump 1.0", 17:53): fault at
+    **0x4a99a1** in 0x4a9990, which reads `[[control+0x78]]` without a check. 0x4a9990 is reached from the HUV
+    control attach 0x4a6370 -> 0x4540f0, the local-control path a record takes when +0x08 is the receiver's serial
+    (0x5237d1 -> 0x45e7b0). The kind-3 summons were the last 12 records through it. *(Guess, DeepSeek: a control
+    recycled from a killed enemy whose +0x78 was never reset.)*
+  - group enemies: the client only spawns / removes NC_object rows itself in the +0xe = 0 flow; the server-spawned
+    ones are never removed. S>C 0xce (handler 0x525d60) finds an actor by key (+2, +4) and sets it dying.
+  **Fix:** enemy_request drops kind-3 records (the HUB spends its summon count anyway, 0x4e2a04); spawn() first
+  sends 0xce (key, Huv Param @0x34, no killer) for every enemy the run spawned before, puts those keys in r.killed
+  (a kill report that comes back pays nothing) and clears r.enemies. 376 tests pass. **Not yet confirmed in game.**
+  Not done: HUB summons (would need the other-HUV branch, +0x08 not a member's serial, untested); the enemies'
+  own revive timer may bring a removed enemy back (DeepSeek 3.3, guess). Enemy AI and attacks are client-side (NEO_ENEMY_AI.md); whether they attack once spawned is open.
+
 ### Neo City from a gameplay video: the CHAPTER CLEARED window and the bonus cards
 
 **User:** "inspect the Neo City gameplay video and try to implement mechanics according to it" (a 14-minute solo run
@@ -99,6 +188,83 @@ and the rental capsule, both implemented earlier: OPEN_FEATURES was stale.
 - 0x6af AuctionCarBuyAck was already right (2 + serial + price + 50-byte car = 60).
 
 Tests: test_collision2016 (5), test_sized2016 (6); all pass. **Not yet tried in game.**
+
+**Neo City "destroyed" on entry (user, 2026-11-14).** Xerender's car reports 45936 HP in `0xf4d` (the client's own
+figure; the video's level-96 car had 7880). The server ignored reports above 20000 (the client's 0xf4e handler sets the
+HP only for 1..20000, 0x53e663; larger values only print "Receive HP : %d"), so the car never got an HP and entered
+the run destroyed. The capped 20000 that followed kept the car below its max HP, and the client resets the
+damage state only when HP >= max (0x4b3d5f). DeepSeek traced the max (docs/neo_work/NEO_HP.md; lead re-read 0x53e69f /
+0x4b5328): 0x2f8 dword 20 (sent 0) + the parts' own Neo option sum at record +0x9e4, from the client's item table:
+the server cannot lower it. Now a report above 20000 is answered with 0: the client stores -1 = "use the car's own
+HP" (0x53e69f, 0x4b5328). Not yet confirmed in game.
+
+### MPH / KPH switch without a region change (user, 2026-11-14)
+
+Launcher `[client] units = mph | kph` (or `--mph` / `--kph`), independent of `rules`, 2011 and 2016. DeepSeek found
+(`docs/neo_work/SPEED_UNITS.md`, all 14 sites byte-checked by the lead in both exes): a nation-1 client keeps km/h
+internally and converts only for display at 7 two-byte branches per build (F2 / info distance x3, race HUD "To Goal",
+the miles() helper for records / car stats, the HUD speed integer, the quest window distance); the launcher writes the
+metric branch (`Launcher/eurules.go` unitPatches2011/2016; the 2011 ASProtect exe is refused). Files (DeepSeek extended
+`tools/eu_rules.py`, reviewed): GlobalText 11874 KPH, 11527, 11977, 10403, 10729, 10730, 10216, 10215 (+12607 in 2016),
+the assist texts in km/h, the ADV HUD label (game.nui ID_SPEEDMETER_ADV_SPEED), the classic dial (the TW Km/h picture).
+Copies per setting combination (X.eu / X.kph / X.eu.kph), manifest `ClientModes.txt` (path, sha256, settings);
+EURules.txt is replaced. The server learns the unit from bit 16 of the 0x7cf value (the launcher's login patch is now
+`push imm32`: nation | 0x10000), `nation.kmh` -> championship speed caps in km/h. Built for both clients, launcher
+installed. **Not yet tried in game.**
+
+**Neo parts: "You cannot equip an item with zero durability" (GlobalText 12233; user screenshot, 2026-11-14).** The
+check 0x637830 refuses when 0x5eec00 gives 0.0: a float at the item object's +0x54, read only under the Neo connection
+flag 0x200000. The object keeps the 0x60-byte record from +8 (0x77a236 `rep movs` 0x18 dwords), so it is record +0x4c,
+where the emulator put Belonging (0). Max durability = ItemClient column 23 of the Neo rows ("500 0.7", "600 0.1":
+max and wear; the video's "Durability 600/600" fuse), the tooltip's %d/%d (12235, 0x6a490a; max at info +0x410). Now
+the 2016 record of a Neo part carries the max as a float at +0x4c (`ItemInfo.durability`, `Item.encode`); no wear is
+kept yet. Then normal parts were refused too, also outside Neo City: the getter's switch [net+0x27c] & 0x200000 is the
+content flag City.NeoCity (0x14 bit 21), on for every 2016 login since session 45, so every part's durability comes from
++0x4c (there: Belonging, mostly 0). Now every 2016 part gets a float there: Neo parts their max, other parts 1.0 (they
+have no durability in the table). Not yet confirmed in game.
+
+**"Ready Quest" fixed (user, 2026-11-14).** DeepSeek trace (docs/neo_work/NEO_READY_QUEST.md; lead re-read 0x7b47a0):
+the activity 0xed9 creates stays in phase 0 ("Ready Quest", the 0xee7 poll every 1-2 s); only S>C 0xedd (key, quest)
+moves it to the running quest (0x526d30 -> 0x7b47a0 -> 0x7aab50: phase 2, missions, intro notice 10122 = the NPC
+briefing), and the client asks for it (0xedc) only from its quest list row. Now 0xedd (key, 0) follows 0xed9. Also
+0xe89 / 0xed9 +0xe was our run id: it becomes activity +0x34, an index into the quest's 0x38-byte entries
+(0x7b47c6): now 0. Next report (user screenshot: quest 1 running, "mission accepted", the checkpoint did nothing): the
+client sent only 0xee7 (key, quest, mission, 1). In the running quest 0xee7 is the goal-zone report (0x7a5883: flag 1
+once on entering the zone, 0 on leaving), not a list request: first answered with 0xeee: that skipped the
+checkpoint dialogue and completed the start zone's mission 0 on arrival (user). Now S>C 0xeea GoalPlaceAck (key, quest,
+mission, result 1; handler 0x533fb0 -> phase 3 = the checkpoint scene), once per mission; the client then sends 0xeef
+itself -> 0xeee (`neocity.goal_zone`). Result (user): the second objective's cutscene and dialogue played and
+then stayed at its end; the client had sent C>S 0xeed (key, quest, mission): now answered with 0xeee (mission_params;
+0xeec's counters only exist for mission types 6..11, handler 0x53cee0). And the first objective ("1) A mysterious
+voice") was skipped since 0xe89 / 0xed9 +0xe went from 1 to 0 (the trace's guess): back to 1 (START_ENTRY). Next (user: the junkyard objective never came): quest 1 ended (0xede -> 0xedf) and quest 2
+("Familiar Faces": fire a plasma weapon, 180-degree turn, find old Duffy's destroyed car = the junkyard, find the old
+drivers) never started: the client does not ask for it either; quest_reward now sends 0xedd for the next quest. Open:
+the video starts in the waiting state with the quest's `start` row dialogue ("The Oros in Ruin", Previous / Next)
+before objective 1; the server's own 0xedd skipped it. Traced by the lead (0x7a2f40, the phase-0 tick): 0xee7 flag 3
+= the car entered the pending quest's start zone (0x79d4e0, latch +0x12c; the red marker / minimap Q), flag 2 = left it.
+Now 0xedd is sent there (goal_zone), not at the chapter load, and after a quest reward the next quest waits for its own
+start zone. Tried: answering the start zone with 0xeea result 1 (to play an intro scene) crashed the
+client (no quest in phase 0); reverted. The car spawns inside the zone, so the quest starts about a second after the
+load and the video's start-zone intro is still open. Not yet confirmed in game. And the stat frames are sent again after 0xedd (the HP HUD is drawn from the car after a 0x2f8,
+0x4b3d20 -> 0x596d40). The empty HP frame: the HUD is filled from the car on a change (an item use restored it; 0xf4e only
+stores the value); expected with the quest running. Not yet confirmed in game.
+
+**Neo City stuck at "Ready Quest", empty HP frame (user screenshots, 2026-11-14).** After 0xed9 the client asks 0xee7
+every 1-2 s; the server refused it during a run (session 46's guess: 0xee6 "drops the activity" because 0x7ad040 sets
+[mgr+0x174] = 0). Lead re-read 0x7ad040: the records' u32 key is looked up in the chapter map [mgr+0x148] and added
+when the u16 @+0x14 (clear count) is > 0, then 0x7abee0 recomputes the unlocks - the cleared list, as the server
+builds it. Answering it during a run was tried and removed the quest marker (user screenshot): it does drop the
+activity ([mgr+0x174] = 0); reverted, the in-run 0xee7 stays unanswered. Also this day: the 0xef2 value at
++0xa is a running count (1, 2, 3 ... 3750), not Retry; answering it with a revive looped "Resurrected!! / YOU ARE
+DESTROYED" (5516 messages): 0xef3 never revives now. The 2016 0x2f8 combat dwords [20..25] carry Neo HP / Defense /
+Weapon / Crash (player.neo_combat, ours: a [20] of 0 left the car at "0 / 0" in Neo City). Not yet confirmed in game.
+
+**Neo City death stuck in black and white (user screenshot, 2026-11-14):** "YOU ARE DESTROYED", "You have used 1 NEO
+Retry Item", "Entering Driver Dome", the screen left in the client's GrayScale effect (g_fGrayIntensity; set by the
+death function 0x788eea, flag 0xa034b4, cleared by 0x788ae0 / the countdown 0x7890bb). The 0xef2 builder (0x84e90b)
+writes only +2 (key) and +0xa (kind); +6 is leftover memory, and the server read its flag there: the Retry (kind 1)
+was taken for "alive again" and got no 0xef3, so the client's countdown ended the run. Now kind 1 -> 0xef3 with
++6 = 1 (the revive routine 0x787f10), kind 0 -> 0xef3 with 0 (acknowledged, a death counted). Not yet confirmed in game.
 
 **Closed (user, 2026-11-14):** the Hurricane's B / C aero kits looking like A (HANDOVER session 44) is solved: the
 aero index renumbering of session 45.

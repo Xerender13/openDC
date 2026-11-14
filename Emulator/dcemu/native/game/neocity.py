@@ -137,8 +137,9 @@ have no state gate. One run = one party, so every relay goes to the run's member
       and @0x34 zero.
    -> S>C 0xc7 (0xc + 0x40 n; handler 0x53baf0) to EVERY run member: the request's u32 time @2, u32 n @6,
       u16 0 @0xa, then the records from +0xc. Each record is copied as the client sent it, except u16 @0x08 =
-      the sender's serial when 0, u16 @0x0a = 0 (spawn now; any other value parks the record in the client's
-      pending list, 0x53b9d0), u32 @0x30 = the run's CHAPTER KEY when 0 (the handler compares it with
+      the sender's serial when 0, u16 @0x0a = the run's next enemy number (the handler skips a record whose +0xa is 0,
+      0x53bd0c-0x53bd11 with the record at ebx-0x3c; it was forced to 0, so no enemy ever spawned; and
+      (+0x0a << 16) | +0x08 is the client's actor key, so it must differ per enemy: ENEMY_FIRST), u32 @0x30 = the run's CHAPTER KEY when 0 (the handler compares it with
       [activity+0x24], which is the chapter key — not an owner serial; lead's correction to NEO_PROTOCOL_B
       1.1 / 5.2) and u32 @0x34 = the quest index (0 without a quest) when 0. The record fields @0x12..0x1a are
       left exactly as the client sent them *(guess: NEO_PROTOCOL_B 5.2 says they are HP/level copied into the
@@ -249,12 +250,20 @@ SAVE_SQL = ("UPDATE SKID_QUEST_TB SET STATE=%s, FAILNUM=%s, LASTDATE=GetDate()"
 REWARD_TEXT = re.compile(r'reward\s+(exp|mito)\s*:\s*([\d,]+)', re.I)
 HUV_FILE = 'NeoHuvParam.xlt'        # Init/: column 1 Huv Param ID, 2 level, 4 HUV Name, 18 reward group ('n/a')
 ENEMY_CAP = 512                     # 0xc6 records kept per run, for a member who reloads
+ENEMY_FIRST = 0x100                 # record +0x0a of a run's first enemy: (+0x0a << 16) | +0x08 is the client's actor
+                                    # key (0x523483 -> 0x558e65); +0x08 = the owner's serial (0x5237d1: the owner's
+                                    # client runs the AI). One +0x0a for all made 25 enemies one actor (client log:
+                                    # "Already huv have control" x24, 0x45e7c2; NEO_VISIBLE.md)
 KILL_EXP_PER_LEVEL = 10             # THE EMULATOR'S OWN kill amounts: no client table has them (NEO_PROTOCOL_B 5)
 KILL_MITO_PER_LEVEL = 10
 
 runs = {}                           # run id -> Run
+START_ENTRY = 1                     # 0xe89 / 0xed9 +0xe: activity +0x34 (send_load)
 _run_ids = itertools.count(1)
-_chapters = _quests = _missions = _huvs = None
+_chapters = _quests = _missions = _huvs = _objects = _huv_rand = None
+OBJECT_FILE, HUV_RAND_FILE = 'NC_object.xlt', 'NC_HuvRand.xlt'
+ENEMY_KINDS = {'NEO_HUB': 1, 'NEO_HUV': 0}   # NC_object object_type -> record u16 @0 (NEO_SPAWN.md 2.1)
+POSITION = re.compile(r'(\d+)\(([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\)')
 
 
 def is_on():
@@ -307,14 +316,27 @@ def heal(session, amount):
 
 @on(SVC, C2S, 0xf4d)
 async def hp_sync(session, frame):
-    """C>S 0xf4d: the car's HP report -> kept, and S>C 0xf4e with the same plain value (a no-op for the client)."""
+    """C>S 0xf4d: the car's HP report (its max HP after each 0x2f8: 0x4b3d20 -> 0x788750 = 0x2f8 dword 20 + the parts'
+    own Neo option sum at record +0x9e4, which the server cannot change; docs/neo_work/NEO_HP.md) -> kept, and S>C 0xf4e.
+    The client's handler stores 1..20000 as is (0x53e663) and 0 / -1 as -1 (0x53e69f), and -1 means "the car's own
+    HP" (0x4b5328). A strong car reports more than 20000 (Xerender's 45936, user 2026-11-14): no answer left its HP
+    unset (entered Neo City destroyed), a capped 20000 left it below its max, so the damage state never reset
+    (0x4b3d5f: only when HP >= max); it gets 0 = its own HP."""
     if not is_on() or len(frame.payload) < 4:
         return
     hp, = struct.unpack_from('<i', frame.payload)
-    if not 0 < hp <= MAX_HP:
+    if hp <= 0:
         return
-    set_hp(session, hp)
-    send(session, Frame(0xf4e, struct.pack('<i', hp)))
+    set_hp(session, min(hp, MAX_HP))
+    send(session, Frame(0xf4e, struct.pack('<i', hp if hp <= MAX_HP else 0)))
+    r = run_of(session)
+    if r is not None and not getattr(r, 'hud_drawn', False) and session.state.get('player'):
+        # the first report inside the run comes after the Neo area loaded: the stat frames once more, so the client
+        # draws the HP HUD from the car (0x2f8 -> 0x4b3d20 -> 0x596d40); sent after 0xedd it came before the area
+        # and the bar stayed empty at the start (user, 2026-11-14)
+        r.hud_drawn = True
+        for f in stat_frames(session.state['player']):
+            send(session, f)
 
 
 # ---- the client's tables (NC_chapter.xlt / NC_quest.xlt) ------------------------------------------------
@@ -373,7 +395,7 @@ def quests():
     global _quests
     if _quests is None:
         _quests = [dict(chapter=_cell(r, 1), id=_cell(r, 2), title=_cell(r, 3), exp=_int(_cell(r, 6)),
-                        mito=_int(_cell(r, 7)),
+                        mito=_int(_cell(r, 7)), objects=_cell(r, 5),
                         items=[c for c in (_cell(r, 8), _cell(r, 9), _cell(r, 10))
                                if c not in ('', 'n/a', '0')])
                    for r in _read(QUESTS_FILE)]
@@ -426,10 +448,128 @@ def huv_params():
         for r in _rows(os.path.join(context.data.root, 'Init', HUV_FILE)):
             i = _int(_cell(r, 1))
             if i:
-                out[i] = dict(level=_int(_cell(r, 2)), name=_cell(r, 4), reward=_cell(r, 18),
+                out[i] = dict(level=_int(_cell(r, 2)), model=_int(_cell(r, 3)), hp=_int(_cell(r, 13)),
+                              name=_cell(r, 4), reward=_cell(r, 18),
                               kind=kill_class(_int(_cell(r, 5)), _cell(r, 4)))
         _huvs = out
     return _huvs
+
+
+def objects():
+    """NC_object.xlt's enemy rows (NEO_HUB / NEO_HUV) by Group ID: dict(index, kind, create, regen_num, regen_time,
+    positions=[(pos group, x, y, z, heading)]). BUILDING / TURRET rows have another position format and travel by
+    other messages; they are left out."""
+    global _objects
+    if _objects is None:
+        out = {}
+        for r in _read(OBJECT_FILE):
+            kind = ENEMY_KINDS.get(_cell(r, 3))
+            if kind is None:
+                continue
+            pos = []
+            for i in range(10, 10 + min(_int(_cell(r, 9)), 10)):
+                m = POSITION.fullmatch(_cell(r, i).strip('"'))
+                if m:
+                    pos.append((int(m[1]),) + tuple(float(v) for v in m.groups()[1:]))
+            out.setdefault(_cell(r, 1), []).append(dict(
+                index=_int(_cell(r, 0)), kind=kind, create=_cell(r, 4), regen_num=_int(_cell(r, 6)),
+                regen_time=float(_cell(r, 7) or 0), positions=pos))
+        _objects = out
+    return _objects
+
+
+def huv_rand():
+    """NC_HuvRand.xlt: position group -> [(Huv Param ID, probability)]."""
+    global _huv_rand
+    if _huv_rand is None:
+        out = {}
+        for r in _read(HUV_RAND_FILE):
+            out.setdefault(_int(_cell(r, 1)), []).append((_int(_cell(r, 3)), max(_int(_cell(r, 5)), 0)))
+        _huv_rand = out
+    return _huv_rand
+
+
+def pick_huv(group, rng=random):
+    """One Huv Param ID of a position group, weighted by Probability (the client accepts any id of the group)."""
+    rows = [(i, w) for i, w in huv_rand().get(group, ()) if i in huv_params()]
+    if not rows:
+        return None
+    return rng.choices([i for i, _ in rows], weights=[w or 1 for _, w in rows])[0]
+
+
+def spawn_records(chapter, quest, serial, create='Q_START', rng=random, numbers=None):
+    """The 0xc7 messages the client itself asked for with 0xc6 when +0xe of 0xe89 / 0xed9 was 0 (NEO_SPAWN.md 1.3,
+    3.2; one rebuilt record was byte-identical to a logged one): per NC_object row of the quest's object_group_ID with
+    this create_type, one message of object_num records. Record (0x40): u16 kind (1 HUB / 0 HUV), u16 position index,
+    u16 level, u16 HUV model, u16 owner serial, u16 enemy number (@0xa, from `numbers`, never 0: the handler skips
+    0, 0x53bd0c; with @0x08 the client's actor key), u16 HP, u32 Huv Param ID,
+    u32 position group, u16 NC_object index, u16 regen_num, f32 regen_time, u16 1, f32 x, y, z, heading, u32 chapter
+    key, u32 quest, u32 0, u16 0 (@0x3c: non-zero parks the actor, 0x53bec7), 2 bytes 0. -> [bytes records]."""
+    table = quests_of(chapter)
+    if not 0 <= quest < len(table):
+        return []
+    numbers = numbers if numbers is not None else itertools.count(ENEMY_FIRST)
+    out = []
+    for row in objects().get(table[quest]['objects'], ()):
+        if row['create'] != create:
+            continue
+        recs = b''
+        for i, (group, x, y, z, h) in enumerate(row['positions']):
+            pid = pick_huv(group, rng)
+            if pid is None:
+                continue
+            huv = huv_params()[pid]
+            recs += struct.pack('<6HHIIHHfH4fIII2x2x', row['kind'], i, huv['level'], huv['model'], serial & 0xffff,
+                                next(numbers) & 0xffff or 1,
+                                min(huv['hp'], 0xffff), pid, group, row['index'], row['regen_num'],
+                                row['regen_time'], 1, x, y, z, h, chapter['key'], quest, 0)
+        if recs:
+            out.append(recs)
+    return out
+
+
+def enemy_numbers(r):
+    """The run's enemy numbers (record +0x0a), unique within the run, 0 skipped."""
+    while True:
+        n = r.enemy_no
+        r.enemy_no = n % 0xffff + 1
+        yield n
+
+
+def clear_enemies(r):
+    """Remove the enemies the run spawned so far: S>C 0xce (handler 0x525d60: actor by key (+2, +4) -> state 2,
+    dying) per kept record, no killer. The client has no other way to drop a server-spawned group (its own
+    delete_type machinery only runs in the +0xe = 0 flow; 0xf3f flushes only what the client staged:
+    NEO_HUBCRASH.md 3). Without it Q1-Q3 stacked three HUBs at 1084(1719.6,5623.5). The keys go into r.killed, so a
+    kill report that comes back for them pays nothing."""
+    n = 0
+    for rec in r.enemies:
+        lo, hi = struct.unpack_from('<HH', rec, 8)
+        huv_id, = struct.unpack_from('<I', rec, 0xe)
+        r.killed.add((lo, hi))
+        body = bytearray(0x3e)
+        struct.pack_into('<HH', body, 0, lo, hi)
+        struct.pack_into('<I', body, 0x34, huv_id)
+        r.cast(Frame(0xce, bytes(body)))
+        n += 1
+    r.enemies = []
+    return n
+
+
+def spawn(session, r, quest):
+    """Send the quest's enemies to every run member (0xc7), kept on the run for a member who reloads; the previous
+    quest's enemies are removed first (clear_enemies)."""
+    gone = clear_enemies(r)
+    if gone:
+        session.log.note(f'neocity: {gone} enemies of the previous quest removed (0xce) in run {r.id}')
+    msgs = spawn_records(r.chapter, quest, serial_of(session), numbers=enemy_numbers(r))
+    for recs in msgs:
+        n = len(recs) // 0x40
+        r.enemies.extend(recs[i * 0x40:(i + 1) * 0x40] for i in range(n) if len(r.enemies) < ENEMY_CAP)
+        r.cast(Frame(0xc7, struct.pack('<IIH', int(time.monotonic() * 1000) & 0xffffffff, n, 0) + recs))
+    if msgs:
+        session.log.note(f'neocity: quest {quest} enemies: {sum(len(m) // 0x40 for m in msgs)} in {len(msgs)} '
+                         f'message(s) (run {r.id})')
 
 
 def kill_class(huv_type, name):
@@ -484,6 +624,7 @@ class Run:
         self.missions_done = set()                  # (quest, mission) already answered with 0xeee
         self.mission_notes = set()                  # (quest, mission) already logged as 0xeec only
         self.enemies = []                           # the 0xc7 records (the client's, filled); at most ENEMY_CAP
+        self.enemy_no = ENEMY_FIRST                 # the next record +0x0a (the actor key's high word)
         self.killed = set()                         # (lo, hi) enemy pairs already paid in this run
         self.turrets = 0                            # the next 0xf42 turret id
         self.hits = 0                               # 0xf4f explosions forwarded (0xf50) in this run
@@ -565,7 +706,10 @@ def send_load(r, session):
     map_id = MAPS.get(r.chapter['city'], MAPS['NeoOros'])
     session.state['neo_run'] = r
     forget_hp(session)
-    send(session, Frame(0xe89, struct.pack('<IIII', 0, map_id, r.chapter['key'], r.id) + bytes(12)))
+    # +0xe: the client echoes it in 0xed8 and 0xed9 puts it in activity +0x34, an index into the quest's 0x38-byte
+    # entries (0x7b47c6). 1 (it was the run id, 1 for the first run) showed "1) A mysterious voice"; 0 skipped that
+    # first objective (user, 2026-11-14): 1, also for later runs
+    send(session, Frame(0xe89, struct.pack('<IIII', 0, map_id, r.chapter['key'], START_ENTRY) + bytes(12)))
     session.log.note(f'neocity: load {r.chapter["id"]} ({r.chapter["city"]}, map {map_id}) as run {r.id}')
 
 
@@ -711,14 +855,16 @@ async def leave_area(session, frame):
 
 @on(SVC, C2S, 0xee7)
 async def quest_list(session, frame):
-    """0xee7 -> 0xee6: the chapters this character has cleared (never while a run is active)."""
+    """0xee7 -> 0xee6: the chapters this character has cleared (records: u32 chapter key looked up in the client's
+    chapter map [mgr+0x148], u16 @+0x14 the clear count, added when > 0; 0x7ad040, then 0x7abee0 recomputes the
+    unlocks). Never during a run: 0x7ad040 also sets [mgr+0x174] = 0, and answering in a run removed the quest marker
+    (user screenshot, 2026-11-14), so the client's repeated 0xee7 during a run stays unanswered."""
     p = _player(session, frame, 0)
     if not p:
         return
     r = run_of(session)
     if r:
-        session.log.note(f'neocity: quest list asked during run {r.id}: not answered (0xee6 would drop the '
-                         f'client\'s activity)')
+        await goal_zone(session, r, frame)
         return
     counts = await cleared(p)
     done = sorted((k, n) for k, n in counts.items() if n > 0)
@@ -728,14 +874,67 @@ async def quest_list(session, frame):
     session.log.note(f'neocity: quest list: {len(done)} chapters cleared {done}')
 
 
+async def goal_zone(session, r, frame):
+    """0xee7 during a run is not a list request: the client's activity sends it from its ticks with u32 key, quest,
+    mission, flag (NEO_READY_QUEST.md 1.2): flag 3 / 2 from the phase-0 tick before the quest runs (left unanswered:
+    0xee6 would drop the activity), 1 once when the car enters the mission's goal zone in the running quest (0x7a5883,
+    after 0x79d4e0 / 0x7a54e0, latch +0x12c), 0 when it leaves (0x7a58c2). The zone answer is S>C 0xeea
+    Cmd_NeoQuestGoalPlaceAck (18: key, quest, mission, result; handler 0x533fb0): result 1 -> activity phase 3 (0x53400f),
+    the checkpoint's scene (the NPC dialogue of the video); the client then reports the mission itself with 0xeef, which
+    mission_complete answers with 0xeee. Once per mission. (A first try answered 0xeee at once: the dialogue was skipped
+    and the start zone's mission 0 completed on arrival; user, 2026-11-14.)"""
+    if len(frame.payload) < 16:
+        return
+    key, quest, mission, flag = struct.unpack_from('<4I', frame.payload)
+    if flag == 3:
+        # phase 0 ("Ready Quest"): the car entered the pending quest's start zone (0x7a2f40: 0x79d4e0, latch +0x12c,
+        # flag 3; 2 when it leaves). The quest starts here: 0xedd (0x526d30 -> phase 2, the intro). Sending 0xedd at
+        # the chapter load skipped the start-zone intro (user screenshots, 2026-11-14)
+        # Tried: 0xeea result 1 here to play an intro scene first -> the client crashed (no quest running yet in phase
+        # 0; user, 2026-11-14). The car spawns inside the zone, so the quest starts about a second after the load; the
+        # video's start-zone intro is still open.
+        # The video's start dialogue (Korean server screenshot, user 2026-11-14: "Quest Ready" + the start row's
+        # Call Sign Radio talk) is 0xeea result 3: 0x5340a2 -> 0x532d60 (phase 0/1: the chapter's first quest, phase
+        # 5: the next one) -> 0x79ee90 -> 0x532c70, the script runner, on the quest's start script (activity +0x18).
+        # It leaves the phase and activity +0x10 alone (result 1 read the NULL +0x10 and crashed). The quest then
+        # starts with the client's 0xedc (quest_start) or, failing that, when the car enters the zone again.
+        nxt = getattr(r, 'next_quest', None)
+        if r.quest is None and nxt is not None and nxt < len(quests_of(r.chapter)):
+            intros = r.__dict__.setdefault('intros', set())
+            if nxt not in intros:
+                intros.add(nxt)
+                send(session, Frame(0xeea, struct.pack('<4I', key, quest, mission, 3)))
+                session.log.note(f'neocity: start zone of quest {nxt} entered: 0xeea result 3, the start dialogue '
+                                 f'(activity quest {quest}, mission {mission}; run {r.id})')
+                return
+            start_quest(session, r, key, nxt)
+        return
+    if flag != 1:
+        return
+    goals = r.__dict__.setdefault('goals', set())
+    if (quest, mission) in goals or (quest, mission) in r.missions_done:
+        return
+    goals.add((quest, mission))
+    send(session, Frame(0xeea, struct.pack('<4I', key, quest, mission, 1)))
+    m = mission_of(r.chapter, quest, mission)
+    session.log.note(f'neocity: goal zone of mission {mission} ({m["type"] if m else "?"}) of quest {quest} reached in '
+                     f'run {r.id}: 0xeea')
+
+
 @on(SVC, C2S, 0xed8)
 async def chapter_start(session, frame):
-    """0xed8 -> 0xed9: the client asks for the chapter after 0xe89 loaded the area."""
-    if not _player(session, frame, 8) or not run_of(session):
+    """0xed8 -> 0xed9 (the activity, "Ready Quest", phase 0) and 0xedd (key, quest 0): the only message that moves the
+    activity to the running quest (0x526d30 -> 0x7b47a0 -> 0x7aab50: phase 2, the quest's missions, the intro notice
+    GlobalText 10122 = the NPC briefing). The client asks for it with 0xedc only from its quest list row (0x5a0260);
+    without it the run stayed at "Ready Quest" with an empty HP frame (user, 2026-11-14; NEO_READY_QUEST.md). 0xed9's
+    last u32 goes to activity +0x34 (an index, see send_load): START_ENTRY."""
+    r = run_of(session)
+    if not _player(session, frame, 8) or not r:
         return
-    key, run_id = struct.unpack_from('<II', frame.payload)
-    send(session, Frame(0xed9, struct.pack('<IIII', key, 0, 0, run_id)))
-    session.log.note(f'neocity: chapter start key {key}, run {run_id}')
+    key, _ = struct.unpack_from('<II', frame.payload)
+    send(session, Frame(0xed9, struct.pack('<IIII', key, 0, 0, START_ENTRY)))
+    r.quest, r.next_quest = None, 0         # "Ready Quest": 0xedd comes when the car enters the start zone (goal_zone)
+    session.log.note(f'neocity: chapter start key {key}, run {r.id}: ready, quest 0 waits for its start zone')
 
 
 @on(SVC, C2S, 0xedc)
@@ -747,9 +946,18 @@ async def quest_start(session, frame):
     if not r:
         return
     key, quest = struct.unpack_from('<II', frame.payload)
-    r.quest = quest
+    start_quest(session, r, key, quest)
+
+
+def start_quest(session, r, key, quest):
+    """0xedd (the only way to phase 2, 0x526d30) and the quest's enemies, once per quest start."""
+    if r.quest == quest:
+        session.log.note(f'neocity: quest {quest} already running (run {r.id})')
+        return
+    r.quest, r.next_quest = quest, None
     send(session, Frame(0xedd, struct.pack('<II', key, quest)))
-    session.log.note(f'neocity: quest {quest} of chapter key {key} starts (run {r.id})')
+    spawn(session, r, quest)
+    session.log.note(f'neocity: quest {quest} of chapter key {key} starts: 0xedd (run {r.id})')
 
 
 @on(SVC, C2S, 0xeeb)
@@ -805,10 +1013,20 @@ async def mission_complete(session, frame):
 
 @on(SVC, C2S, 0xeed)
 async def mission_params(session, frame):
-    """0xeed: mission-complete parameters, logged only (0xeec's counters are not known yet)."""
-    if not _player(session, frame, 0xc) or not run_of(session):
+    """0xeed (key, quest, mission): the client after a mission's checkpoint scene (0xeea result 1 -> phase 3) ended
+    (user, 2026-11-14: the scene stayed at its end without an answer). -> 0xeee (complete) for that mission, once. The
+    0xeec counters (handler 0x53cee0) only exist for mission types 6..11, so they are not sent here."""
+    if not _player(session, frame, 0xc):
         return
-    session.log.note(f'neocity: mission-complete params {frame.payload[:0xc].hex()} (no 0xeec: not decoded)')
+    r = run_of(session)
+    if not r:
+        return
+    key, quest, mission = struct.unpack_from('<III', frame.payload)
+    if (quest, mission) in r.missions_done:
+        return
+    r.missions_done.add((quest, mission))
+    send(session, Frame(0xeee, struct.pack('<3I', key, quest, mission)))
+    session.log.note(f'neocity: mission {mission} of quest {quest} finished after its scene (0xeed): 0xeee, run {r.id}')
 
 
 @on(SVC, C2S, 0xede)
@@ -856,6 +1074,10 @@ async def quest_reward(session, frame):
     if gains and gains.items:
         from .items import mod_list
         send(session, mod_list(*gains.items))
+    if quest + 1 < len(table) and r.quest == quest:
+        # the next quest waits for its start zone (the minimap's Q) like the first: goal_zone sends its 0xedd
+        r.quest, r.next_quest = None, quest + 1
+        session.log.note(f'neocity: quest {quest + 1} ({table[quest + 1]["id"]}) waits for its start zone (run {r.id})')
 
 
 @on(SVC, C2S, 0xeda)
@@ -1069,20 +1291,24 @@ async def chapter_give_up(session, frame):
 
 @on(SVC, C2S, 0xef2)
 async def dying(session, frame):
-    """0xef2: flag 0 = died (0xef3), flag 1 = alive again (the Neo HP back to full)."""
+    """0xef2 (14; builder 0x84e90b): u32 chapter key @+2, u32 @+0xa a running count (1, 2, 3, ... 3750: the client
+    sends it again and again while its car is destroyed); +6 is never written (leftover memory). -> 0xef3 (14, handler
+    0x526ec0): u32 key, u32 revive @+6, u32 0 - always 0 here: a non-zero +6 runs the revive routine 0x787f10, and
+    answering every 0xef2 with it made a destroyed car revive and die again in a loop (5516 messages in 34 s, user
+    2026-11-14: "Resurrected!!" / "YOU ARE DESTROYED"). The NEO Retry is the client's own dialog (12 items, 5 minutes).
+    A death is counted once per burst."""
     if not _player(session, frame, 0xc):
         return
     r = run_of(session)
     if not r:
         return
-    key, flag, value = struct.unpack_from('<III', frame.payload)
-    if flag:
-        forget_hp(session)
-        session.log.note(f'neocity: alive again in run {r.id} (chapter key {key}, value {value})')
-    else:
+    key, _, count = struct.unpack_from('<III', frame.payload)
+    now = time.monotonic()
+    if now - getattr(r, 'last_death', 0.0) > 5.0:
         r.deaths += 1
-        send(session, Frame(0xef3, struct.pack('<III', 0, 1, 0)))
-        session.log.note(f'neocity: died in run {r.id} (chapter key {key}, value {value})')
+        session.log.note(f'neocity: destroyed in run {r.id} (chapter key {key}, count {count})')
+    r.last_death = now
+    send(session, Frame(0xef3, struct.pack('<III', key, 0, 0)))
 
 
 @on(SVC, C2S, 0xef5)
@@ -1113,11 +1339,19 @@ async def enemy_request(session, frame):
     n = min(n, (len(frame.payload) - 8) // 0x40)
     serial = session.state.get('serial', 0) & 0xffff
     body = bytearray()
+    dropped = 0
     for i in range(n):
         rec = bytearray(frame.payload[8 + i * 0x40:8 + (i + 1) * 0x40])
+        if struct.unpack_from('<H', rec)[0] == 3:
+            # kind 3 = a HUB's summons (its AI 0x4e2980 -> 0x4ef2d0): relayed, they took the local HUV control
+            # (+0x08 = the member's serial, 0x5237d1 -> 0x45e7b0) and the client crashed in 0x4a9990 at 0x4a99a1
+            # reading the control's unset +0x78 (dump DriftCity.exe.npd, user 2026-11-14). Not relayed: the HUB
+            # spends its summon count anyway (0x4e2a04) and has no children (NEO_HUBCRASH.md 4.1).
+            dropped += 1
+            continue
         if not struct.unpack_from('<H', rec, 8)[0]:
             struct.pack_into('<H', rec, 8, serial)
-        struct.pack_into('<H', rec, 0xa, 0)                 # 0: spawn now, not the client's pending list
+        struct.pack_into('<H', rec, 0xa, next(enemy_numbers(r)))   # unique actor key; 0 is skipped (0x53bd0c)
         if not struct.unpack_from('<I', rec, 0x30)[0]:
             struct.pack_into('<I', rec, 0x30, r.chapter['key'])
         if not struct.unpack_from('<I', rec, 0x34)[0]:
@@ -1125,6 +1359,11 @@ async def enemy_request(session, frame):
         if len(r.enemies) < ENEMY_CAP:
             r.enemies.append(bytes(rec))
         body += rec
+    if dropped:
+        session.log.note(f'neocity: {dropped} HUB summon record(s) (kind 3) not relayed in run {r.id}')
+    n -= dropped
+    if not n:
+        return
     r.cast(Frame(0xc7, struct.pack('<IIH', time_, n, 0) + bytes(body)))
     session.log.note(f'neocity: {n} enemy record(s) (request time {time_}, chapter key {r.chapter["key"]}, '
                      f'quest {r.quest}) for run {r.id}')

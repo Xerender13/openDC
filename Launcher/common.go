@@ -221,6 +221,8 @@ exe =
 ; by the car's V grade, battle zone and channel battle by V grade) and the EU copies of its tables are put in place
 ; while it runs (made by "python -m tools.eu_rules build" in Emulator/; without them the server rules still apply)
 rules = us
+; units: mph or kph (also --mph / --kph): the speed and distance unit the client shows, independent of the rules
+units = mph
 ; goption.ini MainUIType: 0 = the classic HUD, 1 = the 2011 "ADV" HUD
 main_ui_type = 1
 ; item_icons: 1 = show the items received (combos, traffic items, patrol prizes) as icons on the HUD, 0 = only the
@@ -444,6 +446,10 @@ func main() {
 			cfg["client.rules"] = "eu"
 		case "--us", "-us", "/us":
 			cfg["client.rules"] = "us"
+		case "--kph", "-kph", "/kph":
+			cfg["client.units"] = "kph"
+		case "--mph", "-mph", "/mph":
+			cfg["client.units"] = "mph"
 		default:
 			ip = a
 		}
@@ -459,6 +465,20 @@ func main() {
 	} else {
 		logf("client %s, server %s", filepath.Join(dir, clientExe), ip)
 	}
+	switch u := strings.ToLower(cfg.get("client.units", "mph")); u {
+	case "kph", "km/h", "kmh":
+		if !unitsInFile(filepath.Join(dir, clientExe), client2016) {
+			fail("[client] units = kph needs the unpacked client (%s has other code at the speed displays: the 2011 "+
+				"ASProtect DriftCity.exe? Use DriftCityUS.exe, Emulator/tools/eu_client.py us)", clientExe)
+		}
+		kph = true
+	case "mph":
+	default:
+		fail("[client] units %q: mph or kph (%s)", u, iniPath)
+	}
+	if kph && !clientEU && !nationSendInFile(filepath.Join(dir, clientExe), client2016) {
+		fail("[client] units = kph needs the unpacked client (%s has other code at the login)", clientExe)
+	}
 	switch r := strings.ToLower(cfg.get("client.rules", "us")); {
 	case r == "eu" && clientEU:
 		logf("rules: EU (the EU client sends its nation itself)")
@@ -467,19 +487,15 @@ func main() {
 			"DriftCity.exe? Use DriftCityUS.exe, Emulator/tools/eu_client.py us)", clientExe)
 	case r == "eu":
 		euRules = true
-		logf("rules: EU; %s", applyEUTables(dir))
+		logf("rules: EU, units: %s; %s", map[bool]string{true: "km/h", false: "mph"}[kph], applyEUTables(dir))
 	case r == "us":
-		if n := restoreTables(dir); n > 0 {
-			logf("rules: US; US tables put back: %d files", n)
-		} else {
-			logf("rules: US")
-		}
+		logf("rules: US, units: %s; %s", map[bool]string{true: "km/h", false: "mph"}[kph], applyEUTables(dir))
 	default:
 		fail("[client] rules %q: us or eu (%s)", r, iniPath)
 	}
 	err = launch(dir, ip, cfg)
-	if euRules {
-		logf("US tables put back: %d files", restoreTables(dir))
+	if n := restoreTables(dir); n > 0 {
+		logf("original tables put back: %d files", n)
 	}
 	if err != nil {
 		fail("%v", err)

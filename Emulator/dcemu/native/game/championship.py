@@ -437,10 +437,11 @@ def speed_flags(session):
     flags only feed texts: the lobby tooltip (Championship_Tooltip2, 0x597f0c) and the rules window (11527, 0x591b69);
     the cap itself is GlobalContent PvpGT_TouringA / B, km/h. The US client's Value_US says "%d mph or under" (11527)
     and, since 2026-10-19, "Speed Limit: %d mph" (Championship_Tooltip2, tools/global_text.py; was "%dkm/h"): US
-    clients get the caps in mph (341 km/h -> 212); EU clients (their texts say km/h) the km/h."""
+    clients get the caps in mph (341 km/h -> 212); a client showing km/h (nation.kmh: the EU program or the launcher's
+    units = kph, whose texts say km/h) the km/h."""
     from .. import nation
     a, b = cfg()['touring_a'], cfg()['touring_b']
-    if not nation.eu_client(session):          # the US client's texts (also with EU rules: nation.eu_client)
+    if not nation.kmh(session):                # mph unless the client shows km/h (EU program, launcher units = kph)
         a, b = round(a / MILE), round(b / MILE)
     return {'BattleZone_TouringASpeed': a, 'BattleZone_TouringBSpeed': b}
 

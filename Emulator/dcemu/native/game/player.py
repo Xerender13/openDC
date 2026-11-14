@@ -184,7 +184,23 @@ class Player:
         import time
         s.item_use = tuple(v if end > time.monotonic() else 0
                            for v, end in (self.buffs.get(k, (0, 0)) for k in range(4)))
+        from ..version import is_2016
+        if is_2016():
+            s.neo = neo_combat(self.char.level, s.total())
         return s
+
+
+def neo_combat(level, total):
+    """The 2016 0x2f8 combat dwords [20..25]: Neo HP, Defense, Weapon Attack (base, random extra), Crashing Attack
+    (base, random extra) - "HP increases with [Car & Parts Points] and [Level]", "Defense: Parts Option, Armor Panel,
+    Level", "Weapon Attack: Weapon, Coil, Parts Option, Level", "Crashing Attack: Fuse, Parts Option, Level" (the
+    client's NEO Performance Info). The formulas are OURS, fitted to a real level-96 car (HP 7880, Defense 300, Weapon
+    1215-1361, Crash 153-442): no source gives the original. total = (speed, crash, accel, boost) of the car."""
+    points = sum(max(0, v) for v in total)
+    crash = max(0, total[1])
+    hp = 30 * level + 2 * points
+    weapon = 12 * level + points // 10
+    return (hp, 3 * level + points // 100, weapon, weapon * 12 // 100, crash // 4, crash // 2)
 
 
 async def load(name, member=None):

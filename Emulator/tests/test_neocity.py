@@ -44,10 +44,14 @@ class NeoCityHpTest(unittest.TestCase):
         self.assertEqual(struct.unpack_from('<I', sent[0].payload)[0], 0x111a)
         self.assertEqual(neocity.hp_of(self.s), 0x111a)
 
-    def test_out_of_range_report_ignored(self):
+    def test_out_of_range_report(self):
+        """0 is ignored; a strong car's HP above the client's 20000 bound is answered with 0 (its own HP) (45936 entered
+        Neo City destroyed when it got no answer, user 2026-11-14)."""
         self.assertEqual(self.poll(0), [])
-        self.assertEqual(self.poll(neocity.MAX_HP + 1), [])
         self.assertIsNone(neocity.hp_of(self.s))
+        sent = self.poll(45936)
+        self.assertEqual(struct.unpack_from('<I', sent[0].payload)[0], 0)        # 0 -> -1 = the car's own HP
+        self.assertEqual(neocity.hp_of(self.s), neocity.MAX_HP)
 
     def test_damage_and_heal_clamp(self):
         self.assertIsNone(neocity.damage(self.s, 5))
@@ -204,15 +208,15 @@ class NeoCityFlowTest(unittest.TestCase):
                       AsyncMock(return_value=(SimpleNamespace(items=[]), [])))]
 
     def test_solo_suggest_loads(self):
-        """0x53e400: u32 0, the map selector, the chapter key, the run id, 12 zero bytes; the kept HP is forgotten."""
+        """0x53e400: u32 0, the map selector, the chapter key, 0, 12 zero bytes; the kept HP is forgotten."""
         r = self.enter(0)
         frame = self.sent[0]
         self.assertEqual(len(frame.payload) + 2, 30)
         zero, map_id, key, run_id = struct.unpack_from('<4I', frame.payload)
         self.assertEqual((zero, map_id, key), (0, 6, 0))            # NeoOros = 6 (jump table 0x788a2c)
         self.assertEqual(frame.payload[16:], bytes(12))
-        self.assertEqual(run_id, r.id)
-        self.assertIs(neocity.runs[run_id], r)
+        self.assertEqual(run_id, neocity.START_ENTRY)                 # activity +0x34 index (1), not the run id
+        self.assertIs(neocity.runs[r.id], r)
         self.assertIsNone(neocity.hp_of(self.s))                      # the new car reports its HP
         self.assertEqual(neocity.MAPS, {'NeoOros': 6, 'NeoCras': 7, 'NeoKoinonia': 8, 'NeoMoonPalace': 9})
 
@@ -224,16 +228,71 @@ class NeoCityFlowTest(unittest.TestCase):
 
     def test_chapter_start_ack(self):
         r = self.enter()
-        frames = self.handle(neocity.chapter_start, Frame(0xed8, struct.pack('<II', 0, r.id)))
-        self.assertEqual(len(frames), 1)
-        self.assertEqual(frames[0].type, 0xed9)
+        frames = self.handle(neocity.chapter_start, Frame(0xed8, struct.pack('<II', 0, 0)),
+                             [patch.object(neocity, 'stat_frames', lambda p: [])])
+        self.assertEqual([f.type for f in frames], [0xed9])               # "Ready Quest"
         self.assertEqual(len(frames[0].payload) + 2, 18)
-        self.assertEqual(struct.unpack_from('<4I', frames[0].payload), (0, 0, 0, r.id))
+        self.assertEqual(struct.unpack_from('<4I', frames[0].payload), (0, 0, 0, neocity.START_ENTRY))
+        self.assertIsNone(r.quest)
+        frames = self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 0, 0, 0, 3)))   # start zone
+        # first the start row's dialogue: 0xeea result 3 (0x5340a2 -> the script runner), the quest still waits
+        self.assertEqual([(f.type, struct.unpack('<4I', f.payload)) for f in frames], [(0xeea, (0, 0, 0, 3))])
+        self.assertIsNone(r.quest)
+        frames = self.handle(neocity.quest_start, Frame(0xedc, struct.pack('<II', 0, 0)))   # after the dialogue
+        self.assertEqual((frames[0].type, struct.unpack('<II', frames[0].payload)), (0xedd, (0, 0)))
+        # then the quest's enemies: one 0xc7 per Q_START row of neo_oros_ch1_q1 (NC_object 135..140)
+        self.assertEqual([(f.type, struct.unpack_from('<I', f.payload, 4)[0]) for f in frames[1:]],
+                         [(0xc7, n) for n in (4, 4, 4, 4, 6, 3)])
+        rec = frames[1].payload[0xa:0x4a]
+        self.assertEqual(struct.unpack_from('<HHHH', rec, 0)[0:2], (1, 0))          # NEO_HUB, position 0
+        self.assertEqual(struct.unpack_from('<HH', rec, 8), (1234, neocity.ENEMY_FIRST))   # owner, enemy number
+        keys = {struct.unpack_from('<I', f.payload, 0xa + 0x40 * i + 8)[0]
+                for f in frames[1:] for i in range(struct.unpack_from('<I', f.payload, 4)[0])}
+        self.assertEqual(len(keys), 25)                                           # one actor key per enemy
+        self.assertIn(struct.unpack_from('<I', rec, 0xe)[0], (100466, 100560, 100561))   # NC_HuvRand group 1084
+        self.assertEqual(struct.unpack_from('<IH', rec, 0x12), (1084, 135))
+        self.assertEqual(struct.unpack_from('<4f', rec, 0x20)[:2], struct.unpack('<2f', struct.pack('<2f', 1719.6, 5623.5)))
+        self.assertEqual(struct.unpack_from('<IIIH', rec, 0x30), (0, 0, 0, 0))     # key 0, quest 0, active
+        self.assertEqual(len(r.enemies), 25)
+        self.assertEqual(r.quest, 0)
+        self.assertEqual(self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 0, 0, 0, 3))), [])
+        self.assertEqual(self.handle(neocity.quest_start, Frame(0xedc, struct.pack('<II', 0, 0))), [])  # no 2nd spawn
+
+    def test_next_quest_removes_the_old_enemies(self):
+        """Q2's start first kills Q1's 25 enemies (0xce, key +2/+4, Huv Param @0x34, no killer), then spawns."""
+        r = self.enter()
+        self.handle(neocity.quest_start, Frame(0xedc, struct.pack('<II', 0, 0)))
+        old = [struct.unpack_from('<HH', rec, 8) for rec in r.enemies]
+        huvs = [struct.unpack_from('<I', rec, 0xe)[0] for rec in r.enemies]
+        r.quest = None
+        frames = self.handle(neocity.quest_start, Frame(0xedc, struct.pack('<II', 0, 1)))
+        kills = [f for f in frames if f.type == 0xce]
+        self.assertEqual(len(kills), 25)
+        self.assertEqual([struct.unpack_from('<HH', f.payload) for f in kills], old)
+        self.assertEqual(len(kills[0].payload), 0x3e)
+        self.assertEqual([struct.unpack_from('<I', f.payload, 0x34)[0] for f in kills], huvs)
+        self.assertTrue(set(old) <= r.killed)                                 # a returning report pays nothing
+        self.assertEqual(sum(1 for f in frames if f.type == 0xc7), 6)          # neo_oros_ch1_q2's enemy rows
+        self.assertEqual(len(r.enemies), 28)
+        self.assertFalse(set(old) & {struct.unpack_from('<HH', rec, 8) for rec in r.enemies})
+
+    def test_start_zone_again_starts_the_quest(self):
+        """Without the client's 0xedc, entering the start zone a second time starts the quest."""
+        r = self.enter()
+        self.handle(neocity.chapter_start, Frame(0xed8, struct.pack('<II', 0, 0)),
+                    [patch.object(neocity, 'stat_frames', lambda p: [])])
+        self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 0, 0, 0, 3)))
+        frames = self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 0, 0, 0, 3)))
+        self.assertEqual(frames[0].type, 0xedd)
+        self.assertEqual(r.quest, 0)
+        self.assertEqual(r.quest, 0)
+        self.assertEqual(self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 0, 0, 0, 3))), [])
 
     def test_quest_start_ack(self):
         r = self.enter(key=2)                                        # c_0005
         frames = self.handle(neocity.quest_start, Frame(0xedc, struct.pack('<II', 2, 2)))
-        self.assertEqual([f.type for f in frames], [0xedd])
+        self.assertEqual(frames[0].type, 0xedd)
+        self.assertEqual({f.type for f in frames[1:]}, {0xc7} if frames[1:] else set())   # the quest's enemies
         self.assertEqual(len(frames[0].payload) + 2, 10)
         self.assertEqual(struct.unpack_from('<II', frames[0].payload), (2, 2))
         self.assertEqual(r.quest, 2)
@@ -289,6 +348,22 @@ class NeoCityFlowTest(unittest.TestCase):
         self.add_exp.assert_awaited_once()
         self.assertEqual(self.p.neo_cleared[0], 1)
 
+    def test_dying(self):
+        """0xef2 (key, leftover, running count) -> 0xef3 (key, 0, 0): never a revive (a revive loop, user 2026-11-14);
+        one death per burst."""
+        r = self.enter(key=0)
+        for n in (1, 2, 3750):
+            frames = self.handle(neocity.dying, Frame(0xef2, struct.pack('<III', 0, 0x30000, n)))
+            self.assertEqual(struct.unpack('<III', frames[0].payload), (0, 0, 0))
+        self.assertEqual(r.deaths, 1)
+
+    def test_mission_params_completes(self):
+        """0xeed (key, quest, mission) after a checkpoint scene -> 0xeee once."""
+        r = self.enter(key=0)
+        frames = self.handle(neocity.mission_params, Frame(0xeed, struct.pack('<3I', 0, 0, 1)))
+        self.assertEqual([(f.type, struct.unpack('<3I', f.payload)) for f in frames], [(0xeee, (0, 0, 1))])
+        self.assertEqual(self.handle(neocity.mission_params, Frame(0xeed, struct.pack('<3I', 0, 0, 1))), [])
+
     def test_bonus_card_pick(self):
         """0xee8 (u32 0, u32 slot): the card's item to the picker, 0xee9 with its serial; one card each."""
         r = self.enter(key=0)
@@ -341,7 +416,10 @@ class NeoCityFlowTest(unittest.TestCase):
         self.assertEqual(struct.unpack_from('<H', frame.payload, 4 + 0x14)[0], 2)
         self.assertEqual(struct.unpack_from('<IH', frame.payload, 4 + 28)[0:1], (2,))    # c_0005 -> key 2
         self.enter()                                                     # an active run: 0xee6 would drop it
-        self.assertEqual(self.handle(neocity.quest_list, Frame(0xee7, bytes(16))), [])
+        self.assertEqual(self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 0, 0, 0, 2))), [])  # left zone
+        frames = self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 0, 0, 1, 1)))   # goal zone entered
+        self.assertEqual([(f.type, struct.unpack('<4I', f.payload)) for f in frames], [(0xeea, (0, 0, 1, 1))])
+        self.assertEqual(self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 0, 0, 1, 1))), [])  # once
 
 
 class NeoCityMissionTest(unittest.TestCase):
@@ -563,7 +641,7 @@ class NeoCityCombatTest(unittest.TestCase):
                 patch('dcemu.native.game.rewards.give', self.give)]
 
     def test_enemy_request_answers_every_member(self):
-        """0xc6 -> 0xc7 (0xc + 0x40 n) to both members: serial @8, 0 @0xa, chapter key @0x30, quest @0x34."""
+        """0xc6 -> 0xc7 (0xc + 0x40 n) to both members: serial @8, 1 @0xa, chapter key @0x30, quest @0x34."""
         self.r.quest = 3
         rec = bytearray(0x40)
         struct.pack_into('<H', rec, 0, 1)                   # kind 1
@@ -580,7 +658,7 @@ class NeoCityCombatTest(unittest.TestCase):
         out = frame.payload[0xa:]
         self.assertEqual(len(out), 0x40)
         self.assertEqual(struct.unpack_from('<H', out, 8)[0], 1234)       # the sender's serial
-        self.assertEqual(struct.unpack_from('<H', out, 0xa)[0], 0)        # spawn now
+        self.assertEqual(struct.unpack_from('<H', out, 0xa)[0], neocity.ENEMY_FIRST)   # unique, not 0
         self.assertEqual(struct.unpack_from('<I', out, 0x30)[0], 2)       # chapter key (c_0005)
         self.assertEqual(struct.unpack_from('<I', out, 0x34)[0], 3)       # the run's quest
         self.assertEqual(struct.unpack_from('<I', out, 0xe)[0], 100001)   # unchanged
@@ -588,6 +666,18 @@ class NeoCityCombatTest(unittest.TestCase):
         self.assertEqual(out[0x12:0x1c], bytes(rec[0x12:0x1c]))          # +0x12..+0x1a left as sent
         self.assertEqual(out[0x20:0x2c], bytes(rec[0x20:0x2c]))          # position
         self.assertEqual(self.r.enemies, [out])
+
+    def test_hub_summons_not_relayed(self):
+        """Kind-3 records (a HUB's summons) crashed the client at 0x4a99a1 once relayed: dropped."""
+        summon, hub = bytearray(0x40), bytearray(0x40)
+        struct.pack_into('<H', summon, 0, 3)
+        struct.pack_into('<H', hub, 0, 1)
+        self.assertEqual(self.handle(neocity.enemy_request, Frame(0xc6, struct.pack('<II', 1, 1) + bytes(summon))),
+                         [])
+        frames = self.handle(neocity.enemy_request,
+                             Frame(0xc6, struct.pack('<II', 1, 2) + bytes(summon) + bytes(hub)))
+        self.assertEqual([(f.type, struct.unpack_from('<I', f.payload, 4)[0]) for f in frames], [(0xc7, 1)] * 2)
+        self.assertEqual(struct.unpack_from('<H', frames[0].payload, 0xa)[0], 1)
 
     def test_enemy_hit_relay(self):
         """0xcd: 42 bytes back to every run member, +2..+0x19 copied, Mito / i64 / exp zero at +0x1a."""

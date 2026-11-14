@@ -141,8 +141,18 @@ func writes2016(dir, ip string, cfg Config) ([]write2016, error) {
 	}
 	out = append(out, write2016{guided2016 + 2, []byte{byte(mode)},
 		map[bool]string{true: "guided tutorial", false: "tutorial as shipped"}[mode == 1], nil})
-	if euRules {
-		out = append(out, write2016{nationSend2016, nationSendPatch(), "EU rules (nation 8 at login)", nationSendOrig2016})
+	if sendsNation() {
+		out = append(out, write2016{nationSend2016, nationSendPatch(), fmt.Sprintf("nation %#x at login", nationValue()),
+			nationSendOrig2016})
+	}
+	if kph {
+		for i, u := range unitPatches2016 {
+			what := ""
+			if i == len(unitPatches2016)-1 {
+				what = fmt.Sprintf("km/h (%d branches)", len(unitPatches2016))
+			}
+			out = append(out, write2016{u.addr, u.kph, what, u.orig})
+		}
 	}
 	return out, nil
 }
