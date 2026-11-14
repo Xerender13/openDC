@@ -4,20 +4,18 @@
 
 Drift City (Skid Rush) Stage 2/Stage 3 Emulation Project: a server emulator for the **2011 (2016 in development as well) Drift City client**: the US version and the European (EU) version.
 
-**DISCLAIMER: This project is all entirely made with Claude Code (vibecoded)**
+**DISCLAIMER: This project is coded with AI models (vibecoded)**
 
-**It's still work in progress, so expect bugs and unimplemented stuff!**
+**It's still work in progress, so expect bugs and features not working ideally the way they should!**
 
 The emulator is a native server written in Python. It keeps the original server's architecture from the leaked 2008 files (separate auth /
-lobby / game / area / battle-area services, the original server's database tables, now in PostgreSQL), reads the server tables in the
+lobby / game / area / battle-area services, the original server's database tables, ported to PostgreSQL), reads the server tables in the
 2011/2016 client's own formats, and drives the city traffic, battle zone races, quests, crews, parts shop, auctions and
 the rest itself.
 
 ## Client Download
 
 [2011 US client download](https://drive.google.com/file/d/1b1gunQsMlY8gVCuRYVOMm-qadabdkHSl/view?usp=sharing)
-
-[2011 EU client download](https://drive.google.com/file/d/1nKmGfs0GkWrEal7li6IPAp_mHSW5Eosy/view?usp=sharing)
 
 [2016 US client download](https://drive.google.com/file/d/16wcIO2xvY--fMb0Gyi787U1cZMwFFUM-/view?usp=sharing)
 
@@ -28,7 +26,7 @@ the rest itself.
 
 ## Quick start
 
-1. Get the client and unpack it as `Client US/Client EU` in this folder.
+1. Get the client and unpack it as `Client US` in this folder.
 2. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / macOS) or podman / docker
    with compose (Linux; also Python 3.10+).
 3. Start it:
@@ -63,20 +61,21 @@ To let other players join, put your address in their `DriftCityLauncher.ini` and
 `DriftCity Dev Ed/` next to `Emulator/`.
 
 ## EU version
-
+The EU version takes the parts, drops, battlezone and channel battle rules from the EU version.
 The emulator recognises each client's nation and applies the EU rules only to EU clients (`emulator.ini` `[nation]`;
 `allow = eu` or `us` makes a server for one version only).
+There is a client switch in launcher (between us and eu) which changes the rules. The EU tables with the different rules exist in the client alongside the US ones.
 
-## Current emulator progress (19.10.2026):
+## Current emulator progress (14.11.2026):
 
 **Game features that haven't been done yet:**
-- Neo City
-- Other 2016 version features
 - Seasonal Events
-- Some of the items that are not activated in the current version
 
 **Features that still require testing and might work with issues:**
 - GT Tournament
+- Neo City
+- World Lap Time
+- DCGP
 - Channels and Channel Battle
 - Crew management
 
