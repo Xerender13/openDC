@@ -2,14 +2,15 @@
 # Drift City emulator launcher: start the components together or one by one. emulator.ini [client] version says
 # which client build (2011 or 2016) this server is for; the ports, database and client follow from it.
 #
-#   ./launch.sh [all] [eu]   database + emulator (in the background) + the client (US, or the EU client with eu;
+#   ./launch.sh [all] [eu]   database + emulator (in the background) + the client (US rules, or EU rules with eu;
 #                            version 2016: the 2016 client ../DriftCity Dev Ed)
 #   ./launch.sh server       database + emulator (in the background), no client
 #   ./launch.sh db           the database only (PostgreSQL container dcemu_pg)
 #   ./launch.sh emu [-q]     the emulator only, in the foreground (Ctrl+C stops it; -q: log to the file only)
 #   ./launch.sh emu-bg       the emulator only, in the background (output: logs/emulator.out)
-#   ./launch.sh client [eu]  the client: ../Client US/DriftCityLauncher, ../Client EU/ with eu, or for version 2016
-#                            ../DriftCity Dev Ed/DriftCityLauncher2016
+#   ./launch.sh client [eu]  the client: ../Client US/DriftCityLauncher, or for version 2016
+#                            ../DriftCity Dev Ed/DriftCityLauncher2016; eu = with the EU rules (the launcher's --eu:
+#                            Launcher/eurules.go, tools/eu_rules.py; the EU client is retired since 2026-11-14)
 #   ./launch.sh stop [part]  stop everything, or one part: emu, db
 #   ./launch.sh restart-emu  stop and start the background emulator (clients are disconnected)
 #   ./launch.sh status       what is running
@@ -24,15 +25,13 @@
 # makes it from db/postgres when it is not there.
 #
 # Needs: Python 3.10+, podman (or docker) with podman-compose / docker compose. The emulator's settings are in
-# emulator.ini; the clients' in ../Client US/DriftCityLauncher.ini and ../Client EU/DriftCityLauncher.ini (the EU client:
-# tools/eu_client.py).
+# emulator.ini; the clients' in their DriftCityLauncher.ini ([client] rules = us / eu).
 set -euo pipefail
 cd "$(dirname "$0")"
 HERE=$(pwd)
 PIDFILE=$HERE/.emulator.pid
 OUT=$HERE/logs/emulator.out
 CLIENT_DIR="$HERE/../Client US"          # the US client (its tables: tools/client_setup.py asks for the folder)
-CLIENT_EU_DIR="$HERE/../Client EU"       # the EU client (DriftCityEU.exe, tools/eu_client.py)
 CLIENT_2016_DIR="$HERE/../DriftCity Dev Ed"   # the 2016 client (its launcher: DriftCityLauncher2016)
 
 die() { echo "launch.sh: $*" >&2; exit 1; }
@@ -161,14 +160,14 @@ stop_emu() {
   rm -f "$PIDFILE"
 }
 
-start_client() {   # $1: us (default) or eu; version 2016: the 2016 client
-  local dir=$CLIENT_DIR name=DriftCityLauncher
-  case "${1:-us}" in us|US) ;; eu|EU) dir=$CLIENT_EU_DIR ;; *) die "client: us or eu, not '$1'" ;; esac
+start_client() {   # $1: us or eu, the rules (default: the launcher's ini, [client] rules); version 2016: the 2016 client
+  local dir=$CLIENT_DIR name=DriftCityLauncher rules=
+  case "${1:-}" in '') ;; us|US) rules=--us ;; eu|EU) rules=--eu ;; *) die "client: us or eu, not '$1'" ;; esac
   [ "$VERSION" = 2016 ] && { dir=$CLIENT_2016_DIR; name=DriftCityLauncher2016; }
   local exe=$dir/$name
   [ -x "$exe" ] || die "$exe not found"
-  echo "client: starting (${dir##*/})"
-  (cd "$dir" && nohup "./$name" >> "$dir/DriftCityLauncher.log" 2>&1 &)
+  echo "client: starting (${dir##*/}${rules:+, ${rules#--} rules})"
+  (cd "$dir" && nohup "./$name" $rules >> "$dir/DriftCityLauncher.log" 2>&1 &)
 }
 
 status() {
@@ -180,13 +179,13 @@ status() {
 }
 
 case "${1:-all}" in
-  all)       start_db; start_emu_bg; start_client "${2:-us}" ;;
+  all)       start_db; start_emu_bg; start_client "${2:-}" ;;
   server)    start_db; start_emu_bg ;;
   db)        start_db ;;
   emu)       shift; client_tables; listening $AUTH_PORT && die "port $AUTH_PORT is in use (./launch.sh status)"
              after_emu_up; exec "$(python)" -m dcemu "$@" ;;
   emu-bg)    start_emu_bg ;;
-  client)    start_client "${2:-us}" ;;
+  client)    start_client "${2:-}" ;;
   restart-emu) stop_emu; start_emu_bg ;;
   stop)
     case "${2:-all}" in

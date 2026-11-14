@@ -4,6 +4,19 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
+## Session 47 (2026-11-14): EU = V-grade rules on the US client — resume here
+
+- EU rules differ from US in: parts by V grade, battle zone and channel battle by V grade, no stat points for the
+  level, drops by V grade (`emulator.ini [nation]`, `nation.RULES`); the rest is US (complete bonus, new physics).
+- **The EU client is retired** (files kept). The US client plays either rule set: its launcher's `[client] rules =
+  us | eu` (or `--us` / `--eu`; `./launch.sh client eu`), 2011 and 2016. For EU it makes the client send nation 8 at
+  login (memory only) and swaps in EU copies of the client tables. **After any change to the client tables or the
+  EU lines of emulator.ini, run `.venv/bin/python -m tools.eu_rules build` (2016) and
+  `.venv/bin/python -m tools.eu_rules build "../Client US"` (2011)**, else the launcher keeps the US tables.
+- To try: start each client with `--eu`: part tooltips "Required Grade", Newbie / Pro buttons by V grade, channel
+  battle minimum grades; the emulator log shows `client nation 8 (EU eng)` at the login; then `--us` (tables back:
+  the launcher log says "US tables put back"). Details: EMULATOR_NOTES session 47.
+
 ## Session 46 (2026-11-13/14, overnight): Neo City stages 2-3, rankings, World Match, DCGP — resume here
 
 **Worked while the user slept; nothing tried in game, nothing committed.** Delegated to OpenCode DeepSeek

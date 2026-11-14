@@ -27,19 +27,26 @@ Rules that differ by nation go through this module (`rule(x, name)`), so the han
                  GlobalText 11275, shown when column 7 is 0; client item record +0x120 level, +0x124 grade,
                  tooltip 0x657442; EU: eu_client.py grades fills it). Which grade it means is not in the client (it only shows the number); the EU
                  texts call it the car's rank ("Your car's rank ...", 12140): read here as the car's V grade.
-On for EU only (EU changes never touch US clients: user, 2026-10-17). The US tables fill only column 7; with
+On for EU only (EU changes never touch US clients: user, 2026-10-17). Since 2026-11-14 (user) the EU group differs
+from US only in this V-grade part system, the battle zone rules (battle_levels) and the channel battle lines
+(emulator.ini [cbattle] eu.*), "all connected to the part system", level_points (the stats stay different
+for the player's level) and drop_by_grade; the other rules are the US ones. The US tables fill only column 7; with
 column 8 empty the grade comes from the part's grade and tier (data.Tables.part_req_grade, user 2026-10-17: best N
 parts V3, best S V6, best H V9; options and docking parts N V1, S V4, H V7).
 emulator.ini [nation] us.<rule> / eu.<rule> = 0 / 1 overrides a rule for that group.
     level_points the player's level adds points to the four stats (the "User" column of F2 / the garage: the level
                  each, level / 2 with half_level_points; player.stats). Off for EU: the EU
-                 version gives no stat bonus for the player's level (user, 2026-10-17).
+                 version gives no stat bonus for the player's level (user, 2026-10-17; kept 2026-11-14).
     half_level_points  level_points is the level / 2 instead of the level (the 2008 Contents.ini
                  Main.HalfLevelPoint; read until 2026-10-17). Off for US: 1 point per level (user, 2026-10-17).
     drop_by_grade the traffic / combo / rush drop groups (ItemDropServer.tdf) follow the current car's V grade
                  instead of the player's level: V<n> = the table's n-th level (1, 5, 11, ... 71: nine levels for
-                 V1-V9; data.Tables.drop_rates_of_grade). On for EU (user, 2026-10-17: "EU groups items depending
-                 on the car V grade level"); the mapping of grade to row is ours.
+                 V1-V9; data.Tables.drop_rates_of_grade; the mapping of grade to row is ours). On for EU (user,
+                 2026-10-17: "EU groups items depending on the car V grade level"; kept 2026-11-14).
+    complete_bonus the battle zone's complete bonus per lap (rooms.complete_bonus; the EU client's table has no rows,
+                 so its room window does not show it). On for both since 2026-11-14 (was US only).
+    new_physics  the driving model the EU client is set to (tools/eu_client.py physics, GlobalContent NEWVEHICLESTAT);
+                 the server only reads it there. New (1) for both since 2026-11-14.
     battle_levels the battle zone's level limits (sections, the Pro EXP tiers 11 / 31 / 51 / 71, room invites,
                  Lap Time arenas with laptime_level_limit); off for EU: only the car's V grade counts (user,
                  2026-10-17). The EU client's own limits are its GlobalContent.xlt Value_EU_eng column
@@ -60,12 +67,16 @@ EU = frozenset((EU_DE, EU_ENG, EU_FR, EU_ES))
 NAMES = {0: 'KR', 1: 'US', 2: 'JP', 3: 'TW', 4: 'INI', 5: 'TH thai', 6: 'TH eng',
          7: 'EU de', 8: 'EU eng', 9: 'EU fr', 10: 'EU es'}
 
-# rules per nation group (group(): 'us' or 'eu'); emulator.ini [nation] us.<rule> / eu.<rule> overrides
+# rules per nation group (group(): 'us' or 'eu'); emulator.ini [nation] us.<rule> / eu.<rule> overrides.
+# EU differs from US only in the V-grade (rank) part system and what hangs on it: parts by the car's V grade, the
+# battle zone by V grade (battle_levels off: eu.section.<channel>, rooms.PRO_TIERS_EU) and the channel battle's
+# eu. lines (channels.rule), the stats (no points for the player's level: level_points) and the drops (traffic /
+# combo / rush groups by the car's V grade: drop_by_grade). Everything else plays as the US client (user, 2026-11-14).
 RULES = {
     'us': dict(part_level=True, part_grade=False, level_points=True, half_level_points=False, drop_by_grade=False,
-               battle_levels=True, new_physics=True),
+               battle_levels=True, new_physics=True, complete_bonus=True),
     'eu': dict(part_level=False, part_grade=True, level_points=False, half_level_points=False, drop_by_grade=True,
-               battle_levels=False, new_physics=False),
+               battle_levels=False, new_physics=True, complete_bonus=True),
 }
 
 
@@ -93,6 +104,7 @@ def parse_allow(v):
 
 def configure(section):
     """emulator.ini [nation] (a configparser section or a dict)."""
+    context.nation_eu_client = (section.get('eu_client', '0') or '0').strip() not in ('0', 'no', 'off')
     v = (section.get('client', 'auto') or 'auto').strip().lower()
     context.nation_forced = None if v == 'auto' else int(v)
     context.nation_allow = parse_allow(section.get('allow', 'all'))
@@ -179,6 +191,13 @@ def group(x):
     return 'eu' if is_eu(x) else 'us'
 
 
+def eu_client(x):
+    """x's client is the retired EU program (DriftCityEU.exe: EU texts, km/h, UTF-8 passwords): an EU nation while
+    emulator.ini [nation] eu_client = 1. Since 2026-11-14 (user) the EU rules are played on the US client: its
+    launcher ([client] rules = eu) makes it send nation 8 at the login, and its texts stay the US ones."""
+    return getattr(context, 'nation_eu_client', False) and is_eu(x)
+
+
 def name(n):
     return NAMES.get(n, str(n))
 
@@ -197,8 +216,8 @@ NO_ID = 4
 
 
 def login_result(n, result, member):
-    """The login result to send to a client of nation n."""
-    if n in EU and result == NO_ID:
+    """The login result to send to a client of nation n (the EU program's texts: [nation] eu_client)."""
+    if n in EU and getattr(context, 'nation_eu_client', False) and result == NO_ID:
         return 2 if not member else 1
     return result
 

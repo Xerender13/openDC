@@ -8,6 +8,69 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 47 (2026-11-14): EU differs from US only in the V-grade part system
+
+**User:** "Make the EU region change only the part system being rank (V) based, while leaving the other parts of the
+game use US client settings. Apply to both 2011 and 2016", then: "Part system, battlezone rules and channel battle
+settings (all connected to the part system)".
+
+**Kept for EU** (`nation.RULES['eu']`): `part_level` off / `part_grade` on (parts need the car's V grade, the EU
+client's "Required Grade" tooltips), `battle_levels` off (battle zone by V grade: `eu.section.11/12`,
+`rooms.PRO_TIERS_EU`) and `[cbattle] eu.*` (the channel battle's EU lines and the EU client's MinChBattleGrade values).
+
+**Stats stay different** (user, same day: "Make the stat system still different, between US and EU for player
+level"): `level_points` stays off for EU (no stat points for the player's level; US: 1 per level). **Drops stay by V grade**
+(user: "traffic, combo and rush drops should follow the V grade level for EU"): `drop_by_grade` stays on for EU.
+
+**Now as US for EU:**
+the battle zone complete bonus (new rule `complete_bonus`, both on; `rooms.result` asked `is_eu` before; the EU
+client's Reward_ExpMito has no rows, so its room window does not show the bonus that is paid), and `new_physics` 1:
+`tools/eu_client.py "../Client EU" physics new` wrote NEWVEHICLESTAT 1 into the four EU columns of Client EU's
+Patch.000 (original: `client_backup/Patch.000_ClientEU.orig`) plus the US English stat labels 21769-21772. Restart
+the EU client. Left as they were: the EU texts and units (KPH, km/h assists and dial, championship caps in km/h),
+the F2 panel and the Performance Graph (already US).
+
+Applied to `Emulator/` (2016 and the GitHub copy) and `Emulator 2011/` (nation.py, rooms.py, emulator.ini
+[nation], tests/test_nation_rules.py). Tests: 347 OK in `Emulator/`; `Emulator 2011/` has two old failures in
+test_client2016 (the 2016 exe's checksum since the car-limit patch), unrelated. **Not yet confirmed in game.**
+
+### EU client retired: the US client plays either rule set
+
+**User:** "Get rid of EU client after that and have the US client being able to be started as either EU or US rules",
+"Make it for both 2011 and 2016 clients". Choices (asked): retire the EU client and keep its files; the launcher picks
+the rules; the launcher swaps EU copies of the client's tables in.
+
+**The nation message from the US client.** The login code sends 0x7cf only for nations 7-10 (2011 0x538a9f / 2016
+0x54f0ad: `call GetNation; cmp eax,7; jl; call GetNation; cmp eax,10; jg; call GetNation; push eax`, then
+`mov ecx,esi; call SendNation` 0x7feaf0 / 0x862a30, the same shape in both builds; bytes checked in both exes).
+The launcher (`Launcher/eurules.go`, `[client] rules = eu` or `--eu`) writes `push 8` + 24 NOPs over those 26 bytes in
+memory: the client sends nation 8 behind its login and stays nation 1 for everything else (US data, texts, token). Exe
+on disk unchanged; the 2011 ASProtect DriftCity.exe is refused (EU rules need DriftCityUS.exe: the launcher checks the
+bytes in the file). The server needs nothing new for the rules: the login nation is kept per account
+(`nation.remember`) for lobby / game / area. **Fixed on the way:** with `allow = all` and an ASCII password the login
+is answered without waiting, and the nation read before the password check was stored after it: a 0x7cf that came
+during the check was overwritten with US (auth.answer_login; test_nation_rules.LoginNationTest fails without the fix).
+
+**Texts stay US.** The EU program's text handling (UTF-8 passwords, EU login error codes, km/h championship caps)
+now needs `emulator.ini [nation] eu_client = 1` (`nation.eu_client`; default 0). channels.entry_refused says "This
+channel is not open with your rules." (the US client shows a Semi-channel 3 button the EU rules close).
+
+**The client's own tables.** `tools/eu_rules.py build` (DeepSeek worker, reviewed) writes X.eu next to the files that
+hold them and `EURules.txt` (path, sha256 of X); the launcher renames X -> X.us and copies X.eu -> X for an EU start,
+and puts X.us back when the client is gone and at every start; a copy whose X changed since is not used (build again
+after a client table change). 2011: Patch/Patch.003 (ItemClient), Patch.000 (GlobalContent), Patch.006 (GlobalText);
+2016: Data/World/data.agt (ItemClient), Data/Localize.agt. Contents: ItemClient column 7 = 0, column 8 = the V grade
+(749 rows, identical to what `eu_client.py grades` wrote for the EU client); GlobalContent Value_US: Newbie V1-3 / Pro
+V4-9 (eu.section.11/12), the Pro tiers' Grade11New from rooms.PRO_TIERS_EU, levels 1..1000 (the EU client's values),
+MinChBattleGrade / MinSemi<N>ChBattleGrade from [cbattle] eu.*; GlobalText Value_US 11411 / 11409 (byte-identical to
+the EU client's EU_eng texts). Built for both clients (all ok); headers 20-31 kept. `tools/client_tables.py` now reads
+only `Patch.0NN` (it took Patch.000.eu for a patch pack, which client_setup / sync_data would have copied into the
+server's own tables).
+
+**Launch:** `./launch.sh client eu` (or `all eu`) passes `--eu`; without a word the launcher's ini decides. Launcher
+built and installed in Client US and DriftCity Dev Ed (Go tests: swap / restore / stale / patch bytes). Client EU, its
+zip and `tools/eu_client.py` are kept, not used. **Not yet tried in game** (both clients, both rule sets).
+
 ## Session 46 (2026-11-13/14, overnight): Neo City stages 2-3, rankings window, World Match Lap Time, DCGP, size audit
 
 **User:** "check what work was done on Neo City and then continue working on the whole gamemode and its systems throughout the

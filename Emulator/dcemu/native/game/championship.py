@@ -440,7 +440,7 @@ def speed_flags(session):
     clients get the caps in mph (341 km/h -> 212); EU clients (their texts say km/h) the km/h."""
     from .. import nation
     a, b = cfg()['touring_a'], cfg()['touring_b']
-    if not nation.is_eu(session):
+    if not nation.eu_client(session):          # the US client's texts (also with EU rules: nation.eu_client)
         a, b = round(a / MILE), round(b / MILE)
     return {'BattleZone_TouringASpeed': a, 'BattleZone_TouringBSpeed': b}
 

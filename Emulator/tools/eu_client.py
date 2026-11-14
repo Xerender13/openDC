@@ -1,5 +1,8 @@
 """Turn Client/DriftCityEU.exe into the European client and give it its data folder.
 
+RETIRED (user, 2026-11-14): the EU rules are played on the US client (Launcher [client] rules = eu, tools/eu_rules.py);
+this tool and Client EU are kept for reference. `us` (DriftCityUS.exe) is still the way to get the unpacked US exe.
+
 DriftCityEU.exe is the 2011-10-27 GamesCampus build (the same program as DriftCity.exe, the same addresses),
 already unpacked (no ASProtect: its code can be read and changed on disk). The program serves every publisher; a
 nation number picks the rules, texts, data folder and login server (client 0x4e9360 GetNation, global 0x94d880):

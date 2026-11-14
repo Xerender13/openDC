@@ -120,7 +120,8 @@ async def answer_login(session, member, password_field):
             n = nation.detected(session)    # every nation may play and the password reads the same: no wait
         else:
             n = await nation.wait_detected(session)
-        password = read_password(password_field, utf8=n in nation.EU)
+        eu_program = n in nation.EU and getattr(context, 'nation_eu_client', False)   # UTF-8 (nation.eu_client)
+        password = read_password(password_field, utf8=eu_program)
         if not nation.allowed(n):
             result = nation.WRONG_NATION
             session.log.note(f'login {member!r}: refused, client nation {n} ({nation.name(n)}) is not allowed here '
@@ -128,6 +129,8 @@ async def answer_login(session, member, password_field):
         else:
             result = await check_login(member, password)
             if result == OK:
+                # what the client has said by now: in the no-wait path its 0x7cf may have come during the check
+                n = n if session.state.get('nation') is None else nation.detected(session)
                 nation.remember(member, n)
             else:
                 if session.state.get('nation') is None:     # answered without waiting: the texts depend on it

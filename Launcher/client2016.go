@@ -116,6 +116,7 @@ type write2016 struct {
 	addr uint32
 	b    []byte
 	what string
+	orig []byte // when set: written only over these bytes (code)
 }
 
 func writes2016(dir, ip string, cfg Config) ([]write2016, error) {
@@ -126,8 +127,8 @@ func writes2016(dir, ip string, cfg Config) ([]write2016, error) {
 	slot := make([]byte, 16)
 	copy(slot, ip)
 	p := binary.LittleEndian.AppendUint16(nil, uint16(port))
-	out := []write2016{{slot2016, slot, "address " + ip}, {portCode2016 + 7, p, ""},
-		{portData2016, p, fmt.Sprintf("port %d", port)}}
+	out := []write2016{{slot2016, slot, "address " + ip, nil}, {portCode2016 + 7, p, "", nil},
+		{portData2016, p, fmt.Sprintf("port %d", port), nil}}
 	mode := 4
 	switch cfg.get("client.guided_tutorial", "auto") {
 	case "1":
@@ -138,8 +139,12 @@ func writes2016(dir, ip string, cfg Config) ([]write2016, error) {
 			mode = 1
 		}
 	}
-	return append(out, write2016{guided2016 + 2, []byte{byte(mode)},
-		map[bool]string{true: "guided tutorial", false: "tutorial as shipped"}[mode == 1]}), nil
+	out = append(out, write2016{guided2016 + 2, []byte{byte(mode)},
+		map[bool]string{true: "guided tutorial", false: "tutorial as shipped"}[mode == 1], nil})
+	if euRules {
+		out = append(out, write2016{nationSend2016, nationSendPatch(), "EU rules (nation 8 at login)", nationSendOrig2016})
+	}
+	return out, nil
 }
 
 // apply2016 writes once the image is mapped (the port instruction is readable). -> what was written, or nil while
@@ -153,7 +158,9 @@ func apply2016(ws []write2016, read func(uint32, int) []byte, write func(uint32,
 		return nil, true
 	}
 	for _, w := range ws {
-		if !write(w.addr, w.b) || !bytes.Equal(read(w.addr, len(w.b)), w.b) {
+		if cur := read(w.addr, len(w.b)); w.orig != nil && !bytes.Equal(cur, w.orig) && !bytes.Equal(cur, w.b) {
+			done = append(done, fmt.Sprintf("FAILED %#x (unknown code)", w.addr))
+		} else if !write(w.addr, w.b) || !bytes.Equal(read(w.addr, len(w.b)), w.b) {
 			done = append(done, fmt.Sprintf("FAILED %#x", w.addr))
 		} else if w.what != "" {
 			done = append(done, w.what)

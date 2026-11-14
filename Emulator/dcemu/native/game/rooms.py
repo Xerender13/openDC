@@ -816,7 +816,8 @@ def section_rule(channel, room_type=0, x=None):
 # serial 0x10000, 0x5b0330), nothing alone. Per lap (0x788e70 / 0x789340): EXP = players x 1.025 x section x points,
 # Mito = points x players x 1.8 x section; section = 3 (Newbie) or the Pro tier 4 / 6 / 8 / 16 (else 1).
 # *Our choice* (the client shows the amounts, the server pays them): a finisher gets them x the track's LapCount on
-# top of the race result's EXP / Mito (US players; the EU client's table has no such rows).
+# top of the race result's EXP / Mito (nation rule complete_bonus: US and EU since 2026-11-14; the EU client's table
+# has no such rows, so its window does not show them).
 BONUS_KINDS = {'Bronze': 0, 'Sliver': 1, 'Silver': 1, 'Gold': 2}
 _bonus_rows = None
 _laps = None
@@ -1805,7 +1806,7 @@ async def result(room):
         city = city_of_track(room.map_id)
         exp, money = play_bonus(p, exp, money, 'battle_team' if team_room(room.type) else 'battle_personal', city)
         from .. import nation
-        if end_type == FINISHED and not nation.is_eu(m.session):      # the complete bonus, per lap (see above)
+        if end_type == FINISHED and nation.rule(m.session, 'complete_bonus'):   # the complete bonus, per lap
             bonus = complete_bonus(room.channel, room.type, room.map_flag, len(room.racers))
             laps = lap_count(room.map_id)
             if bonus != (0, 0):

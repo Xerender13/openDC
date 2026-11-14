@@ -12,6 +12,7 @@ For a table name the newest US version wins (a patch over the archive), else the
 usage: client_tables.py <client dir> [name...]     list where each table comes from
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -55,7 +56,7 @@ class Client:
         patch_dir = self._directory('Patch')
         if patch_dir:
             for name in sorted(os.listdir(patch_dir)):
-                if not name.lower().startswith('patch.0'):
+                if not re.fullmatch(r'patch\.0\d\d', name.lower()):    # not Patch.000.eu / .us (tools/eu_rules.py)
                     continue
                 path = os.path.join(patch_dir, name)
                 raw, entries = agt.index(path)

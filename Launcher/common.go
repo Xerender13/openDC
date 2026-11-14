@@ -214,8 +214,13 @@ port = 11005
 
 [client]
 ; the client program in this folder: DriftCityEU.exe (the European client, see Emulator/tools/eu_client.py) or
-; DriftCity.exe (the US client); empty = DriftCityEU.exe when it is there
+; DriftCity.exe (the US client); empty = DriftCity.exe, else DriftCityUS.exe. The EU client is retired: the US
+; client plays with EU rules instead (rules below)
 exe =
+; rules: us or eu (also on the command line: --us / --eu). eu: the client tells the server to use the EU rules (parts
+; by the car's V grade, battle zone and channel battle by V grade) and the EU copies of its tables are put in place
+; while it runs (made by "python -m tools.eu_rules build" in Emulator/; without them the server rules still apply)
+rules = us
 ; goption.ini MainUIType: 0 = the classic HUD, 1 = the 2011 "ADV" HUD
 main_ui_type = 1
 ; item_icons: 1 = show the items received (combos, traffic items, patrol prizes) as icons on the HUD, 0 = only the
@@ -412,9 +417,11 @@ func main() {
 		}
 	}
 	logFile, _ = os.Create(filepath.Join(dir, "DriftCityLauncher.log"))
-	defaultExe := "DriftCity.exe"
-	if _, err := os.Stat(filepath.Join(dir, "DriftCityEU.exe")); err == nil {
-		defaultExe = "DriftCityEU.exe"
+	defaultExe := "DriftCity.exe" // the EU client (DriftCityEU.exe) is retired: only by [client] exe (2026-11-14)
+	if _, err := os.Stat(filepath.Join(dir, defaultExe)); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, "DriftCityUS.exe")); err == nil {
+			defaultExe = "DriftCityUS.exe"
+		}
 	}
 	new2016, _ := is2016(filepath.Join(dir, defaultExe))
 	cfg, iniPath := loadConfig(dir, new2016)
@@ -433,6 +440,10 @@ func main() {
 			cfg["client.display"] = "windowed"
 		case "--fullscreen", "-fullscreen", "/fullscreen":
 			cfg["client.display"] = "fullscreen"
+		case "--eu", "-eu", "/eu":
+			cfg["client.rules"] = "eu"
+		case "--us", "-us", "/us":
+			cfg["client.rules"] = "us"
 		default:
 			ip = a
 		}
@@ -448,7 +459,29 @@ func main() {
 	} else {
 		logf("client %s, server %s", filepath.Join(dir, clientExe), ip)
 	}
-	if err := launch(dir, ip, cfg); err != nil {
+	switch r := strings.ToLower(cfg.get("client.rules", "us")); {
+	case r == "eu" && clientEU:
+		logf("rules: EU (the EU client sends its nation itself)")
+	case r == "eu" && !nationSendInFile(filepath.Join(dir, clientExe), client2016):
+		fail("[client] rules = eu needs the unpacked client (%s has other code at the login: the 2011 ASProtect "+
+			"DriftCity.exe? Use DriftCityUS.exe, Emulator/tools/eu_client.py us)", clientExe)
+	case r == "eu":
+		euRules = true
+		logf("rules: EU; %s", applyEUTables(dir))
+	case r == "us":
+		if n := restoreTables(dir); n > 0 {
+			logf("rules: US; US tables put back: %d files", n)
+		} else {
+			logf("rules: US")
+		}
+	default:
+		fail("[client] rules %q: us or eu (%s)", r, iniPath)
+	}
+	err = launch(dir, ip, cfg)
+	if euRules {
+		logf("US tables put back: %d files", restoreTables(dir))
+	}
+	if err != nil {
 		fail("%v", err)
 	}
 }

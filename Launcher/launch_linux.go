@@ -417,6 +417,9 @@ func patch(pid int, ip string) []string {
 			if n := writeAddress(read, write, ip); n > 0 {
 				addressDone = true
 				note(fmt.Sprintf("address (%d slots)", n))
+				if euRules && !clientEU {
+					note(writeNationSend2011(read, write))
+				}
 			}
 		}
 		if addressDone {

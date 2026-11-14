@@ -164,7 +164,7 @@ def entry_refused(session, ch):
     p = session.state['player']
     grade = p.car.shown_grade() if p.car else 0
     if not open_:
-        return 'This channel is not open to your version of the game.'
+        return 'This channel is not open with your rules.'   # the Semi-channels without an eu. line (EU rules)
     if max_level and p.char.level > max_level:
         return f'Level Limit {max_level}'
     if min_grade and grade < min_grade:
