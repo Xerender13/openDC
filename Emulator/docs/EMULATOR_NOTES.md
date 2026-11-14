@@ -20,7 +20,9 @@ Worker notes: `docs/neo_work/` (not in git, `.git/info/exclude`).
 **The client ships the whole mode's data.** `Data/World/neodata.agt` holds `NC_chapter` (8 chapters, all Neo Oros),
 `NC_quest` (17), `NC_mission` (182 rows), `NC_object` (346 spawns), `NC_objectDef`, `NC_HuvRand`; `Init/NeoAI.xlt`,
 `NeoHuvParam.xlt` (580 enemies) and `WeaponList.xlt` are in server_data_2016 already. Only `neooros.agt` has a map, so Neo
-Oros is the only Neo city that can be played. Copied to `server_data_2016/NeoData/` for the server.
+Oros is the only Neo city that can be played. Copied to `server_data_2016/NeoData/` for the server: client files, so not in
+git (`.gitignore`); `tools/client_setup.py` extracts them on first start (`sync_data.sync_neo`, a patch's version first) and
+reports the folder missing in `--check` for 2016. Script-tested: an empty folder gets the six tables, byte-identical.
 
 **Chapter keys (lead, verified).** The client's `NC_chapter` loader (`0x7ae1a0`) keys chapters by their 0-based data-row
 order (`[chapter+4] = row counter`, map `[0x9e5b70+0x148]`); quests are numbered within their chapter (`0x7aa9b0`, counter

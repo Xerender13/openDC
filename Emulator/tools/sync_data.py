@@ -3,7 +3,8 @@ server's data directory (server_data), unchanged: Init/*.xlt -> Init/ and World/
 the 2008 server's own tables); and the cities' traffic data
 (city_traffic.py) from the city packs Data/World/<city>.agt: tables/<City>/<city>.tcs (lanes and
 signals) and tables/<City>/Path/*.chpath / *.signal (path traffic; Taipei has no .tcs), a patch's
-version where Patch.0xx has one; the built-in crew marks Data_US/gameui/teammark/01-10 -> teammark/ (crews.py).
+version where Patch.0xx has one; the Neo City tables of Data/World/neodata.agt (NC_*.xlt) -> NeoData/
+(game/neocity.py); the built-in crew marks Data_US/gameui/teammark/01-10 -> teammark/ (crews.py).
 
 usage: python3 -m tools.sync_data [client dir, default ../Client US] [data dir, default server_data]
 """
@@ -38,6 +39,7 @@ def sync(client, out):
         n += 1
     print(f'{n} tables -> {out}')
     print(f'{sync_traffic(client, c, out)} city traffic files -> {os.path.join(out, "tables")}')
+    print(f'{sync_neo(c, out)} Neo City tables -> {os.path.join(out, "NeoData")}')
     marks = os.path.join(client, 'Data_US', 'gameui', 'teammark')
     if os.path.isdir(marks):
         import shutil
@@ -81,6 +83,29 @@ def sync_traffic(client, c, out):
             with open(dst, 'wb') as f:
                 f.write(data)
             n += 1
+    return n
+
+
+def sync_neo(c, out):
+    """The Neo City tables (NC_chapter, NC_quest, NC_mission, NC_object, NC_objectDef, NC_HuvRand) from
+    Data/World/neodata.agt, a patch's version where Patch.0xx has one, unchanged -> out/NeoData/."""
+    world = c._directory('Data', 'World')
+    path = os.path.join(world, 'neodata.agt') if world else ''
+    if not os.path.isfile(path):
+        return 0
+    raw, entries = agt.index(path)
+    n = 0
+    for e in entries:
+        name = e[0]                                   # NeoData\NC_chapter.xlt
+        if not name.lower().endswith('.xlt'):
+            continue
+        key = ('data\\world\\' + name).lower()
+        data = c.read_path(key) if key in c.files else agt.extract(raw, e)
+        dst = os.path.join(out, 'NeoData', name.rsplit('\\', 1)[-1])
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, 'wb') as f:
+            f.write(data)
+        n += 1
     return n
 
 

@@ -8,7 +8,7 @@ asking.
 
 The repository holds only the tables the client does not have (the 2008 server's own, and server_data/Init plus
 UseItemClient.tdf, which tools/port2016.py wrote). The rest of tables/ (ItemClient.tdf, QuestClient.tdf, ...,
-the city traffic) and teammark/ are copied from a client: the 2011 US client for [client] version = 2011
+the city traffic), teammark/ and NeoData/ (the Neo City tables, 2016) are copied from a client: the 2011 US client for [client] version = 2011
 (server_data), the 2016 client (DriftCity Dev Ed) for version = 2016 (data_2016). The config picks which.
 
 If those files are there, nothing happens. Otherwise the client folder is asked for (in a terminal), or taken
@@ -32,6 +32,8 @@ from .sync_data import HERE, sync
 PORTED = {'UseItemClient.tdf'}
 # files that show a complete copy; the server stops without them
 REQUIRED = ['ItemClient.tdf', 'QuestClient.tdf', 'Instant_Client.tdf', 'Tutorial.tdf']
+# the Neo City tables (game/neocity.py, from Data/World/neodata.agt); the 2016 server needs them
+NEO = ['NC_chapter.xlt', 'NC_quest.xlt', 'NC_mission.xlt', 'NC_object.xlt', 'NC_objectDef.xlt', 'NC_HuvRand.xlt']
 GAME_EXES = ['DriftCityUS.exe', 'DriftCityEU.exe', 'DriftCity.exe']
 DEFAULT_CLIENT = {'2011': Path(HERE).parent / 'Client US', '2016': Path(HERE).parent / 'DriftCity Dev Ed'}
 
@@ -79,8 +81,10 @@ def ask_version(current):
         print('1 or 2')
 
 
-def missing(data, tables):
+def missing(data, tables, version='2011'):
     out = [f'tables/{n}' for n in REQUIRED if not (tables / n).is_file()]
+    if version == '2016':
+        out += [f'NeoData/{n}' for n in NEO if not (data / 'NeoData' / n).is_file()]
     marks = data / 'teammark'
     if not marks.is_dir() or not any(marks.iterdir()):
         out.append('teammark/')
@@ -166,7 +170,9 @@ def install(client, data, refresh):
         staged = Path(tmp) / 'data'
         sync(str(client), str(staged))
         added = replaced = 0
-        for sub in ('tables', 'teammark'):       # never Init/: it is in git (the port2016 tables)
+        for sub in ('tables', 'teammark', 'NeoData'):   # never Init/: it is in git (the port2016 tables)
+            if not (staged / sub).is_dir():
+                continue
             for src in sorted((staged / sub).rglob('*')):
                 if not src.is_file():
                     continue
@@ -196,7 +202,7 @@ def main():
     parser.add_argument('--choose', action='store_true', help='ask which client version (in a terminal)')
     args = parser.parse_args()
     version, data, tables = paths(args.config)
-    lost = missing(data, tables)
+    lost = missing(data, tables, version)
     chosen = args.version
     if not chosen and not args.check and (lost or args.choose) and sys.stdin.isatty():
         chosen = ask_version(version)
@@ -204,7 +210,7 @@ def main():
         set_version(args.config, chosen)
         print(f'{os.path.basename(args.config)}: [client] version = {chosen}')
         version, data, tables = paths(args.config)
-        lost = missing(data, tables)
+        lost = missing(data, tables, version)
     if args.check:
         print(f'client tables ({version}, {data.name}): ' + (f'missing {", ".join(lost)}' if lost else 'complete'))
         sys.exit(1 if lost else 0)

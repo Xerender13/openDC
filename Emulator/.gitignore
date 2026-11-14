@@ -13,6 +13,7 @@ client_backup/
 # server_data/Init/ is kept in git (user, 2026-10-19): it holds the tables tools/port2016.py wrote (2016 cars, tires,
 # tracks), which a setup from an unported client would not give.
 server_data/teammark/
+server_data/NeoData/
 server_data/tables/*
 # ... except the 2008 server's own tables, which only this repository has
 !server_data/tables/Contents.ini
@@ -37,6 +38,7 @@ editor_backups/
 # Experimental 2016 server data (tools.prepare2016): same rules as server_data/ above
 server_data_2016/*.pid
 server_data_2016/teammark/
+server_data_2016/NeoData/
 server_data_2016/tables/*
 !server_data_2016/tables/Contents.ini
 !server_data_2016/tables/InstantDrop_Server.tdf
