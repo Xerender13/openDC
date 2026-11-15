@@ -66,16 +66,14 @@ The emulator recognises each client's nation and applies the EU rules only to EU
 `allow = eu` or `us` makes a server for one version only).
 There is a client switch in launcher (between us and eu) which changes the rules. The EU tables with the different rules exist in the client alongside the US ones.
 
-## Current emulator progress (14.11.2026):
+## Current emulator progress (15.11.2026):
 
-**Game features that haven't been done yet:**
+**Features that still work in progress and might work with issues:**
 - Seasonal Events
-
-**Features that still require testing and might work with issues:**
 - GT Tournament
 - Neo City
 - World Lap Time
-- DCGP
+- DCGP (only started partially)
 - Channels and Channel Battle
 - Crew management
 
