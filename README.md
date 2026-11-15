@@ -2,7 +2,7 @@
 
 ![Open Drift City](https://github.com/Xerender13/openDC/blob/d05ced31e936e77c70660c8ca0f6aef5ba121735/openDC_logo_white.png)
 
-Drift City (Skid Rush) Stage 2/Stage 3 Emulation Project: a server emulator for the **2011 (2016 in development as well) Drift City client**: the US version and the European (EU) version.
+Drift City (Skid Rush) Stage 2/Stage 3 Emulation Project: a server emulator for the **2011 (2016 in development as well) Drift City client**: the US version.
 
 **DISCLAIMER: This project is coded with AI models (vibecoded)**
 
