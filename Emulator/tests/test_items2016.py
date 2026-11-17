@@ -284,3 +284,102 @@ class Items2016Test(unittest.TestCase):
         self.assertIsNone(driftuse.parse_value('p_f', '20954'))                  # a small car in the large pack
         self.assertIsNone(driftuse.parse_value('f_s', '20954'))                  # time-limited car, meter-rated pack
         self.assertIsNone(driftuse.parse_value('p_s', ''))
+
+
+@unittest.skipUnless(os.path.exists(f'{DATA}/tables/ItemClient.tdf'), 'needs the 2016 client tables (tools.client_setup)')
+class NeoGearGmTest(unittest.TestCase):
+    """gmneo / control port neo: one of each strongest Neo City part (neocity.gm_gear)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.tables = Tables(DATA, f'{DATA}/tables', f'{DATA}/adminlist.txt')
+
+    def setUp(self):
+        self.saved = context.__dict__.copy()
+        version.configure({'version': '2016'})
+        context.data = self.tables
+        self.p = SimpleNamespace(char=SimpleNamespace(cid=7, name='T', hancoin_inven=0, level=99), items=[])
+        self.s = SimpleNamespace(state={'player': self.p})
+
+    def tearDown(self):
+        context.__dict__.clear()
+        context.__dict__.update(self.saved)
+
+    def gear(self, args):
+        from dcemu.native.game import combo, neocity
+        taken, sent = [], []
+
+        async def take(p, info):
+            taken.append(info.item_id)
+            return info.item_id, 1
+        with patch.object(combo, 'take', take), patch.object(neocity, 'send', lambda s, *f: sent.extend(f)), \
+                patch.object(items, 'mod_list', lambda *x: Frame(0x192, b'')):
+            ok, reply = asyncio.run(neocity.gm_gear(self.s, args))
+        return ok, reply, taken, sent
+
+    def test_rare_set_is_the_default_and_strongest(self):
+        ok, reply, taken, sent = self.gear([])
+        self.assertTrue(ok, reply)
+        self.assertEqual(len(taken), 8)
+        self.assertEqual(len(sent), 1)
+        kinds = [self.tables.item_info(self.tables.item_index[i]).kind for i in taken]
+        self.assertEqual(sorted(set(kinds)), ['neo_armor', 'neo_coil', 'neo_fuse', 'neo_weapon'])
+        self.assertIn('R Cannon 90', reply)
+        self.assertNotIn('required level', reply)              # level 99 >= 90
+
+    def test_u_set_names_its_level_and_full_inventory_refuses(self):
+        ok, reply, taken, _ = self.gear(['u'])
+        self.assertTrue(ok, reply)
+        self.assertIn('required level 108', reply)
+        self.p.items = [SimpleNamespace(car_id=0)] * 35        # 40 slots, 5 free
+        ok, reply, taken, _ = self.gear(['rare'])
+        self.assertFalse(ok)
+        self.assertEqual(taken, [])
+        self.assertFalse(self.gear(['nope'])[0])
+
+
+@unittest.skipUnless(os.path.exists(f'{DATA}/tables/ItemClient.tdf'), 'needs the 2016 client tables (tools.client_setup)')
+class NeoEquipTest(unittest.TestCase):
+    """EquipItem 0x199 for Neo gear: one item per Neo slot (weapon 112, amplifier 113, fuse 114, armour 115)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.tables = Tables(DATA, f'{DATA}/tables', f'{DATA}/adminlist.txt')
+
+    def setUp(self):
+        self.saved = context.__dict__.copy()
+        version.configure({'version': '2016'})
+        context.data = t = self.tables
+        context.db = SimpleNamespace(server_id=2016, execute=AsyncMock())
+        context.option_parts = True
+        car = SimpleNamespace(car_id=5, on_auction=False, rental=False, grade=1)
+        self.p = SimpleNamespace(char=SimpleNamespace(cid=7, level=99, cars=[car]), car=car,
+                                 items=[item(t, 1, 'neo_wp_c_21141', car=5), item(t, 2, 'neo_arp_h_10036', car=5),
+                                        item(t, 3, 'neo_cop_10008'), item(t, 4, 'neo_fup_10008'),
+                                        item(t, 5, 'neo_arp_l_10036')])
+        self.p.items[0].state = 112 << 16 | items.ON_CAR
+        self.p.items[1].state = 115 << 16 | items.ON_CAR
+        self.s = SimpleNamespace(state={'player': self.p}, log=SimpleNamespace(note=Mock()))
+
+    def tearDown(self):
+        context.__dict__.clear()
+        context.__dict__.update(self.saved)
+
+    def equip(self, inven, slot):
+        sent = []
+        with patch.object(items, 'send', lambda s, *f: sent.extend(f)), \
+                patch.object(items, 'error', lambda s, text: sent.append(text)), \
+                patch.object(items, 'stat_frames', lambda p: []), \
+                patch('dcemu.native.nation.part_allowed', lambda *a: None):
+            asyncio.run(items.equip_item(self.s, Frame(0x199, struct.pack('<III', inven, slot, 5))))
+        return sent
+
+    def test_amplifier_and_fuse_go_on_next_to_weapon_and_armour(self):
+        self.assertEqual(self.equip(3, 113)[0].type, 0x19a)
+        self.assertEqual(self.equip(4, 114)[0].type, 0x19a)
+        on = {items.slot_of(i): i.item_id for i in self.p.items if i.car_id == 5}
+        self.assertEqual(on, {112: 'neo_wp_c_21141', 113: 'neo_cop_10008', 114: 'neo_fup_10008', 115: 'neo_arp_h_10036'})
+
+    def test_armour_replaces_the_armour_in_its_slot_and_wrong_slot_refused(self):
+        self.assertEqual(self.equip(5, 115)[0].type, 0x19a)
+        self.assertEqual(self.p.items[1].car_id, 0)                 # the heavy armour came off
+        self.assertEqual(items.slot_of(self.p.items[4]), 115)
+        self.assertEqual(self.equip(3, 114), ['20027'])             # an amplifier in the fuse slot

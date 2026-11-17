@@ -240,9 +240,11 @@ async def job_reward(session, frame):
                                           db.server_id, c.cid, aid))
     from .rewards import delivery_rewards, give
     from .items import mod_list
-    gains, given = await give(p, delivery_rewards(row[0], j['medal']))
-    if gains.items:
-        send(session, mod_list(*gains.items))
+    from .seasonal import harvest_delivery         # Harvest: the city's food box, receipts for a Distribution Box
+    extra, delivered = await harvest_delivery(session, p, row)
+    gains, given = await give(p, delivery_rewards(row[0], j['medal']) + extra)
+    if gains.items or delivered:
+        send(session, mod_list(*delivered, *gains.items))
     shown = (given[0][1], given[0][0].table_idx) if given else (0, 0)
     best, cur = await my_unit(c.cid, aid, 0), await my_unit(c.cid, aid, 0, ms)
     session.log.note(f'job record {row[0]}: {ms} ms, best {best}, this run {cur};'

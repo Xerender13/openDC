@@ -355,6 +355,8 @@ def slot_of(it):
 # the client's part slots on a car: 3 per type, speed 100-102, accel 103-105, crash 106-108, boost 109-111
 # (client 0x5fe7eb.., PART_TYPES numbering)
 SLOT_BASE = {0: 100, 2: 103, 1: 106, 3: 109}
+# 2016 Neo slots the client sends in EquipItem 0x199 (weapons: 112, and the extension slot 0xe81 opens is not measured)
+NEO_SLOTS = {'neo_coil': 113, 'neo_fuse': 114, 'neo_armor': 115}
 
 
 async def fix_shared_slots(p):
@@ -434,7 +436,18 @@ async def equip_item(session, frame):
     contents = context.data.contents
     on_car = [i for i in p.items if i.car_id == car_id and i is not it and (i.state & 0xffff) == ON_CAR]
     changed, redraw = [], None
-    if on_top(info.type):
+    neo = info.kind.startswith('neo_')
+    if neo:
+        # 2016 Neo gear: one item per Neo slot (the client sends weapon 112, amplifier 113, fuse 114, armour 115: log
+        # 20261114-231215). All Neo kinds are part type 12 here, so the parts' two-per-type line limit below refused the
+        # amplifier and fuse once a weapon and an armour were on (user, 2026-11-14). The Neo item already in the slot
+        # comes off; no Heat Treatment Kit (that is for the H / U racing parts).
+        if NEO_SLOTS.get(info.kind, slot) != slot:
+            return error(session, '20027')
+        for old in [i for i in on_car if slot_of(i) == slot and info_of(i).kind.startswith('neo_')]:
+            placed(old, 0, 0)
+            changed.append(old)
+    elif on_top(info.type):
         base = next((i for i in on_car if not on_top(info_of(i).type) and slot_of(i) == slot), None)
         if not base or info.grade not in GRADE_FITS.get(info_of(base).grade, ()):
             return error(session, '20027')
@@ -477,7 +490,7 @@ async def equip_item(session, frame):
         db = context.db
         await db.execute("UPDATE SKID_ITEM_TB SET BOX=0 WHERE SERVERID=%s AND CID=%s AND INVENIDX=%s",
                          (db.server_id, p.char.cid, it.inven_idx))
-    if info.grade in HEAT_GRADES and await scorch(p, it, True):
+    if not neo and info.grade in HEAT_GRADES and await scorch(p, it, True):
         session.log.note(f'{info.item_id} is scorched: {it.item_id}')
     await save_state(p, *changed)
     session.log.note(f'equip {info.item_id} on car {car_id} slot {slot}')
@@ -742,6 +755,12 @@ async def use_item(session, frame):
         from .mita500 import active as mita_active
         if mita_active(p):                          # its tooltip: "Cannot be used with the Mita 500 effect"
             return error(session, 'Bacchus cannot be used while the Mita 500 effect lasts.')
+    if info.kind in ('recipe_item', 'event_box_recipe', 'event_autumn'):    # season events (seasonal.py)
+        from . import seasonal
+        done = (await seasonal.exchange_receipts(session, p, it, info) if info.kind == 'event_autumn'
+                else await seasonal.craft(session, p, it, info))
+        if done:
+            return
     if info.kind == 'user_create':                  # a skill book: learned (alchemy.py), then used up
         from .alchemy import learn
         if not await learn(session, p, info):
@@ -802,6 +821,13 @@ async def use_item(session, frame):
         from .driftuse import open_gift_box
         for _ in range(count):
             (await open_gift_box(session, p, info)).send(session, p)
+    elif info.kind in ('chocolet_item', 'chocolet_gift_item') and info.reward:     # Easter baskets (seasonal.py)
+        from .driftuse import Gains
+        from .seasonal import eat_basket
+        gains = Gains()
+        for _ in range(count):
+            await eat_basket(session, p, it, info, gains)
+        gains.send(session, p)
     if stats:
         for f in stat_frames(p):
             send(session, f)

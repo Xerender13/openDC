@@ -77,6 +77,7 @@ class Valentine2016Test(unittest.TestCase):
         s = SimpleNamespace(state={'player': SimpleNamespace(char=SimpleNamespace(name='X'))}, log=Mock())
         body = b'post_1st_00052'.ljust(0xff, b'\0')
         with patch.object(valentine, 'rows', return_value={'post_1st_00052': ('rw_2013_valentine_moon_01', True)}), \
+                patch('dcemu.native.events.is_on', return_value=True), \
                 patch('dcemu.native.game.alchemy.take_count', AsyncMock(return_value=[('it', 3)])), \
                 patch('dcemu.native.game.items.mod_list', return_value=Frame(0x192, b'')), \
                 patch('dcemu.native.game.driftuse.roll', return_value=[]) as roll, \

@@ -98,6 +98,13 @@ async def drop(p, mode, parts_only=False):
                 return Frame(0x2e5, struct.pack('<Iii', 0, -1, mode)), []
             return Frame(0x2e5, struct.pack('<IIi', 1, info.table_idx, mode)), [got]
         return Frame(0x2e5, struct.pack('<Iii', 1, -1, mode)), []
+    from .seasonal import event_drop
+    info = event_drop(p)                        # season events: their items first (seasonal.DROPS, [events])
+    if info:
+        got = await take_if_room(p, info)
+        if got is None:
+            return Frame(0x2e5, struct.pack('<Iii', 0, -1, mode)), []
+        return Frame(0x2e5, struct.pack('<IIi', 1, info.table_idx, mode)), [got]
     roll = random.uniform(0, 100 if mode != 1 else 10)
     total = 0.0
     from .licenses import drop_bonus

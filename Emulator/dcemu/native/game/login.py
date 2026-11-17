@@ -137,6 +137,8 @@ def content_flags(**overrides):
     named['Main.AuctionCar'] = int(context.auction_cars)               # emulator.ini [auction] (auction.py)
     named['Main.AuctionCommission'] = int(context.auction_item_fee)    # the fees the client shows (%)
     named['Main.AuctionVSCommission'] = int(context.auction_drift_fee)
+    from .. import events
+    named.update(events.flags())               # season events that run today (emulator.ini [events])
     named.update(context.extra_flags)          # emulator.ini [flags]
     from ..version import is_2016, max_level
     if is_2016():
@@ -273,6 +275,9 @@ async def load_char(session, frame):
         await dcgp.send_state(session)
         from . import promotion             # 2016 0xaa welcome / welcome-back popup ([promotion])
         await promotion.on_login(session)
+        from .seasonal import login_frames  # season events: the Christmas tree stage (0xcf2), when configured
+        for f in login_frames(p):
+            send(session, f)
     from .items import bonus_update
     send(session, bonus_update(p))
     for car in c.cars:                  # a timed V upgrade on a car: the grade it shows (vshop.after_change)

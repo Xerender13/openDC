@@ -4,7 +4,70 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 47 (2026-11-14): EU = V-grade rules on the US client — resume here
+## Session 49 (2026-11-17): Neo City Q3 destroy objective + HUV kill payment — resume here
+
+Details: EMULATOR_NOTES session 49. 435 tests pass. Emulator restarted after the change.
+- **Q3's destroy objective never counted**: the 0xeec answer rebuilt the body and zeroed the last two u32 (the HUV
+  group / level the client sent), so the client's matcher 0x53cd90 dropped it. `0xeec` now echoes the request's 24
+  payload bytes unchanged, for the destroy path and every other type.
+- **HUV kills paid nothing**: the 0xce kill report carries the enemy's **model** in +0x34 (19040 / 19041 / 19104 =
+  HUV-MRL / APS / HMG), not a Huv Param ID. The id now comes from the run's own spawn record by actor key
+  (`enemy_param()`), with the client's value as a fallback; the mismatch is logged.
+- Not yet tried in game: Q3's objective should go 0/1 -> 1/1 and the chapter should then clear; HUV kills should pay.
+
+## Session 48 (2026-11-14/15): season events, web admin tool, Neo fixes
+
+**State:** nothing committed (the user asks for commits). The 2016 emulator runs from `Emulator/` with all of it
+(restarted 2026-11-15 ~00:10). `Emulator 2011/` got none of it. Details: EMULATOR_NOTES session 48 and the session 47
+entries dated 2026-11-14 at its top.
+
+**Done, not yet confirmed in game:**
+- `gmneo [name] [rare|u]` / control `neo`: the strongest Neo gear (Rare 90 set; U 108 set).
+- Neo amplifier / fuse equip (one item per Neo slot 112-115; the two-per-type part limit no longer counts them).
+- Neo destroy goals count: kill reports 0xeeb are echoed as 0xeec (the client's matcher 0x53cd90), server sends 0xeee
+  at the goal.
+- Season events: emulator.ini [events] (on / off / auto by date, gmevent / control `event`), their content flags at
+  login, and game/seasonal.py: event drops, Easter recipes + baskets, Harvest delivery boxes / receipts, Christmas
+  tree stage (2016 0xcf2, off by default), Valentine 0xfbb push. The Valentine chocolate is now off outside February.
+- Web admin tool: `./webadmin.sh`, open the printed URL (items, cars, rewards / drops, settings + events, server).
+
+**Open:** Hongbao (0x5be / 0x5bf), Halloween drink buff, basket gifting, the Harvest receipt rates (ours), listing the
+event shop rows in the clients (a client change: tools/shop_rows.py, the user's call), copying to `Emulator 2011/`.
+
+## Session 47 (2026-11-14): EU = V-grade rules on the US client, Neo City chapter 1 playable — resume here
+
+**State at the end (2026-11-14 evening):** everything is committed and pushed (last commit `41ad751`); the 2016
+emulator runs from `Emulator/` (version 2016, ports 111xx). `Emulator 2011/` did not get these fixes (none of the Neo
+City work applies to 2011; the visual-item slot fix is 2016-only). Details of every item below: EMULATOR_NOTES
+session 47 (newest entries at the top), DeepSeek traces in `docs/neo_work/` (not in git).
+
+**Neo City (2016), confirmed in game:**
+- Chapter flow: load -> "Quest Ready" in the red circle -> the start talk (0xeea result 3 on the 0xee7 flag-3
+  report) -> the client's own 0xedc -> 0xedd + the quest's enemies -> checkpoint scenes (0xeea result 1 -> 0xeed ->
+  0xeee) -> quest reward -> the next quest waits for its start zone. `START_ENTRY = 1` (0xe89 / 0xed9 +0xe) must stay:
+  0 skips the first objective.
+- HP bar, part durability (2016 item record +0x4c float), only Neo Oros in the city list.
+- Enemies: the server builds the quest's NC_object Q_START rows (NEO_HUB / NEO_HUV) as 0xc7 from NC_object +
+  NC_HuvRand + NeoHuvParam (`neocity.spawn_records`); record +0x08 = the owner's serial (local AI control),
+  +0x0a = a per-run enemy number from 0x100 (actor key = +0x0a << 16 | +0x08), never 0. Visible, roam, attack.
+- Drift Booster (and with it every 2016 visual-item assist slot): slots at record +0x50.
+
+**Done, not yet confirmed in game:**
+- HUB crash: the HUB's kind-3 summon records are no longer relayed (client crash at 0x4a99a1 in the local HUV
+  control, dump `DriftCity Dev Ed/DriftCity.exe.npd`). HUBs therefore summon nothing.
+- The previous quest's enemies are removed with S>C 0xce (no killer, keys in `r.killed`) before the next spawn
+  (they stacked three HUBs at the Q3 start).
+- The revival item `neo_i_00005` (NEO Retry dialog) revives: 0xef3 +6 = 1, only while destroyed; the client's
+  "alive again" 0xef2 within 3 s is not a death.
+- Turbo Booster, PassiveAssist items, Aero Mk.2 option assists on 2016 (same slot fix as the Drift Booster).
+
+**Open (Neo City):**
+- HUB summons: would need the "other HUV" branch (+0x08 not a member's serial) for the minions; untested, and those
+  actors may not get AI.
+- Removed enemies may come back through the client's own revive timer (guess, NEO_HUBCRASH 3.3).
+- Q_END rows (Q1 spawns a second set at its end), BUILDING / TURRET rows, party runs (only solo was played).
+- Q3's last objective (destroy Huv Param 100451) and the chapter clear after it were not reached yet in game.
+- Chapters 2+ were not played.
 
 - EU rules differ from US in: parts by V grade, battle zone and channel battle by V grade, no stat points for the
   level, drops by V grade (`emulator.ini [nation]`, `nation.RULES`); the rest is US (complete bonus, new physics).
@@ -25,7 +88,7 @@ says what to copy, how to set up, how the work is done, and what is open.
   battle minimum grades; the emulator log shows `client nation 8 (EU eng)` at the login; then `--us` (tables back:
   the launcher log says "US tables put back"). Details: EMULATOR_NOTES session 47.
 
-## Session 46 (2026-11-13/14, overnight): Neo City stages 2-3, rankings, World Match, DCGP — resume here
+## Session 46 (2026-11-13/14, overnight): Neo City stages 2-3, rankings, World Match, DCGP
 
 **Worked while the user slept; nothing tried in game, nothing committed.** Delegated to OpenCode DeepSeek
 (`opencode-go/deepseek-v4.1-flash`); the lead extracted the evidence, wrote the specs, re-checked the key client addresses

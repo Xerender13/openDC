@@ -518,13 +518,64 @@ class NeoCityMissionTest(unittest.TestCase):
                                      self.progress(quest=0, mission=1, value=3)), frames)
         self.assertEqual(self.s.log.note.call_count, 1)
 
-    def test_destroy_hit_report_is_dropped(self):
-        """0xeeb with +0x12 or +0x16 non-zero is a destroy hit report (0x5132ae): no answer, no log."""
+    def test_destroy_kill_reports_count(self):
+        """0xeeb with +0x12 / +0x16 non-zero is a destroy KILL report (0x5132ae): 0xeec echoes +0xe / +0x12 as
+        param1 / param2 (the client's matcher 0x53cd90 counts it); the server sends 0xeee at param_2 kills
+        (q_00023 mission 2: 3 x 100482; user, 2026-11-14: kills did not count)."""
+        kill = self.progress(quest=0, mission=2, value=100482, report=45, huv=0x01b70002)
+        for n in range(2):
+            frames = self.frames(neocity.mission_progress, kill)
+            self.assertEqual([f.type for f in frames], [0xeec])
+            self.assertEqual(struct.unpack_from('<5I', frames[0].payload), (2, 0, 2, 100482, 45))
+        other = self.frames(neocity.mission_progress, self.progress(quest=0, mission=2, value=100466, report=45))
+        self.assertEqual([f.type for f in other], [0xeec])                    # not a target: no count
+        frames = self.frames(neocity.mission_progress, kill)
+        self.assertEqual([f.type for f in frames], [0xeec, 0xeee])
+        self.assertEqual(struct.unpack_from('<3I', frames[1].payload), (2, 0, 2))
+        self.assertEqual([f.type for f in self.frames(neocity.mission_progress, kill)], [0xeec])   # once
+
+    def test_destroy_kill_by_huv_group(self):
+        """A randomly placed HUV reports its NC_HuvRand group (1088) instead of its ID: counted when the group
+        holds a target; a report in a mission that is not destroy gets nothing."""
+        m = {'param_1': ['100450', 'n/a'], 'param_2': 1}
+        self.assertTrue(neocity.destroy_target_hit(m, 1088))
+        self.assertFalse(neocity.destroy_target_hit(m, 1000))
+        self.assertTrue(neocity.destroy_target_hit({'param_1': ['n/a'], 'param_2': 1}, 5))
         self.assertEqual(self.handle(neocity.mission_progress,
-                                     self.progress(quest=0, mission=2, value=100482, report=7)), [])
-        self.assertEqual(self.handle(neocity.mission_progress,
-                                     self.progress(quest=0, mission=2, value=100482, huv=100482)), [])
-        self.s.log.note.assert_not_called()
+                                     self.progress(quest=0, mission=1, value=100482, report=45)), [])
+
+    def test_eec_echoes_the_whole_request(self):
+        """The answer keeps all 24 bytes of the request; the matcher 0x53cd90 reads the last two u32 (the HUV
+        group / level the client sent), so a rebuilt body with them zeroed never counts a kill
+        (user, 2026-11-17: Q3's destroy objective stayed 0/1)."""
+        kill = self.progress(quest=0, mission=2, value=100451, report=0x2d, huv=0x01AD004E)
+        frames = self.frames(neocity.mission_progress, kill)
+        self.assertEqual(frames[0].type, 0xeec)
+        self.assertEqual(frames[0].payload, kill.payload[:0x18])
+        self.assertEqual(struct.unpack_from('<6I', frames[0].payload), (2, 0, 2, 100451, 0x2d, 0x01AD004E))
+        patrol = self.progress(quest=0, mission=1, value=3)
+        self.assertEqual(self.frames(neocity.mission_progress, patrol)[0].payload, patrol.payload[:0x18])
+
+    def test_huv_reports_its_model_and_is_paid_from_the_spawn_record(self):
+        """HUV-APS (Huv Param 100451, model 19041) and HUV-HMG (100520, 19104) report the model in 0xce's +0x34, so
+        the row was not found and the kill paid nothing. The actor key (record +0x08 / +0x0a) names our own spawn
+        record, which holds the Huv Param ID."""
+        self.r.enemies.append(struct.pack('<6HHIIHHfH4fIII2x2x', 0, 0, 45, 19041, 2, 441, 3000, 100451,
+                                          1088, 0, 0, 0.0, 1, 0.0, 0.0, 0.0, 0.0, 2, 0, 0))
+        self.assertEqual(neocity.enemy_param(self.r, 2, 441), 100451)
+        self.assertEqual(neocity.enemy_param(self.r, 2, 999), 0)
+        body = bytearray(0x3e)
+        struct.pack_into('<HH', body, 0, 2, 441)
+        struct.pack_into('<I', body, 0x34, 19041)          # the model, as the client sends it
+        context.data.item_index = {}
+        with patch.object(neocity, 'add_exp', AsyncMock()), patch.object(neocity, 'add_money', AsyncMock()), \
+                patch.object(neocity, 'play_mode', AsyncMock()), \
+                patch.object(neocity, 'stat_frames', return_value=[]), \
+                patch.object(neocity, 'collect_drop', AsyncMock()):
+            self.handle(neocity.enemy_kill, Frame(0xce, bytes(body)))
+        notes = ' '.join(str(c.args[0]) for c in self.s.log.note.call_args_list)
+        self.assertIn('Huv Param 100451', notes)
+        self.assertNotIn('unknown Huv Param', notes)
 
     def test_collect_completes_once(self):
         """q_00024 (quest 1) mission 0 needs param_2 = 5: every 0xeeb gets 0xeec, the count gets one 0xeee."""

@@ -201,7 +201,7 @@ async def command(cmd, args):
     """One GM command -> (done, text). kick NAME [days] | block NAME days | unblock NAME |
     chatblock NAME minutes (0 lifts it) | ban ACCOUNT-or-NAME | unban ACCOUNT-or-NAME | who |
     item NAME ITEM-ID [count] [+LEVEL] [A|B|C [TIER]] (as the chat command gmitem) | drift NAME DRIFT-ITEM-ID [days] (as gmdrift; 0 days
-    = for good); car NAME CAR-NAME [V1-V9] (as gmcar); for a character online | coin NAME-or-ACCOUNT amount (G Coin) |
+    = for good); car NAME CAR-NAME [V1-V9] (as gmcar); neo NAME [rare|u] (as gmneo); for a character online | coin NAME-or-ACCOUNT amount (G Coin) |
     crewexp NAME AMOUNT (crew EXP to that character's crew; 2016) | realmatch open | close | in MINUTES | auto | status"""
     from . import editor_admin
     if cmd in editor_admin.COMMANDS:
@@ -231,6 +231,9 @@ async def command(cmd, args):
     if cmd == 'who':
         names = who()
         return True, f'{len(names)} online' + ''.join('\n  ' + n for n in names)
+    if cmd == 'event':                      # event [NAME on|off|auto] (as gmevent): season events
+        from . import events
+        return True, events.gm_command(args)
     if cmd == 'realmatch':
         from .game.rooms import gm_realmatch
         return True, gm_realmatch(args)
@@ -254,6 +257,12 @@ async def command(cmd, args):
             return False, f'car: {name} is not online'
         from .game.misc import gm_car
         return await gm_car(session, args[1:])
+    elif cmd == 'neo':                      # neo NAME [rare|u] (as gmneo): the strongest Neo City gear (2016)
+        session = find(name)
+        if not session:
+            return False, f'neo: {name} is not online'
+        from .game.neocity import gm_gear
+        return await gm_gear(session, args[1:])
     elif cmd == 'drift':
         session = find(name)
         if not session or len(args) < 2 or args[1] not in context.data.visual_index:
@@ -305,7 +314,7 @@ async def command(cmd, args):
         account = await ban(name, valid=cmd == 'unban')
         return bool(account), f'{cmd} account {account}' if account else f'no account or character {name!r}'
     else:
-        return False, f'unknown command {cmd!r} (kick, block, unblock, chatblock, ban, unban, who, item, drift, coin, realmatch)'
+        return False, f'unknown command {cmd!r} (kick, block, unblock, chatblock, ban, unban, who, item, drift, neo, event, coin, realmatch)'
     return ok, f'{cmd} {name}: {"done" if ok else "no such character, or not online"}'
 
 

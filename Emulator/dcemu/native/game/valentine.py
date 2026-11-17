@@ -55,7 +55,8 @@ async def give_chocolate(session, frame):
     from .gotcha import prize_event
     from .items import mod_list
     p = session.state.get('player')
-    if not is_2016() or not p:
+    from .. import events
+    if not is_2016() or not p or not events.is_on('valentine'):     # emulator.ini [events] valentine
         return
     key = frame.payload.split(b'\0', 1)[0].decode('latin-1').strip()
     group, active = rows().get(key, ('', False))

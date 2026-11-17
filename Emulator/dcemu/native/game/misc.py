@@ -14,7 +14,8 @@
     with PType 'A' or in the admin list: gmlevel [name] level, gmexp [name] exp, gmmoney [name] Mito,
     gmitem [name] item id [count] [+level] [A|B|C [tier]] (a part enhanced to +level, up to +20, and converted
     with that type's PartModify_Client.tdf row, 1-34, no tier = 34; a docking item: [+purple] [white] points:
-    gm_part_args), gmcar [name] car name [V1-V9] (gm_car: a car and its key, by its shown / model name). The 2008 server answered them
+    gm_part_args), gmcar [name] car name [V1-V9] (gm_car: a car and its key, by its shown / model name), gmneo [name]
+    [rare|u] (neocity.gm_gear: one of each strongest Neo City weapon, amplifier, fuse and armour; 2016). The 2008 server answered them
     with 0x0001 "cmd(arg1,arg2,arg3)=[1 or 0]"; here 0x0001 carries a line of text saying what was done or why
     not (user, 2026-10-18). The character changed gets 0x169 CharUpdate (XiStrCharInfo) and its stats. Without a name the command is for the sender. (2008 also had gmcar, gmmove, gmeventitem.)
     Kick / block / ban (native/admin.py; the 2008 server had them on its GM console only): gmkick name
@@ -342,6 +343,18 @@ async def game_stream(session, frame):
                  else 'gate rewards follow gate_rewards.txt again')
         session.log.note(f'GM {text!r}: {reply}')
         return admin.message(session, reply)
+    if cmd == 'gmneo':                          # gmneo [name] [rare|u]: the strongest Neo City gear (2016, neocity.py)
+        from .neocity import gm_gear
+        target = online(args[0]) if args and args[0].lower() not in ('rare', 'u') else session
+        ok, reply = (await gm_gear(target, args[1:] if target is not session else args) if target
+                     else (False, f'{args[0]} is not online'))
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
+    if cmd == 'gmevent':                        # gmevent [event on|off|auto]: season events (native/events.py)
+        from .. import events
+        reply = events.gm_command(args)
+        session.log.note(f'GM {text!r}: {reply}')
+        return admin.message(session, reply)
     if cmd == 'gmcar':                          # gmcar [name] car name [V1-V9]: a car (with its key) by its name
         ok, reply = await gm_car(session, args)
         session.log.note(f'GM {text!r}: {reply}')
@@ -552,7 +565,7 @@ async def gm(session, cmd, args):
     from .combo import PART_KINDS, take
     from .items import add_money, mod_list
     if cmd not in GM_USAGE:
-        return False, (f'unknown GM command {cmd!r}: gmitem, gmlevel, gmexp, gmmoney, gmdrift, gmsets, gmgate, '
+        return False, (f'unknown GM command {cmd!r}: gmitem, gmlevel, gmexp, gmmoney, gmdrift, gmsets, gmneo, gmevent, gmgate, '
                        f'gmpartytest, gmvchasetest, gmuctest, gmcbtest, gmcbattle, gmcbstart, gmtour, gmcoin, gmcrewexp, gmrushevent, gmcar, gm' + ', gm'.join(ADMIN_COMMANDS))
     target = session
     if args and not args[0].lstrip('-').isdigit() and args[0] not in context.data.item_index:

@@ -73,11 +73,13 @@ Chapter start, quests, missions (the client's activity object is [mgr+0x174], 0x
      value, then two more. **S>C 0xeea is not sent any more**: its result 1 sets [activity+0x9c] = 3
      (0x53400f) and the client's per-frame mission tick only runs while that flag is 2 (0x7a5aea), so it
      stopped the patrol / collect / investigate / destroy progress (0x7a5a90..0x7a5b22). New rule: when
-     +0x12 or +0x16 is non-zero the message is a destroy hit report (0x5132ae) -> no answer, no log;
+     +0x12 or +0x16 is non-zero the message is a destroy KILL report (0x5132ae, once per destroyed enemy, only in
+     a type 11 mission) -> S>C 0xeec **echoing the request's 24 payload bytes unchanged** (the matcher 0x53cd90
+     reads the HUV group / level in the last two u32, so they must survive), and the server's own count -> 0xeee at
+     param_2 kills (destroy_kill);
      otherwise S>C 0xeec (26; handler 0x53cee0) key, quest, mission, u32 param1 = the request's +0xe,
-     u32 param2 = 0, 4 zero bytes — harmless for every type (patrol needs it to set the point bit,
-     0x538de0; collect / investigate only store it in activity+0x64 / +0x7c; destroy with 0/0 matches
-     nothing, 0x53cd90). Then, by the row's type from NC_mission.xlt: collect (6), when value >= param_2
+     u32 param2, u32 @0x16, u32 @0x1a — also the request's own bytes: harmless for every type (patrol needs it to
+     set the point bit, 0x538de0; collect / investigate only store it in activity+0x64 / +0x7c). Then, by the row's type from NC_mission.xlt: collect (6), when value >= param_2
      (a required count <= 0 means 1), and investigate (7), when value == 1, get S>C 0xeee (14; handler
      0x521940) once per (quest, mission) per run; patrol, move and unknown / out of range get nothing more.
  C>S 0xeef (14; sender 0x84fbd0) three u32 -> S>C 0xeee (14; handler 0x521940) the same 12 payload bytes (the
@@ -165,7 +167,10 @@ have no state gate. One run = one party, so every relay goes to the run's member
       chapter_complete, play_mode(c, 'NEOCITY'); then the reward group of column 18 ('n/a' = none, expanded by
       .driftuse.roll): the first NormalItem / SkidItem that context.data.item_index knows goes through
       rewards.give, followed by items.mod_list. A (lo, hi) enemy pair is paid once per run (run.killed), so
-      duplicate reports are relayed but not paid twice. An unknown Huv Param ID is relayed and logged only.
+      duplicate reports are relayed but not paid twice. The Huv Param ID comes from the run's own spawn record for
+      the report's actor key (record +0x0e); only when that record is unknown is the client's +0x34 used, which a
+      HUV fills with its **model** (19040 / 19041 / 19104 = HUV-MRL / APS / HMG), not a Huv Param ID — those kills
+      paid nothing before 2026-11-17. An unknown ID is relayed and logged only.
  C>S 0xcf (11; maker 0x85dff0) targeting / C>S 0xd0 (16; maker 0x85e070) aggro -> S>C 0xcf (11; handler
       0x526000) / S>C 0xd0 (16; handler 0x52e2f0) the same bytes to every OTHER run member (not the sender).
       Neither is logged: both can be very frequent.
@@ -623,6 +628,7 @@ class Run:
         self.rewarded = set()                       # quest indexes rewarded in this run
         self.missions_done = set()                  # (quest, mission) already answered with 0xeee
         self.mission_notes = set()                  # (quest, mission) already logged as 0xeec only
+        self.kills = {}                             # (quest, mission) -> destroy-mission kills counted
         self.enemies = []                           # the 0xc7 records (the client's, filled); at most ENEMY_CAP
         self.enemy_no = ENEMY_FIRST                 # the next record +0x0a (the actor key's high word)
         self.killed = set()                         # (lo, hi) enemy pairs already paid in this run
@@ -963,17 +969,20 @@ def start_quest(session, r, key, quest):
 @on(SVC, C2S, 0xeeb)
 async def mission_progress(session, frame):
     """0xeeb -> 0xeec (26) plus 0xeee when the mission's type rule is met; 0xeea is not sent any more (its
-    result 1 stops the client's mission tick, 0x53400f / 0x7a5aea). A destroy hit report (+0x12 / +0x16
-    non-zero, 0x5132ae) is dropped silently."""
+    result 1 stops the client's mission tick, 0x53400f / 0x7a5aea). A destroy kill report (+0x12 / +0x16
+    non-zero, 0x5132ae): destroy_kill."""
     if not _player(session, frame, 0x18):
         return
     r = run_of(session)
     if not r:
         return
     key, quest, mission, value, report, huv = struct.unpack_from('<6I', frame.payload)
-    if report or huv:                       # a destroy hit report: frequent, no answer, no log
-        return
-    send(session, Frame(0xeec, struct.pack('<5I', key, quest, mission, value, 0) + bytes(4)))
+    if report or huv:
+        return destroy_kill(session, r, key, quest, mission, value, report, frame.payload[:0x18])
+    # Every type gets the request's own 24 bytes back, not a rebuilt body with the tail zeroed: the matcher and the
+    # per-type stores read the last two u32 (see the module docstring), so zeroing them loses what the client sent
+    # (user, 2026-11-17: a destroy kill's +0x16 was dropped this way).
+    send(session, Frame(0xeec, frame.payload[:0x18]))
     if (quest, mission) in r.missions_done:     # 0xeee went already: no second one, no more notes
         return
     m = mission_of(r.chapter, quest, mission)
@@ -995,6 +1004,41 @@ async def mission_progress(session, frame):
     r.mission_notes.add((quest, mission))
     session.log.note(f'neocity: mission {mission} of quest {quest} ({m["type"] if m else "unknown"}, value '
                      f'{value}): 0xeec only, no 0xeee, in run {r.id}')
+
+
+def destroy_target_hit(m, reported):
+    """A destroy kill report's +0xe against the mission's targets (NC_mission param_1, Huv Param IDs): the ID itself, or
+    an NC_HuvRand group that holds a target (the client reports the group of a randomly picked HUV, e.g. 1088 with
+    level 45 / 50 at +0x12; *(guess)*: the group can also have rolled another HUV). No targets = any kill (as the
+    client's matcher 0x53cd90 with [mission+0xdc] == 0)."""
+    targets = {_int(t) for t in m['param_1'] if _int(t)}
+    if not targets or reported in targets:
+        return True
+    return any(i in targets for i, _ in huv_rand().get(reported, ()))
+
+
+def destroy_kill(session, r, key, quest, mission, value, report, payload):
+    """A kill in a destroy mission (C>S 0xeeb from 0x5132ae, sent once per destroyed enemy and only while the
+    current mission is type 11 (0x51327d): +0xe = the enemy's ID (0x4f0650), +0x12 = [enemy+0x43e8], +0x16 =
+    [enemy+0x41c0]). -> S>C 0xeec **with the request's 24 payload bytes unchanged**: the handler 0x53cee0 hands
+    them to the matcher 0x53cd90, which counts the kill when they fit a target, so the last two u32 must survive
+    (they are the HUV group and the level the client sent). Echoing only param1/param2 with the tail zeroed left
+    Q3's destroy objective at 0/1 (user, 2026-11-17). The server counts the kills too and sends 0xeee (mission
+    complete) at NC_mission param_2 kills, as for collect."""
+    m = mission_of(r.chapter, quest, mission)
+    if not m or m['number'] != 11:
+        return
+    send(session, Frame(0xeec, payload))
+    if (quest, mission) in r.missions_done or not destroy_target_hit(m, value):
+        return
+    n = r.kills[(quest, mission)] = r.kills.get((quest, mission), 0) + 1
+    need = max(m['param_2'], 1)
+    session.log.note(f'neocity: destroy kill {n}/{need} (enemy {value}, {report}) for mission {mission} of quest '
+                     f'{quest} in run {r.id}')
+    if n >= need:
+        r.missions_done.add((quest, mission))
+        send(session, Frame(0xeee, struct.pack('<3I', key, quest, mission)))
+        session.log.note(f'neocity: destroy mission {mission} of quest {quest} complete in run {r.id}')
 
 
 @on(SVC, C2S, 0xeef)
@@ -1448,6 +1492,17 @@ async def collect_drop(session, p, r, huv_id):
                          f'in run {r.id}')
 
 
+def enemy_param(r, lo, hi):
+    """The Huv Param ID of the enemy a kill report names, from the run's own spawn record for that actor key (record
+    +0x08 owner serial, +0x0a enemy number, +0x0e Huv Param ID), or 0. The client's +0x34 is a Huv Param ID for most
+    enemies but a HUV reports its **model** there — 19040 / 19041 / 19104 are the "등장 HUV ID" of HUV-MRL / HUV-APS /
+    HUV-HMG, not IDs of the table — so those kills found no row and paid nothing (user, 2026-11-17)."""
+    for rec in r.enemies:
+        if struct.unpack_from('<HH', rec, 8) == (lo, hi):
+            return struct.unpack_from('<I', rec, 0xE)[0]
+    return 0
+
+
 @on(SVC, C2S, 0xce)
 async def enemy_kill(session, frame):
     """0xce -> 0xce to every run member, then the sender (the killer) is paid once per enemy pair."""
@@ -1458,13 +1513,17 @@ async def enemy_kill(session, frame):
     if not r:
         return
     lo, hi = struct.unpack_from('<HH', frame.payload)
-    huv_id, = struct.unpack_from('<I', frame.payload, 0x34)
+    reported, = struct.unpack_from('<I', frame.payload, 0x34)
     r.cast(Frame(0xce, frame.payload[:0x3e]))
     if (lo, hi) in r.killed:
-        session.log.note(f'neocity: kill of enemy {hi}:{lo} (Huv Param {huv_id}) reported again: relayed, '
+        session.log.note(f'neocity: kill of enemy {hi}:{lo} (Huv Param {reported}) reported again: relayed, '
                          f'paid once')
         return
     r.killed.add((lo, hi))
+    huv_id = enemy_param(r, lo, hi) or reported
+    if huv_id != reported:
+        session.log.note(f'neocity: enemy {hi}:{lo}: the client sent {reported} (a model), the spawn record says '
+                         f'Huv Param {huv_id}')
     await collect_drop(session, p, r, huv_id)
     info = huv_params().get(huv_id)
     if not info:
@@ -1665,3 +1724,37 @@ async def neocity_on_close(session):
         await asyncio.Event().wait()
     finally:
         leave(session)
+
+
+# GM test gear (gmneo / control port "neo"; 2016 ItemClient.tdf + Init/WeaponList.xlt). The Rare 90 weapons point at
+# the WeaponList "120" rows (ItemClient column 9: 21141 / 22141 / 23141 / 24141; e.g. Cannon damage 17940 against
+# 11623 for U Cannon 108) and the Rare 90 armours have the highest defence (column 9: light 1500, heavy 2400; U 108:
+# 871 / 1742), so 'rare' is the strongest set; 'u' is the U-Type 108 line (required level 108).
+NEO_GEAR = {
+    'rare': ('neo_wp_c_21141', 'neo_wp_a_22141', 'neo_wp_w_23141', 'neo_wp_m_24141',     # R Cannon / Railgun / Wave / Mine 90
+             'neo_cop_10008', 'neo_fup_10008',                                           # R Amplifier 90, R Fuse 90
+             'neo_arp_l_10036', 'neo_arp_h_10036'),                                      # R Light / Heavy Armor 90
+    'u': ('neo_wp_c_21135', 'neo_wp_a_22135', 'neo_wp_w_23135', 'neo_wp_m_24135',        # U Cannon / Railgun / Wave / Mine 108
+          'neo_cop_10007', 'neo_fup_10007',                                              # U Amplifier 90, U Fuse 90
+          'neo_arp_l_10035', 'neo_arp_h_10035'),                                         # U Light / Heavy Armor 108
+}
+NEO_GEAR_USAGE = 'gmneo [name] [rare|u]: the strongest Neo City weapons, amplifier, fuse and armours (rare: Rare 90, the default)'
+
+
+async def gm_gear(target, args):
+    """One of each item of a NEO_GEAR set to the target's inventory -> (done, reply)."""
+    from .combo import free_slots, take
+    from .items import mod_list
+    which = args[0].lower() if args else 'rare'
+    if which not in NEO_GEAR:
+        return False, f'usage: {NEO_GEAR_USAGE}'
+    t, p = context.data, target.state['player']
+    infos = [t.item_info(t.item_index[i]) if i in t.item_index else None for i in NEO_GEAR[which]]
+    if not all(infos):
+        return False, 'no Neo City items in this server\'s tables (2016 only: emulator.ini [client] version)'
+    if free_slots(p) < len(infos):
+        return False, f'{p.char.name}: {len(infos)} Neo items need {len(infos)} free slots, {free_slots(p)} free'
+    send(target, mod_list(*[await take(p, info) for info in infos]))
+    level = max(info.req_level for info in infos)
+    note = f' (required level {level}; {p.char.name} is {p.char.level})' if level > p.char.level else ''
+    return True, f'{p.char.name} got the {which} Neo set: ' + ', '.join(i.name or i.item_id for i in infos) + note

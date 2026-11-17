@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>openDC web workshop</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="top">
+  <div class="brand">openDC <span>/ web workshop</span></div>
+  <div id="version" class="badge"></div>
+  <div id="restart-note" class="banner hidden">Restart the emulator to load table changes.</div>
+  <div id="msg" class="msg" aria-live="polite"></div>
+</header>
+
+<nav id="tabs">
+  <button data-tab="items" class="active">Items</button>
+  <button data-tab="cars">Cars</button>
+  <button data-tab="rewards">Rewards &amp; drops</button>
+  <button data-tab="settings">Settings</button>
+  <button data-tab="server">Server</button>
+</nav>
+
+<main>
+  <section id="tab-items" class="panel active">
+    <div class="toolbar">
+      <input id="item-q" type="search" placeholder="Search id or name (English or Korean)" size="34">
+      <label>Table <select id="item-table"></select></label>
+      <label>Kind <select id="item-kind"></select></label>
+      <label>Grade <select id="item-grade"></select></label>
+      <span id="item-count" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="item-prev">‹ Prev</button>
+      <button id="item-next">Next ›</button>
+    </div>
+    <div class="split">
+      <div class="list-wrap">
+        <table class="list" id="item-list">
+          <thead>
+            <tr><th></th><th>ID</th><th>Name</th><th>Kind</th><th>Grade</th><th>Level</th><th>Price</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="item-detail" class="detail"><p class="muted">Select an item to see every column.</p></div>
+    </div>
+  </section>
+
+  <section id="tab-cars" class="panel">
+    <div class="toolbar">
+      <input id="car-q" type="search" placeholder="Search car name, model or ID" size="34">
+      <span id="car-count" class="muted"></span>
+    </div>
+    <div class="split">
+      <div class="list-wrap">
+        <table class="list" id="car-list">
+          <thead><tr><th>Shown name</th><th>Model</th><th>ID</th><th>Type</th><th>V</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="detail-column">
+        <div id="car-detail" class="detail"><p class="muted">Select a car model.</p></div>
+        <div id="car-grades" class="grades"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-rewards" class="panel">
+    <div class="toolbar">
+      <label>Source <select id="reward-source"></select></label>
+      <span id="reward-group-wrap"><label>Group <select id="reward-group"></select></label></span>
+      <input id="reward-q" type="search" placeholder="Search this table" size="24">
+      <span id="reward-count" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="reward-prev">‹ Prev</button>
+      <button id="reward-next">Next ›</button>
+      <button id="reward-add">Duplicate row</button>
+    </div>
+    <p id="reward-desc" class="desc"></p>
+    <p id="reward-prob" class="prob"></p>
+    <div class="split">
+      <div class="list-wrap">
+        <table class="list" id="reward-list">
+          <thead><tr><th>Row</th><th>Entry</th><th>Details</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="reward-detail" class="detail"><p class="muted">Select a row to edit it.</p></div>
+    </div>
+  </section>
+
+  <section id="tab-settings" class="panel">
+    <div class="toolbar">
+      <input id="settings-q" type="search" placeholder="Filter settings by section, key or value" size="40">
+      <span id="settings-count" class="muted"></span>
+    </div>
+    <p class="muted">Changes are written to emulator.ini with a backup. The emulator caches settings at
+      startup: restart it after a save. Season events are also applied live through the GM port.</p>
+    <div id="settings-list"></div>
+    <h2>Season events</h2>
+    <p class="muted">on / off / auto (auto = inside the event's date window). The flags reach the client at the
+      next login.</p>
+    <div id="events-list"></div>
+  </section>
+
+  <section id="tab-server" class="panel">
+    <div class="server-grid">
+      <section class="card">
+        <h2>Emulator status <button id="server-status-refresh">Refresh</button></h2>
+        <pre id="server-status" class="log short"></pre>
+      </section>
+
+      <section class="card">
+        <h2>Online players <button id="server-online-refresh">Refresh</button></h2>
+        <div id="server-online"></div>
+        <pre id="server-actions" class="log short"></pre>
+      </section>
+
+      <section class="card wide">
+        <h2>GM console</h2>
+        <div class="row">
+          <input id="gm-input" list="gm-templates" placeholder="who · item NAME i_s_000001 1 · level NAME 81" autocomplete="off">
+          <button id="gm-run" class="primary">Run</button>
+        </div>
+        <datalist id="gm-templates">
+          <option value="who"></option>
+          <option value="item NAME ITEM-ID 1"></option>
+          <option value="drift NAME DRIFT-ITEM-ID 7"></option>
+          <option value="car NAME CAR-NAME V1"></option>
+          <option value="level NAME 81"></option>
+          <option value="exp NAME 1000"></option>
+          <option value="money NAME 10000"></option>
+          <option value="coin ACCOUNT 100"></option>
+          <option value="kick NAME"></option>
+          <option value="block NAME 1"></option>
+          <option value="unblock NAME"></option>
+          <option value="chatblock NAME 10"></option>
+          <option value="ban ACCOUNT"></option>
+          <option value="unban ACCOUNT"></option>
+          <option value="realmatch status"></option>
+          <option value="gate off"></option>
+          <option value="event"></option>
+          <option value="accounts QUERY"></option>
+          <option value="account ID"></option>
+          <option value="account-role ID A"></option>
+        </datalist>
+        <pre id="gm-output" class="log"></pre>
+      </section>
+
+      <section class="card wide">
+        <h2>Accounts</h2>
+        <div class="row">
+          <input id="account-q" type="search" placeholder="Search accounts (part of the account ID)" size="28">
+          <button id="account-search">Search</button>
+          <span id="account-count" class="muted"></span>
+        </div>
+        <div class="account-grid">
+          <div class="list-wrap small">
+            <table class="list" id="account-list">
+              <thead><tr><th>Account</th><th>Active</th><th>Joined</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="account-detail" class="detail">
+            <p class="muted">Search and select an account. Passwords must not be logged; they are only sent to
+              the emulator and never shown again.</p>
+          </div>
+        </div>
+        <div class="row account-actions">
+          <input id="account-new-id" placeholder="New account ID" size="16" autocomplete="off">
+          <input id="account-new-pass" type="password" placeholder="Password" size="16" autocomplete="new-password">
+          <button id="account-create">Create account</button>
+        </div>
+        <div class="row account-actions">
+          <input id="account-pass" type="password" placeholder="New password for the selected account" size="26" autocomplete="new-password">
+          <button id="account-password">Reset password</button>
+          <button id="account-role-a">Grant GM</button>
+          <button id="account-role-n">Revoke GM</button>
+          <button id="account-ban">Ban</button>
+          <button id="account-unban">Unban</button>
+        </div>
+        <div id="account-msg" class="muted"></div>
+      </section>
+
+      <section class="card wide">
+        <h2>Emulator log <button id="server-log-refresh">Refresh</button></h2>
+        <div id="log-path" class="muted"></div>
+        <pre id="server-log" class="log tall"></pre>
+      </section>
+
+      <section class="card">
+        <h2>Maintenance</h2>
+        <p class="muted">Restarting disconnects every player. Use it after table saves.</p>
+        <button id="server-restart" class="danger">Restart emulator</button>
+        <pre id="server-restart-out" class="log short"></pre>
+      </section>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

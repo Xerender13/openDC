@@ -149,6 +149,7 @@ class Context:
     gotcha_mito_price = 0    # [gotcha] mito_price / coin_price: 0 = the client's prices (gotcha.py)
     gotcha_coin_price = 0
     extra_flags = {}         # emulator.ini [flags]: content flags by 2011 name, sent at login
+    events = {}              # emulator.ini [events]: season event modes / windows (native/events.py)
     rush_schedule = True     # [rush] schedule: the 2008 rushtimetable.txt starts rushes at its hours
     rush_always = False      # [rush] always: a zone with start_members players starts a rush (City.AlwaysRushTime)
     rush_start_members = 2   # [rush] start_members (City.RushTimeStartMember)

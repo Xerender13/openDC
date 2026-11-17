@@ -8,6 +8,90 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 49 (2026-11-17): Neo City Q3 destroy objective counts, HUV kill payment
+
+**User:** chapter 1 Q3, mission `m_000248` (Return to Base ROAD, type destroy, param_1 100451, param_2 1): the target
+HUV was destroyed but the objective stayed 0/1. The client reports the kill as C>S 0xeeb key 0, quest 2, mission 2,
+value 100451, +0x12 0x2d, +0x16 0x01ad004e; `mission_progress()` answered with a rebuilt 0xeec whose last two u32 were
+zeroed (`<5I` + 4 zeros), so the client's matcher 0x53cd90 never counted it. **Now the 0xeec echoes the request's 24
+payload bytes unchanged** — for the destroy path and for every other type (the second path was zeroing them too). The
+server's own count and the 0xeee at param_2 are unchanged. This matches the Enhanced Rice fix the user cited.
+
+**Second report, same run:** kills of "Huv Param IDs" 19040 / 19041 / 19104 logged "unknown Huv Param ID ... relayed
+only" and paid nothing. Those are **model** ids, not Huv Param ids: NeoHuvParam column 3 ("등장 HUV ID") = 19040
+HUV-MRL, 19041 HUV-APS (param 100451), 19104 HUV-HMG (param 100520). The client fills 0xce's +0x34 with the model for
+a HUV. **Now the id comes from the run's own spawn record** for the report's actor key (`enemy_param()`: record +0x08
+owner serial, +0x0a enemy number, +0x0e Huv Param ID), and the client's +0x34 is only a fallback; a mismatch is logged
+with both ids. EXP/Mito, the reward group and play_mode use the resolved row.
+
+Tests: `test_eec_echoes_the_whole_request`, `test_huv_reports_its_model_and_is_paid_from_the_spawn_record`;
+`test_destroy_kill_reports_count` still passes. 435 tests pass. **Not yet tried in game.**
+
+## Session 48 (2026-11-14/15): season events, Neo City fixes, web admin tool
+
+**User:** "start implementing season events configuration switch and server implementation: Christmas event, Valentime
+event, Easter event, Harvest event and if there are more", then (going to sleep) "keep working on implementing events.
+Then with Deepseek make a web tool which will show all items and cars in the game, edit all the items, cars, rewards,
+drops for all game modes and generally control the server".
+
+### Season events: the switch (native/events.py) and the server parts (game/seasonal.py)
+
+**Research:** docs/neo_work/SEASON_EVENTS.md (OpenCode DeepSeek worker, findings only; not in git). Lead-checked:
+0xcf2 handler 0x52cdd0 (u32 stage @2 -> tree manager [net+0x40c]+0xc via 0x7191d0; HUD 0x656630: +0x3c active,
++0x254 stage-1, icon array +0x238.., 5 entries, drawn at 0x65765b), 0xfbb handler 0x542cf0 (u32 @2 sets / clears
+Etc.EventValentainChocolate, [net+0x2c4] bit 3), the RewardGroup / UseItemClient / VShopItem rows below.
+**Per event, what the client does with its flag** (worker, sites in SEASON_EVENTS.md): Christmas: Santa head on the
+hero (0x4750e6), Xmas station NPCs post_*_xmas_01, banner textures, shop rows 60003 / 60031; ChristmasTree (2016 only):
+the city tree X_tree001; ChristmasChase, LuckyBag, Event3Year, EventTeamPoint, NewChar2ExpEvent, EventPartyPatrol: not
+read by either client; Valentine: station NPC art / texts; Harvest: second station NPC per city
+(post_*_harvest_01/02, the "Harvest Distribution Center"); Halloween: Mita 500 drink skins and texts (0x480 / 0x481
+handlers); Watermelon / GWFestival: an extra HUV allowed in the HUV start routine; Independence Day: "%sX2" label;
+EventQuest / QuestMoslem: event quest board props; MoveEventEffect: the gift-box roof figure (christ_gift.nif).
+**Switch:** emulator.ini [events] NAME = on | off | auto (date window, NAME.dates; Easter from Easter Sunday), the
+flags at login (login.content_flags, [flags] still overrides), GM gmevent / control port event. The 2016 Valentine
+chocolate is no longer forced on in [2016]: it follows valentine.
+**Server parts (seasonal.py, module docstring has the rules):**
+- event drops: each traffic / combo pick-up first rolls the running events' items (NAME.drops; defaults in
+  seasonal.DROPS). Reason: the event shop rows are not listed by the clients (VShopItem SellStage 0 / 99); listing
+  them is a client change (tools/shop_rows.py) left to the user.
+- Easter: recipe use (recipe_item, kept) takes 1 paint (Colorful first) + its eggs (tooltips) and gives the basket of
+  rw_<recipe>_careful / _twinkling; quality (eggs painted 1 / 4 / 6 / 10 from the rows' Etc_Value) in NRANDOM; 0x1a2
+  count 0, 0x192, 0x89/23. Eating a basket (2011 chocolet_item, chocolet_gift_item) = the level band of
+  rw_exp_choco_giftbox(2) x eggs painted (the rows' descriptions: per egg, per 10-level band).
+- Harvest: a delivery job (jobs.job_reward) gives rw_event_giftbox_<city>'s box (the groups' "퀵서비스보상");
+  Box Recipe (event_box_recipe, kept) = box (Ice first) + 1 of each food -> Distribution Box *(guess: amounts)*; a
+  job finished holding one delivers it: restaurant_evaluation (1 / 2 / 3 receipts) x box size (1 / 2 / 4); using
+  10 / 30 receipts gives the Goat V1 / Fervor V2 gift box *(ours: the centre's rates are unknown)*.
+- Christmas tree (2016): 0xcf2 stage at login when [events] christmas.tree > 0 (default 0: the buff's effect is
+  not in the client).
+- Valentine (2016): gmevent valentine pushes 0xfbb to the online players.
+**Not done (no evidence):** Hongbao 0x5be -> 0x5bf / 0x48f (layout guesses only), Halloween drink (buff_item: its
+buff is unknown), GW event 0x5b7 (no sender), basket gifting to a friend, 2xPartyBonus pay-out, Independence x2.
+Tests: tests/test_events.py, tests/test_seasonal.py (396 pass). **Not yet confirmed in game.**
+
+### Web admin tool (tools/webadmin; built by an OpenCode DeepSeek worker, reviewed by the lead)
+
+**Start:** from Emulator/, `./webadmin.sh` (or `.venv/bin/python -m tools.webadmin [--port 8088]`); open the URL it
+prints (`http://127.0.0.1:8088/?token=...`, a new token at every start). Standard library only (plus Pillow for icons),
+reuses tools/editor/data.py (Document: lossless edits, backups in editor_backups/, stale-file check; IDENTIFIERS
+locked) and the GM control port. Tabs: **Items** (ItemClient + UseItemClient + VisualItem, 7194 rows in 2016, icons,
+filters, every column editable but the ids, give to an online player), **Cars** (VehicleList models + VehicleUpgrade V
+grades, give car), **Rewards & drops** (RewardGroup by group with probability sums, row copy; ItemDropServer,
+InstantDrop_Server, the reward .txt files, mode_tuning.txt, NC_chapter / NC_quest for 2016), **Settings**
+(emulator.ini sections without database / services secrets; [events] switches written to the ini and applied live
+with GM event), **Server** (launch.sh status, who / kick / block / ban, GM console, accounts, the console log,
+restart after a confirm). Version-aware (2011 server_data, 2016 server_data_2016) from emulator.ini.
+**Security:** binds 127.0.0.1 (other hosts only with --allow-remote and a warning); every /api call needs the X-Token
+header (constant-time compare; no CORS, so other sites cannot call it); table paths must be in the version's source list
+and inside Emulator/; password commands only through the account endpoints, never the console or its history.
+**Lead review fixes:** RewardGroup row copy rebuilt the line from parsed cells, which drops the quotes of the 14 2016
+rows with newlines in a cell: now the raw line is copied (checked on a temp copy: the copy parses identical); the log
+panel read the stale logs/2016/emulator.out: launch.sh writes logs/emulator.out for both versions.
+**Checked:** 37 tests (tests/test_webadmin.py, temp copies only), the whole suite 433 OK; live against the 2016 data
+(read endpoints, 403 without token, apply without save + reload left ItemClient.tdf byte-identical, id column
+refused, path traversal refused); screenshots of every tab in headless Firefox (WebDriver BiDi). Not clicked through
+by the user yet; saving to real tables was not tried live (tests only).
+
 ## Session 47 (2026-11-14): EU differs from US only in the V-grade part system
 
 **User:** "Make the EU region change only the part system being rank (V) based, while leaving the other parts of the
@@ -33,6 +117,56 @@ the F2 panel and the Performance Graph (already US).
 Applied to `Emulator/` (2016 and the GitHub copy) and `Emulator 2011/` (nation.py, rooms.py, emulator.ini
 [nation], tests/test_nation_rules.py). Tests: 347 OK in `Emulator/`; `Emulator 2011/` has two old failures in
 test_client2016 (the 2016 exe's checksum since the car-limit patch), unrelated. **Not yet confirmed in game.**
+
+### Neo City destroy goals: kills did not count (user: "Neo city kill objective doesn't count and work")
+
+**Log** 20261114-232011, chapter key 0 quest 2 (q_00054), mission 2 = m_000248 destroy, param_1 100451, param_2 1:
+C>S 0xeeb after each kill (23:32:05 +0xe 0x18863 = 100451, +0x12 45; later kills +0xe 1088 = an NC_HuvRand group,
++0x12 45 / 50; +0x16 = u16 2, u16 the enemy key), no answer: we dropped every 0xeeb with +0x12 / +0x16 set as a
+"hit report".
+**Client (2016):** the sender 0x5132ae runs once per destroyed enemy and only while the current mission is type 11
+(0x51327d): key, quest, mission, the enemy's ID (0x4f0650), [enemy+0x43e8], [enemy+0x41c0]. The 0xeec handler 0x53cee0
+for type 11 (jump table 0x53cf60, case 0x53cf40) calls the matcher 0x53cd90(param1 = +0xe, param2 = +0x12): no targets
+([mission+0xdc] == 0) -> count; else per target (mission +0xe0 + i * 0x38, atoi) either a direct ID compare (>= 100000,
+0x53ce39) or the NC_HuvRand row 0x4eda00 compared on u16 +0xae / +0xac (0x53ce6e), by [0x4486a0()+0x98]; a match adds
+one to activity+0x5c (max 99). Where the client compares that counter with the goal was not found.
+**Fix:** neocity.destroy_kill: every kill report in a destroy mission -> 0xeec (key, quest, mission, +0xe, +0x12, 4
+zeros), so the client's own matcher counts it; the server counts a kill when +0xe is a target ID or an NC_HuvRand
+group holding one (*(guess)*: a group can also roll another HUV) and sends 0xeee at param_2 kills, once (as collect).
+Tests: test_neocity destroy tests (387 pass). **Not yet confirmed in game.**
+
+### Neo amplifier and fuse could not be equipped (user: "amplifier and fuse items cannot be equiped")
+
+**Log** 20261114-231215: 23:13:31 EquipItem 0x199 neo_arp_h_10036 slot 115 (0x73) -> done; 23:13:34 neo_cop_10008 slot
+113 (0x71) and 23:13:37 neo_fup_10008 slot 114 (0x72) -> error 20027. Car 5 already had a weapon in slot 112.
+**Cause:** data.item_info gives every `neo_*` kind part type 12 (OTHER_TYPE), and items.equip_item's two-per-type line
+limit (Main.PartsInvenLine = 2) counted the weapon and the armour, so a third Neo item was refused. A second weapon
+dropped on 112 also stayed next to the first (the "part in the slot comes off" code only looks at types 0-3).
+**Fix:** items.equip_item: Neo kinds have their own branch: amplifier / fuse / armour only in 113 / 114 / 115
+(items.NEO_SLOTS, from the log; weapons by the client's slot, 112, the 0xe81 extension slot is not measured), the
+Neo item already in that slot comes off, no line limit, no Heat Treatment Kit and no scorched twin (those are for
+the H / U racing parts). Test: test_items2016.NeoEquipTest (fails on the old code; 381 tests pass). **Not yet
+confirmed in game.**
+
+### GM command gmneo: the strongest Neo City gear (user: "make a gm command to get a set of strongest Neo city weapons and parts for testing")
+
+**Gear (2016 ItemClient.tdf):** kinds `neo_weapon` (Cannon `neo_wp_c_`, Railgun `_a_`, Wave `_w_`, Mine `_m_`),
+`neo_coil` (Amplifier), `neo_fuse`, `neo_armor` (Light `arp_l`, Heavy `arp_h`); tiers N 40-48, S 50-68, H 70-88,
+U 90-108 by the required level (column 7), plus Rare 40 / 50 / 70 / 90. Column 9 of a weapon is its
+`Init/WeaponList.xlt` row: the Rare 90 weapons point at the "120" rows (Cannon 21141: damage 17940 against 11623
+for U Cannon 108 / 21135), and the Rare 90 armours have the highest column 9 (light 1500, heavy 2400; U 108: 871 /
+1742). Column 23 = durability ("900 10": 900 max).
+**Where they come from in the tables:** parts shop floor B1F (`B1F` in column 15): N 40 / 46 and S 52 Cannon /
+Railgun / Wave, N 40 light / heavy armour. NC_quest Neo Oros ch1 Q2: N Cannon / Railgun / Wave 40. RewardGroup
+`rw_neooros_ch1..6_reward` (chapter clear): N / S armour up to 62, R armour 40, N / R Amplifier and Fuse 40 / 50.
+`rw_neooros_oper1..3_reward` (operations): weapons up to S 64 and R Cannon 40. Event bags (`rw_2016_newyear_bag_*`,
+`summer_pac_*`): S / H weapons up to H 80, H heavy armour 72-76. **No group gives H 82+, U or Rare 70 / 90** (the
+Korean server's later cities / operations are not in these tables), so those are GM-only here.
+
+**Command:** chat `gmneo [name] [rare|u]`, control port `neo NAME [rare|u]` (neocity.NEO_GEAR / gm_gear): one each
+of the 4 weapons, amplifier, fuse and light + heavy armour; `rare` (default) = the Rare 90 set, `u` = U-Type 108
+weapons / armour + U 90 amplifier / fuse. Needs 8 free slots; the reply names the required level when the character
+is below it (`gmlevel`). Test: test_items2016.NeoGearGmTest (379 tests pass). **Not yet confirmed in game.**
 
 ### Neo City revival item (NEO Retry) revives the car (user: "The NEO retry item doesn't work properly")
 

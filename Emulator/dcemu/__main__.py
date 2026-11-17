@@ -91,6 +91,8 @@ def native_setup(cp):
                 context.extra_flags[name] = int(value)
             else:
                 print(f'emulator.ini [flags]: unknown content flag {key}', flush=True)
+    from .native import events
+    events.load(cp['events'] if cp.has_section('events') else None)
     if cp.has_section('items'):
         context.drink_exp = int(cp['items'].get('drink_exp', context.drink_exp))
         context.drink_mito = int(cp['items'].get('drink_mito', context.drink_mito))

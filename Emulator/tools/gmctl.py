@@ -12,6 +12,9 @@ usage (from Emulator/): python3 -m tools.gmctl [-c emulator.ini] COMMAND ...
     item NAME ITEM-ID [count] [+LEVEL] [A|B|C [TIER]]   as gmitem: a part at +LEVEL (up to 20), converted
                                  with type A / B / C row TIER (1-34, none = 34)
     car NAME CAR-NAME [V1-V9]    as gmcar: a car and its key by its shown name (AXIS ST), model name, pc_0199s or number
+    neo NAME [rare|u]            as gmneo: one of each strongest Neo City weapon, amplifier, fuse, light / heavy
+                                 armour (rare = the Rare 90 set, default; u = the U-Type 108 set); 2016
+    event [EVENT on|off|auto]    season events (emulator.ini [events]): list them, or switch one until the restart
     coin ACCOUNT-or-NAME amount  G Coin (Hancoin) to the account (below 0 takes it); chat: gmcoin [name] amount
     crewexp NAME AMOUNT          crew EXP to that character's crew (2016; also research points); Team Level 1 = 50 000
     realmatch open|close|in MINUTES|auto|status   Real Match opening, over emulator.ini (in: opening notices, then open)
