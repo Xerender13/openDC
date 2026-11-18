@@ -48,6 +48,16 @@ Tests: `test_destroy_kill_reports_count` now asserts 0xeec only at the third kil
 - **Open:** the order of the three dwords (`@0xc / @0x10 / @0x14`) — EXP, Mito, stars, or something else. Implementing
   before that is a guess; a capture of the official server's 0x1e4, or reading the display code that consumes
   `+0x5c8..`, would settle it.
+- **Continued (same day):** the display code is `0x5e287b`: it takes the slot's **`@0xc` as a kind 1..5** and switches
+  (`dec; cmp 4; ja skip`, jump table `0x5e29f0`), showing the caption at `+0xc8` — **the same vocabulary as the Neo
+  chapter cards** (1 = item name, 3/4/5 = "N Mito / Mileage / EXP Received", format strings `0x955f94` etc.). So the
+  entry is `[slot index @0][unused @4][serial @8][kind @0xc][item @0x10][amount @0x14]`, i.e. a reward **grid** with
+  the picker's serial per slot.
+- **The pick is `0x1e3`**: payload `u32 @0` and `u32 @4` (`[eax+2]`/`[eax+6]`), sent from `0x5e0fbc` as (clicked
+  index, `[win+0x134]`), and from `0x61b256` as (value, `-1`). `[win+0x134]` is not identified yet.
+- **What is still missing to build it:** (a) what `[win+0x134]` carries, and (b) whether the grid follows the Neo rule
+  (kind 0 = face-down/clickable until picked) — with those, it is the same implementation as `cards_frame()` +
+  `pick()` but on 0x1e4/0x1e3 and after a race.
 
 
 
