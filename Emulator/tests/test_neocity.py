@@ -398,6 +398,25 @@ class NeoCityFlowTest(unittest.TestCase):
             self.handle(neocity.chapter_reward, Frame(0xee8, struct.pack('<II', 0, 6)))    # a second card: no
             give.assert_awaited_once()
 
+    def test_bonus_cards_start_face_down(self):
+        """The first 0xee9 carries no item: every slot all zeros (kind 0 = the "?" face, the only clickable one).
+        Sending the items up front drew all 16 face-up and the client never sent 0xee8 (user, 2026-11-18)."""
+        r = self.enter(key=0)
+        r.cards = [[1, 100 + i, 1, 0] for i in range(16)]
+        r.card_items = [f'item_{i}' for i in range(16)]
+        frame = neocity.cards_frame(r)
+        self.assertEqual(len(frame.payload) + 2, 0x106)
+        self.assertEqual(frame.payload[:4], bytes(4))
+        for i in range(16):
+            self.assertEqual(struct.unpack_from('<4I', frame.payload, 4 + 16 * i), (0, 0, 0, 0))
+        give = AsyncMock(return_value=(SimpleNamespace(items=[]), []))
+        with patch('dcemu.native.game.rewards.give', give):
+            frames = self.handle(neocity.chapter_reward, Frame(0xee8, struct.pack('<II', 0, 3)))
+        grid = frames[0].payload
+        self.assertEqual(struct.unpack_from('<4I', grid, 4 + 16 * 3), (1, 103, 1, neocity.serial_of(self.s)))
+        for i in (0, 1, 2, 4, 15):
+            self.assertEqual(struct.unpack_from('<4I', grid, 4 + 16 * i), (0, 0, 0, 0))
+
     def test_bonus_mission_count(self):
         """0xef5 key -> 0xef6 key, 0, clears % 10."""
         self.p.neo_cleared = {2: 13}

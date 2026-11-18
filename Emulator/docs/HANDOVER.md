@@ -4,7 +4,19 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 49 (2026-11-17): Neo City Q3 destroy objective + HUV kill payment — resume here
+## Session 50 (2026-11-18): Neo City chapter bonus cards face-down until picked — resume here
+
+Details: EMULATOR_NOTES session 50. 436 tests pass. Not yet tried in game.
+- **The 16 Chapter Bonus Item cards appeared face-up and could not be clicked** (no 0xee8, so the 18 s auto-pick did
+  it). `cards_frame()` sent every slot with `kind 1` + item; per NEO_CLEAR_PROTOCOL §3.1-3.2 only a **kind 0** slot is
+  the clickable "?" face and any non-zero kind draws the card revealed. Unpicked slots now go out as 16 zero bytes; a
+  picked slot carries its item and the picker's serial.
+- **Q3 goes straight to the results after the kill**: not a server bug — the chapter's last mission is the destroy one
+  (`c_0000` q_00054: move, patrol, destroy; no `end` row) and the client reports 0xeda itself (NEO_CLEAR_PROTOCOL §2).
+- `Emulator/.venv` had no pytest and a stale pip shebang (the project moved); `python -m pip install pytest` fixed it,
+  so the documented `Emulator/.venv/bin/python -m pytest tests -q` works again.
+
+## Session 49 (2026-11-17): Neo City Q3 destroy objective + HUV kill payment
 
 Details: EMULATOR_NOTES session 49. 435 tests pass. Emulator restarted after the change.
 - **Q3's destroy objective never counted**: the 0xeec answer rebuilt the body and zeroed the last two u32 (the HUV

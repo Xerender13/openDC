@@ -8,6 +8,28 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 50 (2026-11-18): Neo City chapter bonus cards are face-down until picked
+
+**User:** chapter 1 clear: after 0xedb the server sends 0xee9 and the 16 "Chapter Bonus Item" cards appear **face-up**
+with their items, but clicking one does nothing, the client never sends 0xee8, and after ~18 s the server auto-picks.
+
+**Cause:** `cards_frame()` sent every slot with `kind = 1` + item + count and picker 0. Per
+`docs/neo_work/NEO_CLEAR_PROTOCOL.md` §3.1/§3.2 only a **kind 0** slot is the client's "?" face, and only that card
+face is clickable (`+0x08` control, bit 0x40 = clickable); every non-zero kind re-shows the caption and the card is
+drawn revealed. So all 16 were revealed and none could be clicked.
+
+**Fix:** `cards_frame()` sends **16 zero bytes** for every slot nobody has picked; a picked slot carries its
+kind / item / count and the **picker's serial**, which is also how the client fills the caption and the picker's name
+(the name is never in the message). The one-card-per-member rule and the 18 s auto-pick are unchanged.
+
+**Also reported, not changed:** after destroying Q3's target HUV the game goes straight to the results instead of
+returning to the base. That is client-driven: the chapter's last mission is the destroy one (`c_0000` q_00054: move,
+patrol, `m_000248` destroy — no `end` row), and the client itself reports the chapter complete with C>S 0xeda
+(NEO_CLEAR_PROTOCOL §2: "the client reports the chapter complete"); the server only answers it.
+
+Tests: `test_bonus_cards_start_face_down` (the initial grid is 16 zero slots, the pick reveals only its own slot).
+436 pass. **Not yet tried in game.**
+
 ## Session 49 (2026-11-17): Neo City Q3 destroy objective counts, HUV kill payment
 
 **User:** chapter 1 Q3, mission `m_000248` (Return to Base ROAD, type destroy, param_1 100451, param_2 1): the target

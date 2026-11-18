@@ -1245,9 +1245,18 @@ def roll_cards(r):
 
 
 def cards_frame(r):
-    """S>C 0xee9 (handler 0x526d80, 262 bytes; NEO_CLEAR_PROTOCOL 3.1): u32 0, then 16 x {u32 kind (1 item), u32 item
-    TableIdx, u32 count, u32 serial of the member who picked it (0: face down)}."""
-    return Frame(0xee9, struct.pack('<I', 0) + b''.join(struct.pack('<4I', *card) for card in r.cards))
+    """S>C 0xee9 (handler 0x526d80; NEO_CLEAR_PROTOCOL 3.1): u32 0 (the client ignores it), then 16 x {u32 kind,
+    u32 item TableIdx, u32 count, u32 picker serial}.
+
+    A slot that nobody has picked goes out as **all zeros**: kind 0 is the client's "?" face, and only that card face
+    is clickable (`+0x08` control, bit 0x40 = clickable; every non-zero kind re-shows the caption of `+0xc8`). While
+    the server sent the items in every slot, all 16 cards were drawn face-up, clicking one did nothing and the client
+    never sent 0xee8, so the pick fell to the server's 18 s auto-pick (user, 2026-11-18, chapter 1 clear). Picked
+    slots carry their item and the picker's serial, which is how the client shows the caption and the picker's name."""
+    out = bytearray(struct.pack('<I', 0))
+    for kind, item, count, picker in r.cards:
+        out += struct.pack('<4I', kind, item, count, picker) if picker else bytes(16)
+    return Frame(0xee9, bytes(out))
 
 
 async def pick(r, session, slot):
