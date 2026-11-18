@@ -920,9 +920,13 @@ async def goal_zone(session, r, frame):
     goals = r.__dict__.setdefault('goals', set())
     if (quest, mission) in goals or (quest, mission) in r.missions_done:
         return
+    m = mission_of(r.chapter, quest, mission)
+    if m and m['number'] == 11:                    # destroy: the mark only counts once the kills are done
+        need = max(m['param_2'], 1)
+        if r.kills.get((quest, mission), 0) < need:
+            return
     goals.add((quest, mission))
     send(session, Frame(0xeea, struct.pack('<4I', key, quest, mission, 1)))
-    m = mission_of(r.chapter, quest, mission)
     session.log.note(f'neocity: goal zone of mission {mission} ({m["type"] if m else "?"}) of quest {quest} reached in '
                      f'run {r.id}: 0xeea')
 
@@ -1036,9 +1040,13 @@ def destroy_kill(session, r, key, quest, mission, value, report, payload):
     session.log.note(f'neocity: destroy kill {n}/{need} (enemy {value}, {report}) for mission {mission} of quest '
                      f'{quest} in run {r.id}')
     if n >= need:
-        r.missions_done.add((quest, mission))
-        send(session, Frame(0xeee, struct.pack('<3I', key, quest, mission)))
-        session.log.note(f'neocity: destroy mission {mission} of quest {quest} complete in run {r.id}')
+        # The objective is met, NOT the mission: the client then shows the mission's goal mark (NC_mission column 5,
+        # e.g. m_000248's "Return to Base ROAD" at the base) and the player drives there, which is the same
+        # goal-zone step as a move / patrol mission (0xee7 flag 1 -> 0xeea result 1 -> the NPC scene -> the client's
+        # 0xeef -> 0xeee). Sending 0xeee here skipped the mark and the closing dialogue and, on the chapter's last
+        # quest, jumped straight to CHAPTER CLEAR (user, 2026-11-18, with the official-server video).
+        session.log.note(f'neocity: destroy objective of mission {mission} of quest {quest} complete: waiting for its '
+                         f'goal mark in run {r.id}')
 
 
 @on(SVC, C2S, 0xeef)

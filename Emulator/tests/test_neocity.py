@@ -539,8 +539,9 @@ class NeoCityMissionTest(unittest.TestCase):
 
     def test_destroy_kill_reports_count(self):
         """0xeeb with +0x12 / +0x16 non-zero is a destroy KILL report (0x5132ae): 0xeec echoes +0xe / +0x12 as
-        param1 / param2 (the client's matcher 0x53cd90 counts it); the server sends 0xeee at param_2 kills
-        (q_00023 mission 2: 3 x 100482; user, 2026-11-14: kills did not count)."""
+        param1 / param2 (the client's matcher 0x53cd90 counts it). The kills only meet the objective; the mission
+        ends at its goal mark, like a move / patrol (0xee7 flag 1 -> 0xeea result 1 -> 0xeef -> 0xeee), because the
+        video shows a marker and a closing dialogue after the kill (q_00023 mission 2: 3 x 100482)."""
         kill = self.progress(quest=0, mission=2, value=100482, report=45, huv=0x01b70002)
         for n in range(2):
             frames = self.frames(neocity.mission_progress, kill)
@@ -548,10 +549,15 @@ class NeoCityMissionTest(unittest.TestCase):
             self.assertEqual(struct.unpack_from('<5I', frames[0].payload), (2, 0, 2, 100482, 45))
         other = self.frames(neocity.mission_progress, self.progress(quest=0, mission=2, value=100466, report=45))
         self.assertEqual([f.type for f in other], [0xeec])                    # not a target: no count
+        # the goal mark before the kills are done does nothing
+        self.assertEqual(self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 2, 0, 2, 1))), [])
         frames = self.frames(neocity.mission_progress, kill)
-        self.assertEqual([f.type for f in frames], [0xeec, 0xeee])
-        self.assertEqual(struct.unpack_from('<3I', frames[1].payload), (2, 0, 2))
-        self.assertEqual([f.type for f in self.frames(neocity.mission_progress, kill)], [0xeec])   # once
+        self.assertEqual([f.type for f in frames], [0xeec])                   # objective met, no 0xeee
+        done = self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 2, 0, 2, 1)))
+        self.assertEqual([(f.type, struct.unpack('<4I', f.payload)) for _, f in done], [(0xeea, (2, 0, 2, 1))])
+        self.assertEqual(self.handle(neocity.quest_list, Frame(0xee7, struct.pack('<4I', 2, 0, 2, 1))), [])  # once
+        frames = self.handle(neocity.mission_params, Frame(0xeed, struct.pack('<3I', 2, 0, 2)))
+        self.assertEqual([f.type for _, f in frames], [0xeee])
 
     def test_destroy_kill_by_huv_group(self):
         """A randomly placed HUV reports its NC_HuvRand group (1088) instead of its ID: counted when the group

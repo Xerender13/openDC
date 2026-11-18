@@ -8,7 +8,48 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
-## Session 50 (2026-11-18): Neo City chapter bonus cards are face-down until picked
+## Session 52 (2026-11-18): the destroy mission ends at its goal mark, not at the kill
+
+**User, with the official server's video (14:18-15:20):** after Q3's target HUV dies the objective shows 1/1 and a
+**goal marker** appears; the car drives there and there is **one more dialogue**, and only then CHAPTER CLEAR. So the
+earlier "goes straight to the results" was ours, not the client's.
+
+**Cause:** `destroy_kill()` sent S>C 0xeee itself as soon as the kill count reached `param_2`, which the client takes as
+"mission complete" (0x79f640) — the mission's goal mark and its closing scene never happened. Every NC_mission row has
+its goal position in column 5 (m_000248: `(5,2444.0,4151.1,132.1,15.2)`, the ROAD base) and the closing dialogue in
+column 4 (`<pimg ch_neo_0003_01><name Aunt Erie><text Thanks a lot~>`), and `move` / `patrol` already complete through
+that route: 0xee7 flag 1 (goal zone entered) -> 0xeea result 1 (the scene) -> the client's 0xeef -> 0xeee.
+
+**Fix:** the destroy kills now only *meet the objective*; `goal_zone()` completes the mission when the car reaches the
+mark. A destroy mission ignores the goal-zone report until its kills are done, so driving to the base early cannot
+finish it. Collect missions still answer 0xeee at the count (not changed: no report and no video evidence for them).
+
+Tests: `test_destroy_kill_reports_count` now asserts 0xeec only at the third kill, no 0xeea before the kills are done,
+0xeea result 1 at the mark (once), and 0xeee after the client's 0xeef. 436 pass. **Not yet tried in game.**
+
+
+## Session 51 (2026-11-18): PvP "Complete Bonus Reward" panel (0x1e4) — checked, not implemented
+
+**User:** check the bonus card system for PvP races. Findings (no code change):
+- The client's own symbol table (`tools/re2016/handlers_2016.json`) names it: **S>C `0x1e4` `Cmd_PvpBattleBonusResult`**
+  (handler `0x542720`, right after `0x1e3`). The emulator registers **nothing** for `0x1e2`, `0x1e3` or `0x1e4`.
+- Layout so far: `u16 n @2`, then `n` entries of **0x18** bytes starting at payload `+4`; each entry has a slot index
+  `@0`, four bytes skipped `@4`, a **player serial `@8`**, and three dwords `@0xc / @0x10 / @0x14`. `0x542720` walks
+  them and calls window `[conn+0x3f8]`'s `0x5e2720(index, serial, x, y, z)`, which keeps per slot `serial @+0x5c8`,
+  `@+0x5cc`, `@+0x5d0`, `@+0x5d4` and clears the "not yet" bit of that slot's control.
+- **The pick is C>S `0x1e3`** (wrapper ctor `0x84d550`, called from `0x5e0fbc` with the clicked index and
+  `[win+0x134]`, and from `0x61b256` with `-1`): `0x5e0fbc` sets `[win+0x12c]`/`[win+0x128]` only when `0x12c == -1`,
+  i.e. one pick, and `0x5e2720` compares `0x12c` with the entry's slot and resets it when the serial is not our own.
+- **C>S `0x1e2`** (ctor `0x84ba90`, caller `0x5c321c`) toggles a global (`0x9d5c68`) and sends it with our serial — a
+  separate switch, not the pick.
+- The **reward itself is already paid**: `rooms.complete_bonus` gives the per-lap EXP/Mito; only the panel that shows
+  it is never sent. Its labels are the dialog's own: **12084 "[ 완주 보너스 보상 ]"**, **12085 "보너스 단계"** (the
+  stars), plus EXP/Mito cells — they are set from the .nui, so no code reference to the ids exists.
+- **Open:** the order of the three dwords (`@0xc / @0x10 / @0x14`) — EXP, Mito, stars, or something else. Implementing
+  before that is a guess; a capture of the official server's 0x1e4, or reading the display code that consumes
+  `+0x5c8..`, would settle it.
+
+
 
 **User:** chapter 1 clear: after 0xedb the server sends 0xee9 and the 16 "Chapter Bonus Item" cards appear **face-up**
 with their items, but clicking one does nothing, the client never sends 0xee8, and after ~18 s the server auto-picks.

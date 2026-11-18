@@ -4,7 +4,18 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 50 (2026-11-18): Neo City chapter bonus cards face-down until picked — resume here
+## Session 52 (2026-11-18): destroy missions end at their goal mark (chapter-end dialogue) — resume here
+
+Details: EMULATOR_NOTES session 52. 436 tests pass. Not yet tried in game.
+- **After Q3's kill the game jumped to CHAPTER CLEAR**; the official-server video shows a **goal marker**, a drive
+  there and **one more dialogue** first. `destroy_kill()` was sending 0xeee at the kill count, which the client reads
+  as "mission complete". Now the kills only meet the objective and `goal_zone()` finishes the mission (0xee7 flag 1 ->
+  0xeea result 1 -> 0xeef -> 0xeee), the same route `move` / `patrol` use. A destroy mission ignores the goal report
+  until its kills are done. The mission's goal position is NC_mission column 5 and its closing dialogue column 4.
+- Collect missions still answer 0xeee at the count (no evidence either way yet).
+- Session 51 (PvP bonus panel 0x1e4) and session 50 (chapter bonus cards face-down) are the entries above.
+
+## Session 50 (2026-11-18): Neo City chapter bonus cards face-down until picked
 
 Details: EMULATOR_NOTES session 50. 436 tests pass. Not yet tried in game.
 - **The 16 Chapter Bonus Item cards appeared face-up and could not be clicked** (no 0xee8, so the 18 s auto-pick did
