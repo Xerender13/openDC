@@ -4,7 +4,22 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 52 (2026-11-18): destroy missions end at their goal mark (chapter-end dialogue) — resume here
+## Session 53 (2026-11-19): LAA for the memory crash, Zorro hidden, shipped 2016 client repacked — resume here
+
+Details: EMULATOR_NOTES session 53. 436 tests pass. Not yet tried in game.
+- **Memory crash on entering the city** (user: "abnormal program termination" at Moon Palace after many cars): the exe
+  is 32-bit with LAA off (Characteristics `0x010f`); `tools/laa.py apply` set it (`0x012f`), original in
+  `client_backup/DriftCity.exe.before_laa`. Header only, no code changed; restart the client. `tools/client2016.py`
+  and its test now hash through `laa.normalised()` so the flag does not read as an unknown build.
+- **Zorro** (Unique Id 74, `pc_0054s.nif`) has no model in any of the 46 client packs we hold, so `tools/no_model_cars.py
+  apply` set its `Sellable` to 0 in the server table and the client's `Data/Init.agt`. Only that one car qualified.
+- **GitHub:** Discussions on; `main` protected (PR + 1 approval, no force-push / deletion, owner exempt).
+- **`Releases/openDC Client US 2016.zip` repacked** (1,868,891,146 bytes, 1448 entries, clean) - only the exe and
+  `Data/Init.agt` differ from the previous archive; logs and crash dumps excluded.
+- Open: Neo chapter bonus cards are still not clickable and the Player 1 Reward cell is still empty; both are correct
+  server-side, so a live trace at `0x71ee10` / the user's log is needed.
+
+## Session 52 (2026-11-18): destroy missions end at their goal mark (chapter-end dialogue)
 
 Details: EMULATOR_NOTES session 52. 436 tests pass. Not yet tried in game.
 - **After Q3's kill the game jumped to CHAPTER CLEAR**; the official-server video shows a **goal marker**, a drive

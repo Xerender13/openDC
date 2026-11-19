@@ -8,6 +8,49 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 53 (2026-11-19): 32-bit address space (LAA), Zorro hidden, repacked 2016 client
+
+**User:** random "Microsoft Visual C++ Runtime Library - abnormal program termination" when entering Moon Palace after
+viewing many cars; the GameLog stops after NeoCity at `ThreadLoad0 Start:MoonPalace:Main`. Their diagnosis: the
+32-bit `DriftCity.exe` is limited to 2 GB and ~600 cars push it over. Also: Zorro (BMW Z4, Unique Id 74) is on sale
+but `pc_0054s.nif` is not in `vehicles.agt`.
+
+**LAA (measured):** `DriftCity.exe` is `machine 0x014c` (i386) with PE Characteristics `0x010f`; bit `0x20`
+(IMAGE_FILE_LARGE_ADDRESS_AWARE) is off. `tools/laa.py` sets/clears only that one header word (no code is patched):
+`status` / `apply` / `remove`, default exe `../DriftCity Dev Ed/DriftCity.exe`, the original kept once in
+`client_backup/DriftCity.exe.before_laa`. Applied: Characteristics `0x012f`. A running client keeps the header it
+started with, so it must be restarted. The tool refuses a non-i386 image (the flag would do nothing).
+
+**Hash guard:** `tools/client2016.py` accepted only the untouched exe (`IMAGE_SHA256`), so the LAA bit made it refuse
+the client as "unsupported". It now hashes `laa.normalised(data)` (that one field cleared); non-PE input is returned
+unchanged, so a genuinely unknown build is still refused. `tests/test_client2016.py` hashes the same way.
+
+**Zorro (measured):** `server_data_2016/Init/VehicleList.xlt` row Unique Id 74 = BMW Z4 Coupe, `pc_0054s.nif`,
+Support 0, Sellable 1. No file whose name starts with `pc_0054` exists in **any** pack we hold - 19 packs of the 2016
+client, 8 of the 2011 US client, 19 of the Skid Rush build (a car's base `.nif` is stored as its variants
+`pc_XXXXs_s.nif` / `_01` / `_02` / `_dm`, so the match is by prefix). Of the `PlayerCar` rows whose Support is 0, only
+74 is on sale with no model at all; 43 / 49 / 64 / 67 / 68 also say Support 0 but their models do exist. So it is not
+ported but **hidden**: `tools/no_model_cars.py` (list / `apply`) sets `Sellable = 0` for exactly such rows, one column
+of one row, in the server table and in the client's `Data/Init.agt` (through `port2016.pack_update`, original kept in
+`client_backup/`).
+
+**GitHub (user: "make the project editable with moderation"):** the repo was already public. Discussions are on;
+`main` is protected - changes arrive by pull request with 1 approving review, force pushes and deletions refused,
+`enforce_admins` false so the owner can still merge alone. Collaborators are added by the owner, not by code.
+
+**Repack:** `Releases/openDC Client US 2016.zip` was rebuilt (1,868,891,146 bytes, 1448 entries, `unzip -t` clean).
+Against the previous archive only `DriftCity.exe` (LAA) and `Data/Init.agt` (Zorro) differ; `Data/vehicles.agt` is
+byte-identical. `DriftCity.exe.npd` (a 0-byte crash dump) and `EURules.txt` (superseded by `ClientModes.txt`) are
+gone; `ClientModes.txt` is in. Logs, `*_Test_Log/`, `*.kph`, `GameLog_*.txt`, `DriftCity2016Test.exe` are excluded.
+
+**Still open (both verified correct server-side):** the chapter bonus cards are face-down but a click sends no 0xee8,
+and the "Player 1 Reward" cell of CHAPTER COMPLETED is empty although `0xcb` carries item `1043`
+(`neo_arp_l_10001`) at payload `+0x1c` and `+0x20`. The client's `ItemClient.tdf` is byte-identical in size to the
+server copy, so the id resolves. Both need a live trace / the user's log excerpt; nothing was changed for them.
+
+Tests: 436 pass. **Not yet tried in game.**
+
+
 ## Session 52 (2026-11-18): the destroy mission ends at its goal mark, not at the kill
 
 **User, with the official server's video (14:18-15:20):** after Q3's target HUV dies the objective shows 1/1 and a

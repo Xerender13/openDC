@@ -31,10 +31,10 @@ PORT_DATA = 0x5bb174
 
 
 def patch_image(data, guided=False):
-    from . import carlimit2016
+    from . import carlimit2016, laa
     if carlimit2016.applied(data):          # the car limit patch (tools/carlimit2016.py) is kept
         return carlimit2016.apply(patch_image(carlimit2016.strip(data), guided))
-    if hashlib.sha256(data).hexdigest() != IMAGE_SHA256:
+    if hashlib.sha256(laa.normalised(data)).hexdigest() != IMAGE_SHA256:
         raise ValueError('Unsupported Dev Ed executable; original SHA-256 does not match')
     out = bytearray(data)
     expected = bytes.fromhex('66c70574c39b00fd2a')

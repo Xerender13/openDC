@@ -3,7 +3,7 @@ from pathlib import Path
 import struct
 import unittest
 
-from tools import carlimit2016
+from tools import carlimit2016, laa
 from tools.client2016 import IMAGE_SHA256, PORT_DATA, PORT_STORE, ROOT, patch_image
 
 
@@ -16,7 +16,7 @@ class ClientPatch(unittest.TestCase):
     def test_only_socket_port_changes(self):
         original = carlimit2016.strip((ROOT/'DriftCity Dev Ed/DriftCity.exe').read_bytes())
         import hashlib
-        self.assertEqual(hashlib.sha256(original).hexdigest(), IMAGE_SHA256)
+        self.assertEqual(hashlib.sha256(laa.normalised(original)).hexdigest(), IMAGE_SHA256)
         patched = patch_image(original)
         self.assertEqual(len(patched), len(original))
         self.assertEqual({i for i, (a, b) in enumerate(zip(original, patched)) if a != b},
@@ -49,7 +49,7 @@ class ClientPatch(unittest.TestCase):
         the section bytes are tools/p20_cars.s, and client2016 keeps the patch."""
         original = carlimit2016.strip((ROOT/'DriftCity Dev Ed/DriftCity.exe').read_bytes())
         import hashlib
-        self.assertEqual(hashlib.sha256(original).hexdigest(), IMAGE_SHA256)
+        self.assertEqual(hashlib.sha256(laa.normalised(original)).hexdigest(), IMAGE_SHA256)
         patched = carlimit2016.apply(original)
         self.assertTrue(carlimit2016.applied(patched) and not carlimit2016.applied(original))
         self.assertEqual(carlimit2016.strip(patched), original)
