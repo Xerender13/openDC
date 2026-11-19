@@ -48,6 +48,18 @@ and the "Player 1 Reward" cell of CHAPTER COMPLETED is empty although `0xcb` car
 (`neo_arp_l_10001`) at payload `+0x1c` and `+0x20`. The client's `ItemClient.tdf` is byte-identical in size to the
 server copy, so the id resolves. Both need a live trace / the user's log excerpt; nothing was changed for them.
 
+From the user's screenshot (2026-11-19) and the client code:
+- The **Reward column is one item-icon slot per row** (a dark rounded square at the far right), not text. Nothing is
+  drawn in it for our 1043.
+- The **16 card slots draw as plain dark squares**; all 16 have the same look after our all-zero 0xee9, so the
+  face-down card face itself is drawn. The 0xee9 filler and the WndProc touch only these ids: the bind at `0x71eb14`
+  creates `0x53c5af..0x53c5be` (stored `win+0x48+4i`) and `0x53c5bf..0x53c5ce` (stored `win+0x08+4i`, the picture,
+  which gets flag `0x40` at `0x71eb3b` — the same flag the notice text gets at `0x71eb80`, so it is most likely
+  **mouse-transparent**, not "clickable" as the protocol doc guessed); the only code that compares an id with
+  `0x53c5af..0x53c5be` in the whole window is the WndProc range check at `0x71ee24/0x71ee2f` (verified: no other
+  constant in that range appears in `0x71e000..0x71f600`). So a click on the area should reach `0x71e4a0`, and
+  `ItemClient.tdf` row 1043 is `neo_arp_l_10001` — the client's own table. What is missing has to be seen at run time.
+
 Tests: 436 pass. **Not yet tried in game.**
 
 
