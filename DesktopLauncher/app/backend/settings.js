@@ -17,7 +17,9 @@ function readVideo() {
     exists: fs.existsSync(goption()),
     width: num('ScreenWidth', 1366), height: num('ScreenHeight', 768),
     fullscreen: (l['client.display'] || '').toLowerCase() === 'fullscreen' || bool(g['Graphic.Fullscreen'] || 'false'),
-    hud: num('MainUIType', 1),
+    // the HUD the game really uses: DriftCityLauncher.ini main_ui_type (0 / 1) is written over goption.ini's
+    // MainUIType every time the game starts (Launcher/common.go setOptions); "auto" leaves goption.ini's value
+    hud: ['0', '1'].includes(String(l['client.main_ui_type'] || '').trim()) ? parseInt(l['client.main_ui_type'], 10) : num('MainUIType', 1),
     msaa: num('MultiSampling', 0),
     preset: num('VideoGradeSet', -1),
     shadow: num('ShadowQuality', 3), car: num('CarDetail', 4), env: num('EnvironmentDetail', 4), fx: num('EffectDetail', 4),
