@@ -23,6 +23,7 @@ the rest itself.
 |---|---|
 | `Emulator/` | the server: `launch.sh` (Linux) / `launch.bat` (Windows), `docker-compose.yml`, the code in `dcemu/`. Start with [`Emulator/README.md`](Emulator/README.md); the detailed research notes are [`Emulator/docs/EMULATOR_NOTES.md`](Emulator/docs/EMULATOR_NOTES.md) |
 | `Launcher/` | source of `DriftCityLauncher` (Go): starts the client against your server; `build.sh` builds the Linux and Windows launchers into each client folder |
+| `DesktopLauncher/` | the openDC desktop launcher (Windows 10/11 and Linux): one window that downloads the client, this server, a portable Python and PostgreSQL, and runs everything without Docker. See [`DesktopLauncher/README.md`](DesktopLauncher/README.md) |
 
 ## Quick start
 
