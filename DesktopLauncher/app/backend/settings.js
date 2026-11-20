@@ -19,6 +19,7 @@ function readVideo() {
     fullscreen: (l['client.display'] || '').toLowerCase() === 'fullscreen' || bool(g['Graphic.Fullscreen'] || 'false'),
     // the HUD the game really uses: DriftCityLauncher.ini main_ui_type (0 / 1) is written over goption.ini's
     // MainUIType every time the game starts (Launcher/common.go setOptions); "auto" leaves goption.ini's value
+    // in the 2016 client MainUIType 0 shows the "Digital Type" HUD and 1 the classic one (user, 2026-11-20: tested in game)
     hud: ['0', '1'].includes(String(l['client.main_ui_type'] || '').trim()) ? parseInt(l['client.main_ui_type'], 10) : num('MainUIType', 1),
     msaa: num('MultiSampling', 0),
     preset: num('VideoGradeSet', -1),
