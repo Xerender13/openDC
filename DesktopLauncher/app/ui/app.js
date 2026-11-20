@@ -49,8 +49,18 @@ function renderStatus() {
   if (!ST) return;
   $('#verline').textContent = t('ver', { v: ST.version });
   $('#splashVer').textContent = t('ver', { v: ST.version });
-  $('#dotDb').className = 'dot' + (ST.db ? ' on' : ''); $('#txtDb').textContent = ST.db ? T.dbOn : T.dbOff;
-  $('#dotSrv').className = 'dot' + (ST.server ? ' on' : ''); $('#txtSrv').textContent = ST.server ? T.srvOn : T.srvOff;
+  // while starting / stopping: yellow "Starting…" / "Stopping…" for what is still changing
+  const line = (on, onTxt, offTxt, dot, txt) => {
+    const wait = (ST.busy === 'start' && !on) ? T.stStarting : (ST.busy === 'stop' && on) ? T.stStopping : null;
+    $(dot).className = 'dot' + (wait ? ' wait' : on ? ' on' : '');
+    $(txt).textContent = wait ? (dot === '#dotDb' ? T.stDb : T.stSrv) + ' ' + wait : on ? onTxt : offTxt;
+  };
+  line(ST.db, T.dbOn, T.dbOff, '#dotDb', '#txtDb');
+  line(ST.server, T.srvOn, T.srvOff, '#dotSrv', '#txtSrv');
+  // keep the panel moving while a start / stop runs (the backend only reports its begin and end)
+  if ((ST.busy === 'start' || ST.busy === 'stop') && !renderStatus.poll) {
+    renderStatus.poll = setInterval(async () => { try { ST = await window.odc.state(); } catch { /* next tick */ } renderStatus(); if (page === 'home') renderHomeDynamic(); }, 1000);
+  } else if (!(ST.busy === 'start' || ST.busy === 'stop') && renderStatus.poll) { clearInterval(renderStatus.poll); renderStatus.poll = null; }
   $('#txtCli').textContent = ST.installed ? t('cliOn', { c: ST.client, p: ST.port || (ST.client === '2011' ? 11005 : 11105) }) : T.cliOff;
   $$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === page));
 }
@@ -463,7 +473,7 @@ function tabServer(el) {
       <div class="set"><div class="l"><b>${esc(T.onGame)}</b><span class="muted small">${esc(T.onGameD)}</span></div><select id="og">${[['tray', T.ogTray], ['minimize', T.ogMin], ['none', T.ogNone]].map(([v, n]) => `<option value="${v}" ${(c.onGame || 'tray') === v ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
     </section>
     <section>
-      <div class="set"><div class="l"><b>${esc(T.srvNow)}</b><span class="muted small">${esc(ST.server ? T.srvOn : T.srvOff)}</span></div><button class="btn sm" id="sOn" ${ST.installed && !ST.server && !ST.busy ? '' : 'disabled'}>${esc(T.srvStart)}</button><button class="btn sm" id="sOff" ${ST.server || ST.db ? '' : 'disabled'}>${esc(T.srvStop)}</button></div>
+      <div class="set"><div class="l"><b>${esc(T.srvNow)}</b><span class="muted small">${esc(ST.server ? T.srvOn : T.srvOff)}</span></div><button class="btn sm" id="sOn" ${ST.installed && !ST.server && !ST.busy ? '' : 'disabled'}>${esc(T.srvStart)}</button><button class="btn sm" id="sOff" ${(ST.server || ST.db) && !ST.busy ? '' : 'disabled'}>${esc(T.srvStop)}</button></div>
       <div class="set"><div class="l"><b>${esc(T.bk)}</b><span class="muted small">${esc(T.bkD)}</span></div><button class="btn sm" id="bkGo" ${ST.installed ? '' : 'disabled'}>${esc(T.bkNow)}</button></div>
       <div class="set"><div class="l"><b>${esc(T.bkAuto)}</b></div><input type="checkbox" id="bkAuto" ${c.autoBackup ? 'checked' : ''}></div>
       <div class="set"><div class="l"><b>${esc(T.srvUpd)}</b><span class="muted small" id="suRes">${esc(T.srvUpdD)}</span></div><button class="btn sm" id="suGo" ${ST.installed && !ST.busy ? '' : 'disabled'}>${esc(T.srvUpdBtn)}</button><button class="btn sm pri" id="suApply" hidden>${esc(T.updBtn)}</button></div>
@@ -476,8 +486,8 @@ function tabServer(el) {
   $('#rTest').onclick = async () => { $('#rRes').textContent = T.testing; const ok = await call('testRemote', $('#rIp').value.trim()); $('#rRes').textContent = ok ? T.testOk : T.testBad; $('#rRes').className = ok ? 'ok' : 'bad'; };
   $('#og').onchange = (e) => save({ onGame: e.target.value });
   $('#bkAuto').onchange = (e) => save({ autoBackup: e.target.checked });
-  $('#sOn').onclick = async () => { try { await call('serverStart'); } catch { /* toast */ } await refresh(); render(); };
-  $('#sOff').onclick = async () => { await call('serverStop'); await refresh(); render(); };
+  $('#sOn').onclick = async () => { $('#sOn').disabled = $('#sOff').disabled = true; try { await call('serverStart'); } catch { /* toast */ } await refresh(); render(); };
+  $('#sOff').onclick = async () => { $('#sOn').disabled = $('#sOff').disabled = true; try { await call('serverStop'); } catch { /* toast */ } await refresh(); render(); };
   $('#bkGo').onclick = async () => { try { const f = await call('backup'); toast('✓ ' + f, true); } catch { /* toast */ } };
   // check the openDC server (emulator) on GitHub now, without restarting the launcher
   const showSrvUpd = () => {

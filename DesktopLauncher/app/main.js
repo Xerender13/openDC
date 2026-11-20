@@ -132,7 +132,7 @@ const api = {
     });
   },
   async serverStart() { return guard('start', () => S.startAll()); },
-  async serverStop() { return S.stopAll(); },
+  async serverStop() { return guard('stop', () => S.stopAll()); },
   async checkUpdate() { lastCheck = await U.checkAll(app.getVersion()); return lastCheck; },
   async update() {
     let restart = null;

@@ -4,7 +4,7 @@ window.TX = {
   pt: {
     ver: 'Launcher · versão {v}', min: 'Minimizar', close: 'Fechar',
     navHome: 'Início', navNotes: 'Notas de atualização', navAcc: 'Contas', navCfg: 'Configurações', navMods: 'Mods', exp: 'EXPERIMENTAL',
-    st: 'ESTADO', dbOn: 'Banco ligado', dbOff: 'Banco offline', srvOn: 'Servidor ligado', srvOff: 'Servidor offline',
+    st: 'ESTADO', stStarting: 'ligando…', stStopping: 'desligando…', stDb: 'Banco', stSrv: 'Servidor', dbOn: 'Banco ligado', dbOff: 'Banco offline', srvOn: 'Servidor ligado', srvOff: 'Servidor offline',
     cliOn: 'Cliente {c} · porta {p}', cliOff: 'Cliente não instalado',
     splash: ['Iniciando…', 'Verificando os arquivos…', 'Procurando atualizações…', 'Pronto'],
     heroTag: 'SERVIDOR LOCAL · DRIFT CITY {c}', news: 'NOVIDADES', newsNone: 'As novidades do openDC aparecem aqui.',
@@ -74,7 +74,7 @@ window.TX = {
   en: {
     ver: 'Launcher · version {v}', min: 'Minimize', close: 'Close',
     navHome: 'Home', navNotes: 'Patch notes', navAcc: 'Accounts', navCfg: 'Settings', navMods: 'Mods', exp: 'EXPERIMENTAL',
-    st: 'STATUS', dbOn: 'Database on', dbOff: 'Database offline', srvOn: 'Server on', srvOff: 'Server offline',
+    st: 'STATUS', stStarting: 'starting…', stStopping: 'stopping…', stDb: 'Database', stSrv: 'Server', dbOn: 'Database on', dbOff: 'Database offline', srvOn: 'Server on', srvOff: 'Server offline',
     cliOn: '{c} client · port {p}', cliOff: 'Client not installed',
     splash: ['Starting…', 'Checking the files…', 'Looking for updates…', 'Ready'],
     heroTag: 'LOCAL SERVER · DRIFT CITY {c}', news: 'NEWS', newsNone: 'openDC news shows up here.',
@@ -140,7 +140,7 @@ window.TX = {
   ru: {
     ver: 'Лаунчер · версия {v}', min: 'Свернуть', close: 'Закрыть',
     navHome: 'Главная', navNotes: 'Список изменений', navAcc: 'Аккаунты', navCfg: 'Настройки', navMods: 'Моды', exp: 'ЭКСПЕРИМЕНТ',
-    st: 'СОСТОЯНИЕ', dbOn: 'База данных запущена', dbOff: 'База данных выключена', srvOn: 'Сервер запущен', srvOff: 'Сервер выключен',
+    st: 'СОСТОЯНИЕ', stStarting: 'запускается…', stStopping: 'выключается…', stDb: 'База данных', stSrv: 'Сервер', dbOn: 'База данных запущена', dbOff: 'База данных выключена', srvOn: 'Сервер запущен', srvOff: 'Сервер выключен',
     cliOn: 'Клиент {c} · порт {p}', cliOff: 'Клиент не установлен',
     splash: ['Запуск…', 'Проверка файлов…', 'Поиск обновлений…', 'Готово'],
     heroTag: 'ЛОКАЛЬНЫЙ СЕРВЕР · DRIFT CITY {c}', news: 'НОВОСТИ', newsNone: 'Здесь появятся новости openDC.',
