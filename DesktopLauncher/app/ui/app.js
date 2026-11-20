@@ -466,6 +466,7 @@ function tabServer(el) {
       <div class="set"><div class="l"><b>${esc(T.srvNow)}</b><span class="muted small">${esc(ST.server ? T.srvOn : T.srvOff)}</span></div><button class="btn sm" id="sOn" ${ST.installed && !ST.server && !ST.busy ? '' : 'disabled'}>${esc(T.srvStart)}</button><button class="btn sm" id="sOff" ${ST.server || ST.db ? '' : 'disabled'}>${esc(T.srvStop)}</button></div>
       <div class="set"><div class="l"><b>${esc(T.bk)}</b><span class="muted small">${esc(T.bkD)}</span></div><button class="btn sm" id="bkGo" ${ST.installed ? '' : 'disabled'}>${esc(T.bkNow)}</button></div>
       <div class="set"><div class="l"><b>${esc(T.bkAuto)}</b></div><input type="checkbox" id="bkAuto" ${c.autoBackup ? 'checked' : ''}></div>
+      <div class="set"><div class="l"><b>${esc(T.srvUpd)}</b><span class="muted small" id="suRes">${esc(T.srvUpdD)}</span></div><button class="btn sm" id="suGo" ${ST.installed && !ST.busy ? '' : 'disabled'}>${esc(T.srvUpdBtn)}</button><button class="btn sm pri" id="suApply" hidden>${esc(T.updBtn)}</button></div>
       <div class="set"><div class="l"><b>${esc(T.tables)}</b><span class="muted small">${esc(T.tablesD)}</span></div><button class="btn sm" id="tbGo" ${ST.installed ? '' : 'disabled'}>${esc(T.repair)}</button></div>
     </section></div>`;
   const save = async (patch) => { await call('saveConfig', patch); await refresh(); };
@@ -478,6 +479,22 @@ function tabServer(el) {
   $('#sOn').onclick = async () => { try { await call('serverStart'); } catch { /* toast */ } await refresh(); render(); };
   $('#sOff').onclick = async () => { await call('serverStop'); await refresh(); render(); };
   $('#bkGo').onclick = async () => { try { const f = await call('backup'); toast('✓ ' + f, true); } catch { /* toast */ } };
+  // check the openDC server (emulator) on GitHub now, without restarting the launcher
+  const showSrvUpd = () => {
+    const el = $('#suRes'); if (!el) return;
+    const e = upd && upd.emulator;
+    if (!e) { el.textContent = T.srvUpdD; el.className = 'muted small'; $('#suApply').hidden = true; return; }
+    if (e.error) { el.textContent = T.updFail; el.className = 'bad'; $('#suApply').hidden = true; return; }
+    el.textContent = e.available ? t('srvUpdNew', { n: e.changes.length }) : T.okUpd;
+    el.className = e.available ? 'ok' : 'muted small';
+    $('#suApply').hidden = !e.available;
+  };
+  $('#suGo').onclick = async () => {
+    $('#suGo').disabled = true; $('#suRes').textContent = T.checking; $('#suRes').className = 'muted small';
+    try { upd = await window.odc.checkUpdate(); } catch { upd = { emulator: { error: true } }; }
+    if ($('#suGo')) { $('#suGo').disabled = false; showSrvUpd(); }
+  };
+  $('#suApply').onclick = async () => { await onUpdate(); };
   $('#tbGo').onclick = async () => { try { await call('refreshTables'); toast('✓', true); } catch { /* toast */ } };
 }
 async function tabVideo(el) {
