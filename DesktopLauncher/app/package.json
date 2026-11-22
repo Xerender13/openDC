@@ -1,0 +1,8 @@
+{
+  "name": "opendc-launcher",
+  "productName": "openDC Launcher",
+  "version": "0.1.1",
+  "description": "Launcher for openDC (Drift City server emulator): download, install and play without Docker on Windows and Linux.",
+  "main": "main.js",
+  "license": "MIT"
+}

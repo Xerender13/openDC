@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; media-src 'self' blob:">
+<title>openDC Launcher</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="root">
+  <header id="titlebar">
+    <div class="brand">open<span>DC</span></div>
+    <div id="verline" class="muted small"></div>
+    <div class="grow"></div>
+    <button id="btnMin" class="winbtn" aria-label="min"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" stroke="currentColor" stroke-width="1.5"/></svg></button>
+    <button id="btnClose" class="winbtn close" aria-label="close"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  </header>
+  <div id="body">
+    <nav id="nav" aria-label="Menu">
+      <a href="#" data-page="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span data-t="navHome"></span></a>
+      <a href="#" data-page="notes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg><span data-t="navNotes"></span></a>
+      <a href="#" data-page="accounts"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span data-t="navAcc"></span></a>
+      <a href="#" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span data-t="navCfg"></span></a>
+      <a href="#" data-page="mods"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3"/><path d="M7.5 15h9"/></svg><span data-t="navMods"></span><em class="exp" data-t="exp"></em></a>
+      <div class="grow"></div>
+      <div id="status" class="card">
+        <div class="cap" data-t="st"></div>
+        <div class="row"><i id="dotDb" class="dot"></i><span id="txtDb"></span></div>
+        <div class="row"><i id="dotSrv" class="dot"></i><span id="txtSrv"></span></div>
+        <div id="txtCli" class="muted small"></div>
+      </div>
+    </nav>
+    <main id="main"></main>
+  </div>
+  <div id="modal" hidden></div>
+  <div id="toast" hidden></div>
+  <div id="splash" role="status" aria-live="polite">
+    <img class="splash-bg" src="assets/bg1.jpg" alt="">
+    <div class="splash-shade"></div>
+    <div class="splash-in">
+      <img src="assets/logo.png" alt="Open Drift City" class="splash-logo">
+      <div class="splash-bar"><div id="splashFill"></div></div>
+      <span id="splashTxt"></span>
+    </div>
+    <span id="splashVer" class="splash-ver"></span>
+  </div>
+</div>
+<script src="i18n.js"></script>
+<script src="i18n2.js"></script>
+<script src="dds.js"></script>
+<script src="vendor/three.min.js"></script>
+<script src="nif.js"></script>
+<script src="adpcm.js"></script>
+<script src="garage.js"></script>
+<script src="app.js"></script>
+<script src="panels.js"></script>
+<script src="lic_i18n.js"></script>
+<script src="more.js"></script>
+</body>
+</html>

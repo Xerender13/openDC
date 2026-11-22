@@ -19,6 +19,7 @@ the original server's layout: separate services and ports, the original database
 | `Emulator/dcemu/native/` | native services: `auth.py`, `lobby.py`, `area.py`, `nation.py` (US / EU rules), `game/*.py` (one module per feature: rooms, quests, mothers, instant, items, licenses, ...) | yes |
 | `Emulator/dcemu/handlers/game.py` | content flags sent to the client (`NEW_FLAGS`: flags new in 2011 or missing from the 2008 `Contents.ini`) | yes |
 | `Launcher/` | Go source of the client launcher (`build.sh`) | yes |
+| `DesktopLauncher/` | Electron desktop launcher for Windows / Linux: installs and runs client + emulator + portable Python / PostgreSQL without Docker (`build.sh`, `README.md`) | yes |
 | `Client US/`, `Client EU/`, `DriftCity Dev Ed/` | the game clients: 2011 US / EU, 2016 US (shared separately; zips in `../Releases/`) | **no** |
 | `Emulator 2011/` | local copy of `Emulator/` set to 2011, for playing | **no** |
 | `Server2008/`, `Handoff/` | 2008 server, research tools, hand-over copies | **no** |

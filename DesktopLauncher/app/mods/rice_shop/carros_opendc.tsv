@@ -1,0 +1,100 @@
+# Cars only openDC has (not in Enhanced Rice): a score from 1 (cheapest) to 10 (most expensive) for the base car,
+# by the real car (how rare and wanted it is). The price at the car's V goes from the low to the high end of a range,
+# in Rice's steps (V9: normal 1.5M-5.5M in steps of 50,000; specials in steps of 250,000: ST 33.75M-57.5M,
+# BT 10M-33.75M, MINI 60M-81.25M, CT 12.5M-17.5M). The special cars (ST / BT / MINI / CT) use their base car's score.
+# base name	score	real car
+Fate	8	Ferrari 250 Testarossa
+Monster	3	Dakoda
+Lemans	8	Ford GT 2016
+Assassin	6	Toyota FT-1
+Hurricane	8	Lamborghini Huracan
+Savana	4	Mazda Savanna RX-3
+Stratos	6	Lancia Stratos HF
+Farmer	1	Fendt 936 tractor
+Revolution	6	De Tomaso Pantera
+Inferno	6	Nissan Skyline R33
+Tango	5	Ford Mustang 2015
+Waggon	2	Waggon
+Duel	10	Bugatti Veyron
+Vulkan	9	Aston Martin Vulcan
+Cobalt	3	Mini Coupe 2013
+Fenrir	4	Lotus Europa Special
+MkSEVEN	5	Caterham Seven 160
+366C	8	Porsche 962C
+REWINDER	4	DeLorean DMC-12
+RHINO	3	Mercedes G63 AMG 6x6
+KEEPER	7	Lamborghini Miura
+SRK-V	5	Cadillac CTS-V 2016
+Lightning	6	Porsche Cayman
+Natura	8	Porsche Carrera GT
+Camper	1	Volkswagen Microbus
+STONECOLD	10	Bugatti Chiron
+ACROBAT	7	Batmobile
+PRIME	2	Peterbilt 379
+FF40	8	Ferrari F40
+Apollon	8	Gumpert Apollo S
+VenomR	9	Lamborghini Veneno Roadster
+Ravine	4	Toyota Corolla Levin AE86
+Utopia	8	Mercedes SLR McLaren
+Cross	7	Aston Martin Vanquish
+Comodo	4	Audi TT
+Devils	9	W Motors Devel Sixteen
+DragonFly	2	Volkswagen New Beetle
+Romeo	5	Lotus Elise
+VAS70	6	Equus Bass 770
+CENARIUS	9	Lamborghini Centenario
+Liner	6	Infiniti Essence
+Mirage	8	Ferrari 458 Italia
+GSIX coop	4	Hyundai Genesis Coupe
+OMG GT	7	Mercedes-AMG GT
+LAXAS	6	Lexus LC500h
+Pandora	10	Ferrari LaFerrari
+AQUA	7	Acura NSX
+Teranium	7	Peugeot Onyx concept
+Rosso	8	Ferrari F50
+Tyrant	2	Hummer H3
+Grace	8	Jaguar C-X75
+Calade	3	Cadillac Escalade 2018
+Vonco	1	Kia Bongo Frontier
+FW Peny	9	W Motors Fenyr SuperSport
+Xolk	4	Volkswagen XL1
+SivicR	5	Honda Civic Type R 2017
+Solo	3	Jaguar S-Type 2.5
+Rione	9	Rimac Concept One
+Helos	4	Hyundai Veloster N
+Tagar	6	TVR Sagaris
+Mema	9	McLaren Senna
+Barussi	6	Marussia B2
+Staber	5	Kia Stinger
+CIRA	2	GMC Sierra 3500HD
+Asrion	8	Lamborghini Asterion
+Vlader	6	Nissan BladeGlider
+Cygler	3	Tesla Cybertruck
+Darkness	9	Apollo Intensa Emozione
+Zenesty	9	Zenvo ST1
+Laysport	6	Porsche 718 Cayman GT4
+Temiron	3	Volkswagen Arteon
+Damiz	8	Ferrari F12 Berlinetta
+X-Peedy	10	Bugatti Centodieci
+Grisy	5	Toyota GR Yaris
+ILLUSION	8	Ferrari 488 GTB
+LM3	4	Tesla Model 3
+CERES	4	Genesis G70
+Lixeton	2	SsangYong Rexton
+Survivor	10	Aston Martin Valkyrie AMR Pro
+Rolless	7	Rolls-Royce Boat Tail
+RedShot	6	Shelby Mustang GT
+PHOENIX	10	Bugatti Bolide
+Jumbo X	2	Hyundai Xcient truck
+QUADRA	6	Audi e-tron GT
+SILHOUETTE	9	Lamborghini Aventador LP700-4
+Shield902	7	Porsche 911 Targa 4 GTS
+delusion	8	Ferrari 296 GT3
+21ND	7	Aston Martin DB12
+Hussar	7	Arrinera Hussarya
+Eisen K	3	Volvo Iron Knight truck
+Red Light R2	2	Chevrolet Colorado ZR2
+Duecento96	8	Ferrari 296 GTB
+TinySaint B	9	Pininfarina Battista
+Demeter	3	Genesis GV80
+SUDI8	5	Audi S8 2012
