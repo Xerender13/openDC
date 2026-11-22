@@ -1,0 +1,42 @@
+쿠폰타입별	배틀횟수	퀵서비스횟수	체이싱 횟수	콤보횟수	주행시간	드리프트횟수	곡예주행횟수	점프횟수	역주행시간	게임모드수행	튜토리얼 쿠폰용	
+최대슬롯갯수	5	3	2	2	2	3	2	2	3	4	10	
+UI 끝 단위	회	회	회	회	분	회	회	회	분			
+종류	인덱스	CouponStampDisaply	횟수	시간(분)	증정카(쿠폰)이름	카 Unique ID	쿠폰ID	카 등급	DB Type	DB Idx	DB Field	Comment
+배틀횟수	0	1	300	-1	Above	30	i_n_c0016	5	0	0	N/A	
+	1	1	600	-1	Fondo	39	i_n_c0018	6	0	1	N/A	
+	2	1	1500	-1	Viper SRT10	18	i_n_c0021	8	0	2	N/A	
+	3	1	3000	-1	Arena	25	i_n_c0024	9	0	3	N/A	
+	4	1	5000	-1	Torero	52	i_n_c0012	9	0	4	N/A	
+퀵서비스횟수	0	1	70	-1	MPMCC	7	i_n_c0004	4	1	0	N/A	
+	1	1	250	-1	Impact	11	i_n_c0017	5	1	1	N/A	
+	2	1	1000	-1	Ruby	48	i_n_c0022	8	1	2	N/A	
+체이싱 횟수	0	1	100	-1	Unlimit	37	i_n_c0005	5	2	0	N/A	
+	1	1	250	-1	Comodo	14	i_n_c0006	6	2	1	N/A	
+콤보횟수	0	1	14000	-1	Eric	5	i_n_c0015	4	3	0	N/A	
+	1	1	1000000	-1	Gigas	24	i_n_c0023	9	3	1	N/A	
+주행시간	0	1	-1	180	Tokio	36	i_n_c0003	3	4	0	N/A	
+	1	1	-1	6000	Aria	16	i_n_c0009	8	4	1	N/A	
+드리프트횟수	0	1	1000	-1	Panda	2	i_n_c0001	2	5	0	N/A	
+	1	1	30000	-1	Tiger	45	i_n_c0019	7	5	1	N/A	
+	2	1	50000	-1	Compact	247	i_n_c_Compact	5	5	2	N/A	
+곡예주행횟수	0	1	500	-1	Muse	6	i_n_c0013	3	6	0	N/A	
+	1	1	15000	-1	Action	47	i_n_c0020	7	6	1	N/A	
+점프횟수	0	1	70	-1	DragonFly	8	i_n_c0014	3	7	0	N/A	
+	1	1	5000	-1	Solution	69	i_n_c0008	7	7	1	N/A	
+역주행시간	0	1	-1	60	MMT1	4	i_n_c0002	2	8	0	N/A	
+	1	1	-1	3000	Sneak	41	i_n_c0007	7	8	1	N/A	
+	2	1	-1	6000	RunnerR	97	i_n_c_RunnerR	8	8	2	N/A	
+게임모드수행	0	1	1	-1	Monster	83	i_n_c0027	5	9	0	N/A	
+	1	1	100	-1	Duel	50	i_n_c0028	7	11	0	DUEL_RM	리얼매치 상위랭크
+	2	1	10	-1	FondoX	84	i_n_c0029	6	14	0	RUSHTRY	러쉬타임 도전
+	3	1	100	-1	Liner	230	i_n_c_liner	6	15	0	LINEBALL	라인볼 미션 100회 수행
+퀘스트클리어	0	0	0	0	SS	32	i_n_c0025	2	10	0	N/A	튜토리얼용
+	1	0	0	0	PANZER	251	i_n_c_PANZER	7	10	0	N/A	대풍작 이벤트용
+	2	0	0	0	V-STAR	262	i_n_c_vstar	8	10	0	N/A	대풍작 이벤트용
+	3	0	0	0	ICINCO	261	i_n_c_icinco	9	10	0	N/A	대풍작 이벤트용
+	4	0	0	0	Panda2	190	i_n_c_panda2	7	10	0	N/A	대풍작 이벤트용
+	5	0	0	0	Panda MINI	240	i_n_c_pandamini	7	10	0	N/A	대풍작 이벤트용
+	6	0	0	0	Rotary MINI	241	i_n_c_rotarymini	7	10	0	N/A	대풍작 이벤트용
+	7	0	0	0	Fondo MINI	242	i_n_c_fondomini	7	10	0	N/A	대풍작 이벤트용
+	8	0	0	0	Above MINI	243	i_n_c_abovemini	7	10	0	N/A	대풍작 이벤트용
+	9	0	0	0	JIMMY	269	i_n_c_jimmy	8	10	0	N/A	발렌타인 이벤트용
