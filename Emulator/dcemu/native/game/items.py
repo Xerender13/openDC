@@ -150,7 +150,8 @@ async def new_item(p, info, count, random=None):
     c.part_inven_idx += 1
     it = Item(gid, c.part_inven_idx, info.item_id, 0, count, random, 0, 0, 0, '', '', 0, 0, info.table_idx, p.tick)
     import datetime
-    it.cdate = datetime.datetime.utcnow()       # as the row's CDATE (GetDate() in the UTC container)
+    # Match the database's CDATE, which stores UTC without a timezone offset.
+    it.cdate = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     await db.execute(INSERT_SQL, (db.server_id, c.cid, c.name, gid, 0, it.inven_idx, info.item_id, count, random, 0, 0, 0,
                                   '', '', 0))
     from .setparts import start_expiry

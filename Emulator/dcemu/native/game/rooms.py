@@ -1364,6 +1364,8 @@ async def start_request(session, frame):
         return room.cast(Frame(0x1e7, struct.pack('<iiiifii', PRACTICE, room.map_id, map_flag, room.area, 0.0,
                                                 start_time, -1)))
     room.state = LOADING
+    from . import pvpreward
+    pvpreward.reset(room)
     room.watch_start()
     room.waiting = {o.serial for o in room.humans}
     room.racers = [o.serial for o in room.humans]
@@ -1664,6 +1666,33 @@ TEAM_GATE_REWARDS_FILE = os.path.join(os.path.dirname(__file__), '..', '..', '..
 SMALL_RACE = 4
 CLEAN_GATE = 100.0                  # the gate request's last float when the racer had no collision
 REWARDS, LAST_RESORT = 8, 6
+ALL_GATE_REPORT = 'BattleZone.AllGateReport'
+NO_GATE_SUPPORT = 'BattleZone.NoGateSupport'
+NEW_GATE_EFFECT = 'BattleZone.NewGateEffect'
+NEW_GATE_FACTOR = 'BattleZone.NewGateEffectFactor'
+
+
+def configure_gate_flags(section):
+    """Load the 2016 gate settings, with explicit [flags] values taking precedence."""
+    settings = context.extra_flags
+    mode = section.get('gate_rewards', 'classic').strip().lower()
+    if mode not in ('off', 'classic', 'new'):
+        raise ValueError('[battlezone] gate_rewards must be off, classic or new')
+    report = section.get('all_gate_report', '0').strip()
+    if report not in ('0', '1'):
+        raise ValueError('[battlezone] all_gate_report must be 0 or 1')
+    defaults = {ALL_GATE_REPORT: int(report), NO_GATE_SUPPORT: int(mode == 'off'),
+                NEW_GATE_EFFECT: int(mode == 'new'),
+                NEW_GATE_FACTOR: int(section.get('new_gate_effect_factor', '0'))}
+    for flag, default in defaults.items():
+        value = settings.setdefault(flag, default)
+        if not 0 <= value <= (1023 if flag == NEW_GATE_FACTOR else 1):
+            raise ValueError(f'{flag} is out of range')
+    # Client 0x7d39fe, 0x7d3b09 and 0x7d3b87 divide by this factor.
+    if settings[NEW_GATE_EFFECT] and not settings[NEW_GATE_FACTOR]:
+        raise ValueError('NewGateEffect requires a positive new_gate_effect_factor (1–1023)')
+
+
 # reward numbers (user, 2026-10-13, with gmgate): 0 nothing, 1 Boost 50%, 2 Boost 100%, 3 Skid Rush,
 # 4 Repairs Complete, 5 Untouchable, 6 Hyper Boost, 7 Team Boost 50%
 _gate_tables = {}
@@ -1715,12 +1744,25 @@ def gate_reward(racers, position, clean, team=False):
 @on(SVC, C2S, 0x1ed)
 async def gate(session, frame):
     room = room_of(session)
-    if not room or room.state != RACING or len(frame.payload) < 20:
+    newer = is_2016()
+    if not room or room.state != RACING or len(frame.payload) < (24 if newer else 20):
         return
     m = room.member(session)
-    who, index, _, _, col_point = struct.unpack_from('<Iiiff', frame.payload)
+    if m is None:
+        return
+    if newer:
+        # 0x84cfac–0x84cfd3: serial, gate index, geometry variant, tick, elapsed seconds and collision score.
+        who, index, variant, _, _, col_point = struct.unpack_from('<IiiIff', frame.payload)
+    else:
+        who, index, variant, _, col_point = struct.unpack_from('<Iiiff', frame.payload)
+    ai = room.ai_by_car(who) if who != m.serial else None
+    flags = context.extra_flags if newer else {}
+    all_gates = flags.get(ALL_GATE_REPORT)
+    if all_gates:
+        # 0x7dc57f broadens which gate types the local car reports.
+        if index < 0 or (who != m.serial and (not ai or ai.driver != m.serial)):
+            return
     passed = room.gates.setdefault(index, [])
-    ai = room.ai_by_car(who) if m and who != m.serial else None
     if ai:          # an AI its client drives (car key): it takes a place at the gate, no reward
         if ai.serial not in passed:
             passed.append(ai.serial)
@@ -1730,12 +1772,14 @@ async def gate(session, frame):
         return
     passed.append(m.serial)
     field = len(room.racers) + len(room.ais)         # the AIs count for the places (user, 2026-10-20: "8 of 1")
-    reward = gate_reward(field, len(passed), col_point == CLEAN_GATE, team_gates(room.type, field))
-    if forced_reward is not None:               # GM command gmgate N (to find out what each number is)
-        reward = forced_reward
-    if mission_room(room):                      # no gates in a Mission Battle (user, 2026-10-17)
-        reward = 0
-    session.log.note(f'gate {index}: position {len(passed)} of {field}, reward {reward}')
+    reward = 0                                  # keep the 0x1ee acknowledgement even with rewards off
+    if not mission_room(room) and not flags.get(NO_GATE_SUPPORT):
+        if forced_reward is None:
+            reward = gate_reward(field, len(passed), col_point == CLEAN_GATE, team_gates(room.type, field))
+        else:                                   # GM command gmgate N
+            reward = forced_reward
+    gate_label = f'{index} variant {variant}' if all_gates else str(index)
+    session.log.note(f'gate {gate_label}: position {len(passed)} of {field}, reward {reward}')
     room.cast(Frame(0x1ee, struct.pack('<Ii', m.serial, reward)))
 
 
@@ -1761,6 +1805,9 @@ async def race_end(session, frame):
     session.log.note(f'room {room.id}: {m.name!r} ends (type {end_type}, record {record:.2f}, rank {rank})')
     frames = [Frame(0x1eb, struct.pack('<IiifI', who if ai else m.serial, end_type, end_time, record, rank)
                     + p[0x14:0x4a])]
+    if end_type == FINISHED and m.session:
+        from . import pvpreward
+        pvpreward.open_board(room)
     if end_type == FINISHED and room.first_end is None:
         room.first_end = end_time
         finish_ms = getattr(room, 'finish_ms', FINISH_MS)     # channel battle races: 10 s (channels.py)
@@ -1910,8 +1957,8 @@ async def result(room):
         m.ready = m.serial == room.master or not m.session     # AIs are always ready (a second race was refused 20182)
     if team_room(room.type) and room.members:
         room.members[0].session.log.note(f'room {room.id}: team points {team_points}')
-    from . import pvpreward                    # 2016: the PvP bonus card board (0x1e4) *before* the result, so the
-    await pvpreward.on_race_result(room)       # result window is built with the cards already in it (and again after)
+    from . import pvpreward
+    await pvpreward.on_race_result(room)
     result_frame = Frame(0x1ec, struct.pack('<iIIfii', 1, *team_points, 0.0, room.first_end or 0, len(entries))
                          + b''.join(entries))
     host = room.by_serial(room.master)
@@ -1920,8 +1967,6 @@ async def result(room):
     room.cast(room.master_frame(), result_frame, *([ready_frame(host)] if host else []), *map(ready_frame, room.ais))
     for s in room.observers:                    # BS_OBSRoom::SetResult
         send(s, result_frame)
-    from . import pvpreward                    # 2016: the same board again, now that the result window exists
-    pvpreward.resend(room)
     from .pickem import on_result               # spectators' Pick'em draws (after the result they see)
     await on_result(room)
     lists_changed(room.channel)

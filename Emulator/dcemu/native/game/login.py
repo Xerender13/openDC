@@ -139,8 +139,18 @@ def content_flags(**overrides):
     named['Main.AuctionVSCommission'] = int(context.auction_drift_fee)
     from .. import events
     named.update(events.flags())               # season events that run today (emulator.ini [events])
-    named.update(context.extra_flags)          # emulator.ini [flags]
     from ..version import is_2016, max_level
+    if is_2016():
+        # 0x523c35 selects the dormant-player panel after promotion.on_login sends 0xaa.
+        named['Etc.DormantPromotion'] = int(bool(context.promotion.get('enabled')))
+        # 0x6b7280 enables the display queue for item grants the server already sends.
+        named['Etc.ShowDropItem'] = 1
+        # 0x6bacc5 reads Etc.MitoTrade and 0x6ba400 shows the currency controls.
+        named['Etc.MitoTrade'] = 1
+        # 0x5c37d6, 0x5cec40 and 0x5cef10 bypass section grade/level checks for observers.
+        # rooms.watch still checks the room's Spectating setting and password.
+        named['BattleZone.ObserveAllMode'] = 1
+    named.update(context.extra_flags)          # emulator.ini [flags]
     if is_2016():
         # 2016 reads this cap literally: zero makes level 1 display as MAX.
         named['Etc.LevelLimit'] = max_level()

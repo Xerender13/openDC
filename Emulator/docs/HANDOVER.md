@@ -4,7 +4,42 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 54 (2026-11-23): content flags (PvP bonus board), flag audit, boost refill still open — resume here
+## Session 58 (2026-11-23): Neo City chapter rewards
+
+- The chapter summary now sends reward kind 1 at row `+0x1c` and the item TableIdx at `+0x20`. The draw
+  loop at `0x71e3ca` uses the first dword as the kind. Sending the item ID there skipped the item draw branch.
+- The shared bonus board is ready before the result is sent. Each member gets an 18-second pick window from
+  their own chapter completion. Picked slots carry the item data in the required 16-slot `0xee9` update.
+  The mouse-click report still needs an in-game check.
+
+## Session 57 (2026-11-23): 2016 Mito trade and spectator section flags
+
+- `Etc.MitoTrade` exposes Mito offers in the existing trade UI. A trade with Mito commits both balances and
+  transferred items in one database transaction. The offer handler honors the flag.
+- `BattleZone.ObserveAllMode` exposes spectator sections across grade and level limits. Rooms still enforce
+  their Spectating option, password and practice-room policy. Both flags default to 1 for 2016 and can be set
+  to 0 in `[flags]`. Both need an in-game check.
+- Jackpot remains off. See EMULATOR_NOTES session 57 for the verified room type, stake and result fields.
+
+## Session 56 (2026-11-23): 2016 Battle Zone gate flags
+
+- `[battlezone] gate_rewards` selects `classic`, `off` (`NoGateSupport`), or `new` (`NewGateEffect` with
+  `new_gate_effect_factor` from 1 to 1023). `all_gate_report = 1` opts into `AllGateReport`. Defaults are
+  classic rewards and ordinary reports. `[flags]` can override the corresponding bits.
+- The 2016 `0x1ed` handler now reads the collision score from its final float. See BATTLEZONE.md for the
+  wire layout and remaining checks. The new modes still need an in-game test.
+
+## Session 55 (2026-11-23): race boost recharge, bonus item reveal, and content flags
+
+- The refill accelerated because the 2016 client's `BA_CB_095` assist added 1.90 to the passive rate on every
+  combo milestone. Live on UR E3 V9, the rate grew from 2.05 to 13.45 at six milestones. The 2016 launcher
+  applies a guarded in-memory change at `0x493f6f` to use the race's existing base rate and modifiers.
+- The client's bonus board accepts clicks as soon as a player finishes. The emulator now prepares the board
+  at that point and sends a single `0x1e4` update with the chosen item's index. The client draws its own card backs.
+- Existing 2016 features now send the verified `Etc.RealMatchEffect`, `Etc.DormantPromotion`, and `Etc.ShowDropItem`
+  tags. Details and client addresses are in EMULATOR_NOTES session 55. Changes still need an in-game retest.
+
+## Session 54 (2026-11-23): content flags (PvP bonus board), flag audit, boost refill still open
 
 Details: EMULATOR_NOTES session 54. 442 tests pass.
 - **PvP bonus card board** (`game/pvpreward.py`, S>C 0x1e4 / C>S 0x1e3): implemented and **flag-gated**. The client

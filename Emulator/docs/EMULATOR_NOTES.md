@@ -8,6 +8,63 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 57 (2026-11-23): 2016 Mito trade and spectator section flags
+
+- `Etc.MitoTrade` is enabled for 2016. Client getter `0x6bacc5` extracts bit 25 of flag dword `0x4c`;
+  `0x6ba400` uses it to show the currency fields. The existing `0x202` offer handler follows the flag.
+  Trades with Mito validate both offers against locked character rows and commit inventory and currency together.
+- `BattleZone.ObserveAllMode` is enabled for 2016. The client branches at `0x5c37d6`, `0x5cec40` and
+  `0x5cef10` skip the spectator section checks. The first branch skips the lookups for
+  `MinBattle2XGrade` through `MaxBattle8XLevel` (strings at `0x956ef8`–`0x957010`).
+  The existing observer list handler `0x1b8` serves the section, and room spectating still checks the room option,
+  password and practice-room policy. The two defaults can be overridden by name in `[flags]`.
+- `BattleZone.BattingJackpot` remains off. Client `0x5c911b`–`0x5c9130` packs the four selectable tiers into
+  the room type at bit 12. `0x53f9e0` maps tiers 2–5 to stakes of 5000, 1000, 500 and 100 Mito.
+  `0x5c91de`–`0x5c91f1` checks ten times that stake. The `0x1f3` handler at `0x5424f0` reads a
+  row count at frame +0xa and 0x42-byte rows from +0xe, including the signed Mito delta and the updated balance.
+  Stake collection, payout calculation and DNF treatment still need evidence.
+
+## Session 56 (2026-11-23): 2016 Battle Zone gate flags
+
+- `BattleZone.AllGateReport`: the branch at `0x7dc57f` includes crossings whose gate record type at +0x20 is
+  other than 1. The sender `0x84cea0` still uses the local racer's serial and `0x1ed`. The third payload dword
+  is the geometry variant returned by `0x7d1690`, so gate ordering and deduplication still use the gate index.
+  `[battlezone] all_gate_report = 1` opts in. The emulator uses the existing reward table for those reports.
+- `BattleZone.NewGateEffect` and `BattleZone.NewGateEffectFactor`: `0x7d3990` interprets the same reward IDs
+  but reads the ten-bit factor as a divisor for timed effects. `gate_rewards = new` requires a factor
+  from 1 to 1023. `gate_rewards = off` sends `BattleZone.NoGateSupport` and acknowledges every pass with reward 0.
+  Confirmations and order still use `0x1ee`. Classic rewards and ordinary reports remain the defaults.
+- In the 2016 packet, the elapsed time precedes the collision score. For example, the pass at line 21932
+  of `logs/2016/20261123-114404.msgs.txt` has 15.19 seconds and a score of 100. Read payload +0x14 for
+  the clean-pass test. 2011 still reads its five-field layout.
+- Audit follow-ups: `BattingJackpot` drives a four-way lobby selection at `0x5cafb7`; the 2011 Pick'em
+  handlers do not implement it. The audited 2008 observer branch `0x6822c8` uses room type bits, so it
+  does not establish an `ObserveAllMode` override. The existing Mito trade settlement writes the two sides'
+  balances separately. These switches remain open.
+
+## Session 55 (2026-11-23): race boost stacking, PvP item reveals, and 2016 content flags
+
+- **Passive boost recharge accelerated during a race.** Read-only sampling of the 2016 client in a two-player
+  race measured the UR E3 V9's base race rate at 2.05 (`car+0x95c`), with the Aero recharge +25% and flame
+  recharge +80% in `0x4b1` (log `20261123-114404.msgs.txt`, line 54). The car's `BA_CB_095` grade assist
+  (`VehicleUpgrade.xlt`, line 417) supplied 1.90 at `car+0x984`. The client increments `car+0x8e0` at combo
+  milestones (`0x493734`): the passive gain calculation `0x493f6f` computes `2.05 + 1.90 * milestones`,
+  or 13.45 by milestone 6, before applying the other multipliers and frame time. The other client's observed
+  rate stayed at 1.00. `Launcher/client2016.go` now loads the existing base rate in that race branch and keeps
+  both subsequent modifiers, the frame time, and the direct gauge gains. The launch patch is guarded by the
+  original instructions. This removes the milestone assist's passive stacking on that build. Needs a new launch.
+- **Battle bonus item artwork stayed blank.** In the same log, line 95628, a finisher clicked slot 5 before
+  the server initialized the board at line 98311. The click was dropped and a different card was assigned on timeout.
+  Client `0x5e0900` initializes the blank board and `0x5e27c2` clears the addressed slot's control bit even for
+  kind 0. The server now prepares the board when the first human finishes, accepts finished racers' clicks before
+  the full result, and sends only the revealed slot's `0x1e4` entry (normal item lookup at `0x5e0e42`).
+- **2016 client flags for existing features.** `Etc.RealMatchEffect` is at `0x4c` bits 29–31 (parser `0x463ee8`
+  through `0x463f04`), so the existing Real Match room setting now packs. `Etc.DormantPromotion` follows
+  `[promotion] enabled` (returning-player dialog at `0x523c35`), and `Etc.ShowDropItem` enables the client display
+  for existing item grants (`0x6b7280`).
+
+The pre-fix race was sampled live. The changes have not yet been confirmed in game.
+
 ## Session 54 (2026-11-23): the PvP bonus card board (0x1e4 / 0x1e3), content flags, boost refill still open
 
 **Boost refilled "way too quickly passively" (user): NOT FIXED, and not the GM status.** Nothing on the server refills

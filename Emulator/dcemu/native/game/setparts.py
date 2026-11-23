@@ -100,7 +100,8 @@ async def start_expiry(p, it):
     if period(it) > 0 and not it.ctime:
         db = context.db
         # CDATE is the database's GetDate(): UTC in the container (the emulator's clock is local time)
-        age = int((datetime.datetime.utcnow() - it.cdate).total_seconds() // 3600) if it.cdate else 0
+        utc_now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        age = int((utc_now - it.cdate).total_seconds() // 3600) if it.cdate else 0
         it.ctime = p.tick - max(age, 0) + period(it)
         await db.execute(EXPIRE_SQL, (it.ctime, db.server_id, p.char.cid, it.inven_idx))
 

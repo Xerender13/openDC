@@ -145,6 +145,18 @@ After a practice race (no 0x1ec at all) the same screen appeared once; not looke
   send) Untouchable 5 s, Skid Rush / Hyper Boost 15 s; with it on, arg4 / NewGateEffectFactor (bits 19-28)
   + 10 s (Hyper, Untouchable, max 20 / 30) or + 5 s (Skid Rush), where arg4 is the 0 the 0x1ee handler
   passes. So the server can only switch NewGateEffect; no per-position duration can be sent.
+- **2016 gate flags (session 56).** `[battlezone] gate_rewards = classic | off | new` defaults to classic.
+  Off advertises `BattleZone.NoGateSupport`, records the pass order, and answers `0x1ee` with reward 0.
+  New advertises `BattleZone.NewGateEffect` and uses the same reward IDs with the client's alternate effect path.
+  `new_gate_effect_factor` must be 1–1023 in new mode because client `0x7d39fe / 0x7d3b09 / 0x7d3b87`
+  divide by `BattleZone.NewGateEffectFactor`. The client controls the effect details.
+  `all_gate_report = 1` sends `BattleZone.AllGateReport`. Its test at `0x7dc57f` allows the caller to report
+  crossings whose gate record type (`[edi+0x20]`) is other than 1. The 2016 sender `0x84cea0` writes
+  `u32 serial, i32 gate index, i32 geometry variant, u32 tick, f32 elapsed seconds, f32 collision score`
+  after the type. The variant comes from the nearest sub-gate lookup at `0x7d1690`. We use the existing
+  reward rules and count one pass per racer per gate index. The 2016 score at payload +0x14 is 100 for
+  a clean pass (example `logs/2016/20261123-114404.msgs.txt:21932`). The 2011 handler reads its five-field
+  layout as before. The opt-in modes await in-game verification.
 - **Seat change** (user): a member clicking a free seat sends 0x270 (2011 only: u32 room, serial, seat),
   unanswered until now; the member is moved and the room gets 0x26d with the new seats *(our answer; 0x271,
   handler 0x52c420: u32 n + n x 24 bytes, is something else: per-member records with a name lookup)*.

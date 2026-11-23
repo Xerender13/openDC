@@ -11,6 +11,7 @@ package main
 //     same byte tools/tutorial_flow.py changes in the test exe. Table and byte must agree: mode 1 with the original
 //     byte opens the Battle Zone window as soon as the training car is in Driver Dome (0x5ca914) ([client]
 //     guided_tutorial = auto: from GlobalContent.xlt, packed or loose)
+//   - the race-only passive recharge formula keeps its base rate and modifiers without the cumulative combo term.
 // Linux: the image is mapped long before its code runs (Wine loads ~30 DLLs first): the launcher polls the new
 // process's memory until the port instruction is there, then writes. Windows: the client is started suspended.
 // The 2011 memory patches (item icons, cargo camera, Visual Item slot) have other addresses in 2016: not applied.
@@ -28,14 +29,29 @@ import (
 )
 
 const (
-	slot2016     = 0x957760
-	portCode2016 = 0x54f6bf // mov word [0x9bc374], imm16 (66 c7 05 74 c3 9b 00 imm16)
-	portData2016 = 0x9bc374
-	guided2016   = 0x5ca8ed // cmp eax, 4 / 1 (83 f8 xx); jne 0x5ca914 (75 22)
-	authPort     = 11005
+	slot2016         = 0x957760
+	portCode2016     = 0x54f6bf // mov word [0x9bc374], imm16 (66 c7 05 74 c3 9b 00 imm16)
+	portData2016     = 0x9bc374
+	guided2016       = 0x5ca8ed // cmp eax, 4 / 1 (83 f8 xx); jne 0x5ca914 (75 22)
+	raceRecharge2016 = 0x493f6f
+	authPort         = 11005
 )
 
 var portPrefix2016 = []byte{0x66, 0xc7, 0x05, 0x74, 0xc3, 0x9b, 0x00}
+
+// fild [edi+0x8e0]; fmul [edi+0x984]; fadd [edi+0x95c]: milestone count times the assist value plus the base rate.
+// BA_CB_095 contributes 1.90 per 20-combo milestone, so by milestone 6 the UR E3's 2.05 rate became 13.45.
+// Load the race's base rate directly. The following fmul [edi+0x2a50], frame time and gauge gain still run.
+var raceRechargeOriginal2016 = []byte{
+	0xdb, 0x87, 0xe0, 0x08, 0, 0,
+	0xd8, 0x8f, 0x84, 0x09, 0, 0,
+	0xd8, 0x87, 0x5c, 0x09, 0, 0,
+}
+var raceRechargePatched2016 = []byte{
+	0xd9, 0x87, 0x5c, 0x09, 0, 0, // fld dword [edi+0x95c]
+	0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+	0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+}
 
 // client2016: the client exe is the 2016 build (main).
 var client2016 bool
@@ -129,6 +145,7 @@ func writes2016(dir, ip string, cfg Config) ([]write2016, error) {
 	p := binary.LittleEndian.AppendUint16(nil, uint16(port))
 	out := []write2016{{slot2016, slot, "address " + ip, nil}, {portCode2016 + 7, p, "", nil},
 		{portData2016, p, fmt.Sprintf("port %d", port), nil}}
+	out = append(out, write2016{raceRecharge2016, raceRechargePatched2016, "race passive boost recharge", raceRechargeOriginal2016})
 	mode := 4
 	switch cfg.get("client.guided_tutorial", "auto") {
 	case "1":

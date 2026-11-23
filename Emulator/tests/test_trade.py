@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from dcemu.native import context, version
-from dcemu.native.game import trade
+from dcemu.native.game import login, trade
 from dcemu.native.game.records import Item
 
 
@@ -26,6 +26,7 @@ class TradeTest(unittest.TestCase):
         self.sent = []
         self.a = session(player('Alice', 11, 1000, [Item(1, 5, 'i_a', 0, 3, 0, 0, 0, 0, '', '', 0, 0, table_idx=40)]))
         self.b = session(player('Bob', 22, 50, []))
+        context.extra_flags = {}
         context.db = SimpleNamespace(server_id=1, execute=AsyncMock(), row=AsyncMock(return_value=(900,)))
 
     def tearDown(self):
@@ -130,6 +131,50 @@ class TradeTest(unittest.TestCase):
                 patch.object(trade, 'error', side_effect=lambda to, k: self.sent.append((to, k))):
             asyncio.run(trade.trade_open(c, SimpleNamespace(payload='Alice'.encode('utf-16-le').ljust(42, b'\0'))))
         self.assertIn((c, '20115'), self.sent)
+
+    def test_2016_mito_trade_flag_and_override(self):
+        version.configure({'version': '2016'})
+        context.data = SimpleNamespace(contents={})
+        self.assertEqual(login.content_flags()[0x4f] & 2, 2)
+        tid = self.open_trade()
+        context.extra_flags = {'Etc.MitoTrade': 0}
+        self.assertEqual(login.content_flags()[0x4f] & 2, 0)
+        self.run_(trade.trade_money, self.b, struct.pack('<Iq', tid, 30))
+        self.assertFalse(self.frames(0x203))
+        self.assertEqual(trade.trades[tid].guest.money, 0)
+
+    def test_2016_mixed_trade_commits_together_or_keeps_the_offer_items(self):
+        version.configure({'version': '2016'})
+        info = SimpleNamespace(item_id='i_a', table_idx=40, type=5, kind='')
+        context.data = SimpleNamespace(item_info=lambda _: info)
+        for enough_mito in (False, True):
+            with self.subTest(enough_mito=enough_mito):
+                self.sent.clear()
+                tid = self.open_trade()
+                host_inventory = self.a.state['player'].items
+                with patch('dcemu.native.game.mail.sendable', return_value=True):
+                    self.run_(trade.trade_item_on, self.a, struct.pack('<IIi', tid, 5, 2))
+                self.run_(trade.trade_money, self.b, struct.pack('<Iq', tid, 30))
+                for s in (self.a, self.b):
+                    self.run_(trade.trade_lock, s, struct.pack('<IH', tid, 1))
+                cursor = Mock(rowcount=1)
+                cursor.fetchone.side_effect = [(1000, 100), (50 if enough_mito else 0, 100),
+                                               (1030,), (20,), (900,)]
+                transaction = AsyncMock(side_effect=lambda operation: operation(cursor))
+                context.db.transaction = transaction
+                with patch('dcemu.native.game.mail.sendable', return_value=True), \
+                        patch('dcemu.native.game.setparts.period', return_value=0), \
+                        patch.object(trade, 'stat_frames', return_value=[]):
+                    self.run_(trade.trade_complete, self.a, struct.pack('<I', tid))
+                    self.run_(trade.trade_complete, self.b, struct.pack('<I', tid))
+                transaction.assert_awaited_once()
+                context.db.execute.assert_not_awaited()
+                self.assertNotIn(tid, trade.trades)
+                self.assertEqual(host_inventory[0].stack, 1 if enough_mito else 3)
+                self.assertEqual([it.stack for it in self.b.state['player'].items], [2] if enough_mito else [])
+                self.assertEqual(len(self.frames(0x8a)), 2 if enough_mito else 0)
+                if not enough_mito:
+                    self.assertEqual(cursor.execute.call_count, 2)
 
 
     def test_rules_of_open(self):

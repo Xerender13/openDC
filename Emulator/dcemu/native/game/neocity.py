@@ -646,7 +646,7 @@ class Run:
         self.clear_item = {}                        # serial -> item TableIdx of the Reward column
         self.cards = None                           # the 16 Chapter Bonus Item cards: [kind, TableIdx, count, picker]
         self.card_items = []                        # the cards' item ids
-        self.pick_task = None
+        self.pick_tasks = {}                        # serial -> timeout for that member's result window
         for s in self.members:
             s.state['neo_run'] = self
 
@@ -679,9 +679,9 @@ def run_of(session):
 def drop_run(r):
     """The run is over: its members leave it (their session.state['neo_run'] goes)."""
     r.over = True
-    if r.pick_task:
-        r.pick_task.cancel()
-        r.pick_task = None
+    for task in r.pick_tasks.values():
+        task.cancel()
+    r.pick_tasks.clear()
     if r.task:
         r.task.cancel()
         r.task = None
@@ -698,6 +698,9 @@ def leave(session):
     if not r:
         session.state.pop('neo_run', None)
         return
+    task = r.pick_tasks.pop(serial_of(session), None)
+    if task:
+        task.cancel()
     if session in r.members:
         r.members.remove(session)
     if r.solo or not r.members:
@@ -1167,17 +1170,18 @@ async def chapter_complete(session, frame):
                          f'{exp} exp, {money} Mito, item {item.item_id if item else None}')
         for f in stat_frames(p):
             send(session, f)
-    send(session, clear_frame(r, key))
     if r.cards is None:
         roll_cards(r)
-        r.pick_task = asyncio.ensure_future(auto_pick(r))
-    send(session, cards_frame(r))
+    if me not in r.pick_tasks and not any(card[3] == me for card in r.cards):
+        r.pick_tasks[me] = asyncio.create_task(auto_pick(r, session))
+    send(session, clear_frame(r, key), cards_frame(r))
 
 
 GRADES = 5                          # 0xedb grade index 0..4 -> one of five letters (0 = S: a guess, section 2.1)
 PICK_SECONDS = 18                   # the client closes the window after 20 s (0x788ae0 from 0x71ef60)
 CARDS = 16
 CHAPTER_CARDS = 4                   # ours: cards from the chapter's own result_rewardGroup, the rest elite HUV items
+ITEM_REWARD = 1                     # client 0x71dee0: draw a normal item's icon
 
 
 def grade_of(r):
@@ -1188,7 +1192,8 @@ def grade_of(r):
 def clear_frame(r, key):
     """S>C 0xedb (handler 0x52e960 -> window 0x71f2b0; NEO_CLEAR_PROTOCOL 2): u32 chapter key, u32 n rows, u8 0, u32
     seconds (0x71f43a), u32 quests failed, u32 deaths, u32 grade 0..4, four rows of 0x2c (u32 serial, level, HUV / HUB
-    / HUS kills, exp, Mito, the Reward item TableIdx twice, 0, 0; 0x71f5de, stride 0x71f959), then 0x10 per extra
+    / HUS kills, exp, Mito, reward kind, item TableIdx, 0, 0; 0x71f882 copies the reward block and 0x71e3ca
+    passes its first dword as the kind to 0x71dee0), then 0x10 per extra
     row (the handler's size: n * 0x10 + 0xbb)."""
     members = [m for m in r.members if m.state.get('player')][:4]
     n = max(1, len(members))
@@ -1199,7 +1204,7 @@ def clear_frame(r, key):
         exp, money = r.gained.get(serial, (0, 0))
         item = r.clear_item.get(serial, 0)
         rows.append(struct.pack('<7I4I', serial, c.level, k.get('HUV', 0), k.get('HUB', 0), k.get('HUS', 0),
-                                exp, money, item, item, 0, 0))
+                                exp, money, ITEM_REWARD if item else 0, item, 0, 0))
     rows += [bytes(0x2c)] * (4 - len(rows))
     seconds = int(time.monotonic() - r.t0)
     return Frame(0xedb, struct.pack('<IIBIIII', key, n, 0, seconds, r.failed, r.deaths, grade_of(r))
@@ -1248,7 +1253,7 @@ def roll_cards(r):
         got = roll_item(r.chapter.get('reward_group') if i < CHAPTER_CARDS else None) or roll_item(elite_group(r.chapter))
         item, count = got or ('', 0)
         info = context.data.item_info(context.data.item_index[item]) if item else None
-        r.cards.append([1 if info else 0, info.table_idx if info else 0, count if info else 0, 0])
+        r.cards.append([ITEM_REWARD if info else 0, info.table_idx if info else 0, count if info else 0, 0])
         r.card_items.append(item if info else '')
 
 
@@ -1256,11 +1261,8 @@ def cards_frame(r):
     """S>C 0xee9 (handler 0x526d80; NEO_CLEAR_PROTOCOL 3.1): u32 0 (the client ignores it), then 16 x {u32 kind,
     u32 item TableIdx, u32 count, u32 picker serial}.
 
-    A slot that nobody has picked goes out as **all zeros**: kind 0 is the client's "?" face, and only that card face
-    is clickable (`+0x08` control, bit 0x40 = clickable; every non-zero kind re-shows the caption of `+0xc8`). While
-    the server sent the items in every slot, all 16 cards were drawn face-up, clicking one did nothing and the client
-    never sent 0xee8, so the pick fell to the server's 18 s auto-pick (user, 2026-11-18, chapter 1 clear). Picked
-    slots carry their item and the picker's serial, which is how the client shows the caption and the picker's name."""
+    Kind 0 keeps the slot face-down. The click uses the separate controls at win+0x48 (0x71ee24).
+    Picked slots carry the item kind and TableIdx for the icon and the serial for the picker's name."""
     out = bytearray(struct.pack('<I', 0))
     for kind, item, count, picker in r.cards:
         out += struct.pack('<4I', kind, item, count, picker) if picker else bytes(16)
@@ -1270,9 +1272,13 @@ def cards_frame(r):
 async def pick(r, session, slot):
     """A member takes card `slot` (one card each): the item is given and every member sees the new grid."""
     me = serial_of(session)
-    if r.cards is None or not 0 <= slot < CARDS or r.cards[slot][3] or any(c[3] == me for c in r.cards):
+    if (me not in r.clear_item or r.cards is None or not 0 <= slot < CARDS
+            or r.cards[slot][3] or any(c[3] == me for c in r.cards)):
         return False
     r.cards[slot][3] = me
+    task = r.pick_tasks.pop(me, None)
+    if task:
+        task.cancel()
     item = r.card_items[slot]
     p = session.state.get('player')
     if item and p:
@@ -1281,20 +1287,22 @@ async def pick(r, session, slot):
         if gains and gains.items:
             from .items import mod_list
             send(session, mod_list(*gains.items))
-    r.cast(cards_frame(r))
+    frame = cards_frame(r)
+    for member in r.members:
+        if serial_of(member) in r.clear_item:
+            send(member, frame)
     session.log.note(f'neocity: bonus card {slot} picked: {item} x{r.cards[slot][2]}')
     return True
 
 
-async def auto_pick(r):
+async def auto_pick(r, session):
     """"If you don't choose a reward item within a given time, it will be automatically selected." (GlobalText 11799)"""
     await asyncio.sleep(PICK_SECONDS)
-    r.pick_task = None
-    for m in list(r.members):
-        if r.cards and not any(c[3] == serial_of(m) for c in r.cards):
-            free = [i for i, c in enumerate(r.cards) if not c[3]]
-            if free:
-                await pick(r, m, random.choice(free))
+    r.pick_tasks.pop(serial_of(session), None)
+    if not r.over and session in r.members:
+        free = [i for i, card in enumerate(r.cards) if not card[3]]
+        if free:
+            await pick(r, session, random.choice(free))
 
 
 @on(SVC, C2S, 0xee8)
@@ -1302,9 +1310,9 @@ async def chapter_reward(session, frame):
     """0xee8 (sender 0x84ef10): u32 0, u32 the card slot the player clicked -> the card's item, 0xee9 to the run."""
     if not _player(session, frame, 8):
         return
-    r = session.state.get('neo_run')
+    r = run_of(session)
     _, slot = struct.unpack_from('<II', frame.payload)
-    if not r or r.cards is None:
+    if not r or serial_of(session) not in r.clear_item or r.cards is None:
         session.log.note(f'neocity: bonus card {slot} picked outside a cleared run: ignored')
         return
     if not await pick(r, session, slot):

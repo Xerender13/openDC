@@ -1,6 +1,6 @@
 # 2016 XiContentsFlag: name, absolute dword offset, shift, width.
 # Group bases measured at DriftCity.exe 0x464820; fields from flags_2016_raw.tsv.
-# Ambiguous parser results remain commented; ChannelPro corrected from 0x463a24-0x463a4c.
+# Ambiguous parser results remain commented. ChannelPro and RealMatchEffect are verified in the client parser.
 BattleZone.AllGateReport	0x30	29	1
 BattleZone.AttackPlayer	0x3c	5	1
 BattleZone.BattingJackpot	0x30	17	1
@@ -112,7 +112,7 @@ Etc.NewLicenseSystemnDay	0x58	0	7
 Etc.NewOption	0x50	12	1
 Etc.NoviceAdvUI2nd	0x58	27	1
 Etc.PartyBonus	0x4c	12	1
-#Etc.RealMatchEffect	0x4c	0	29
+Etc.RealMatchEffect	0x4c	29	3
 Etc.ShowDropItem	0x50	3	1
 Etc.ShowGotchaOldStyle	0x54	18	1
 Etc.ShowMainButtonGotcha	0x54	15	1

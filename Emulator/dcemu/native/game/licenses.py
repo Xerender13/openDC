@@ -581,4 +581,5 @@ def tell_payment(session):
     c = p.char
     send(session, Frame(0x8a, struct.pack('<iiqq', 1, 1, amount, c.mito) + b'\0\0'))
     send(session, content(0, 0, c.cid, 'License', 500, 'R', 'License Ownership Reward Money',
-                          f'License Ownership Reward Money: {amount:,} Mito ({names}).', 0, '', datetime.datetime.utcnow()))
+                          f'License Ownership Reward Money: {amount:,} Mito ({names}).', 0, '',
+                          datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)))

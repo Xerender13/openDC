@@ -44,13 +44,17 @@ players act on a trade.
 Items move as mail moves them (taken from one inventory, made again in the other with the same properties).
 A close, a refusal or a disconnect ends the trade: 0x1ff to both.
 """
+from dataclasses import replace
+import datetime
 import itertools
 import struct
+from types import SimpleNamespace
 
 from ...handlers import on, on_open
 from ...protocol import C2S
 from ...wire import Frame, read_wstr
 from .. import context
+from ..version import is_2016
 from .login import SVC, error, send, stat_frames
 from .records import wstr
 
@@ -85,6 +89,7 @@ class Trade:
         self.id = next(_ids)
         self.host, self.guest = Side(host), Side(guest)
         self.open = False
+        self.settling = False
         self.next_index = itertools.count(1)
 
     def sides(self):
@@ -187,7 +192,7 @@ def running(session, frame, size):
     tid, = struct.unpack_from('<I', frame.payload)
     t = trades.get(tid)
     side = t.side(session) if t else None
-    return (t, side) if t and t.open and side else (None, None)
+    return (t, side) if t and t.open and side and not t.settling else (None, None)
 
 
 @on(SVC, C2S, 0x1f8)
@@ -235,6 +240,8 @@ async def trade_item_off(session, frame):
 
 @on(SVC, C2S, 0x202)
 async def trade_money(session, frame):
+    if is_2016() and not context.extra_flags.get('Etc.MitoTrade', 1) & 1:
+        return
     t, side = running(session, frame, 12)
     if not t:
         return
@@ -268,7 +275,7 @@ async def trade_close(session, frame):
     if len(frame.payload) < 4:
         return
     t = trades.get(struct.unpack_from('<I', frame.payload)[0])
-    if t and t.side(session):
+    if t and t.side(session) and not t.settling:
         close(t, f'{t.side(session).name!r} closed it')
 
 
@@ -279,6 +286,9 @@ async def trade_complete(session, frame):
         return                                          # 2008 TradeOk 0x5949c0: nothing before both locked
     side.pressed = True
     if all(s.pressed for s in t.sides()):
+        if is_2016() and any(s.money for s in t.sides()):
+            t.settling = True
+            return await exchange_mito(t, side)
         return await exchange(t, side)
     t.cast(Frame(0x201, struct.pack('<II', t.id, PRESSED) + wstr(side.name, NAME)))
 
@@ -302,6 +312,142 @@ def check(t):
         if free_slots(s.player) - len(s.items) < len(o.items):
             return f'{s.name!r} has no room'
     return None
+
+
+class SettlementChanged(Exception):
+    """A balance or inventory row changed before the trade was committed."""
+
+
+def plan_inventory(t):
+    """Apply the trade to copies so failed database writes leave the live inventories alone."""
+    from .items import CHANGED, NEW, REMOVED, info_of, stack_for
+    from .setparts import period
+    originals = {side: {it.inven_idx: replace(it) for it in side.player.items} for side in t.sides()}
+    inventories = {side: SimpleNamespace(items=[replace(it) for it in items.values()], tick=side.player.tick)
+                   for side, items in originals.items()}
+    incoming = {side: [] for side in t.sides()}
+    for side, inventory in inventories.items():
+        for index, count in side.items.values():
+            source = next(it for it in inventory.items if it.inven_idx == index)
+            incoming[t.other(side)].append((source, count))
+            source.stack -= count
+            if source.stack <= 0:
+                inventory.items.remove(source)
+    changes = {}
+    for side, inventory in inventories.items():
+        for source, count in incoming[side]:
+            info = info_of(source)
+            target = None
+            if not (source.random or source.upgrade or source.box or source.assist_a or source.assist_b):
+                target = stack_for(inventory, info, count)
+            if target:
+                target.stack += count
+                continue
+            item = replace(source, gid=0, inven_idx=0, stack=count if info.type == 5 else 1, state=0,
+                           expire_tick=inventory.tick, ctime=0,
+                           cdate=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None))
+            hours = period(item)
+            if hours:
+                item.ctime = inventory.tick + hours
+            inventory.items.append(item)
+        original = originals[side]
+        remaining = {it.inven_idx: it for it in inventory.items if it.inven_idx}
+        changes[side] = [(it, replace(it, stack=0), REMOVED)
+                         for index, it in original.items() if index not in remaining]
+        changes[side].extend((original[index], it, CHANGED) for index, it in remaining.items()
+                             if original[index].stack != it.stack)
+        changes[side].extend((None, it, NEW) for it in inventory.items if not it.inven_idx)
+    return changes
+
+
+def persist_mito_trade(cursor, server, t, players, changes):
+    """Commit the currency and all inventory mutations on one connection."""
+    from .items import CHANGED, DELETE_SQL, GOLD_SQL, INSERT_SQL, NEXT_GID_SQL, REMOVED, STACK_SQL
+    from .mail import PROPS
+    balances, indexes = {}, {}
+    for side in sorted(players, key=lambda s: players[s].char.cid):
+        char = players[side].char
+        cursor.execute("SELECT GOLD, PARTINVENIDX FROM SKID_CHARACTER_TB WHERE SERVERID=%s AND CID=%s FOR UPDATE",
+                       (server, char.cid))
+        row = cursor.fetchone()
+        if row is None or row[0] < side.money:
+            raise SettlementChanged()
+        balances[side] = int(row[0])
+        indexes[side] = max(int(row[1] or 0), char.part_inven_idx)
+    for side, changes_for_side in changes.items():
+        char = players[side].char
+        delta = t.other(side).money - side.money
+        if delta:
+            cursor.execute(GOLD_SQL, (delta, server, char.cid, delta))
+            balances[side] = int(cursor.fetchone()[0])
+        for original, item, status in changes_for_side:
+            if original is not None:
+                sql = STACK_SQL if status == CHANGED else DELETE_SQL
+                params = (item.stack,) if status != REMOVED else ()
+                cursor.execute(sql + " AND GID=%s AND STACKNUM=%s AND STATE=%s AND CARID=%s",
+                               (*params, server, char.cid, original.inven_idx, original.gid, original.stack,
+                                original.state, original.car_id))
+                if cursor.rowcount != 1:
+                    raise SettlementChanged()
+                continue
+            cursor.execute(NEXT_GID_SQL, ())
+            item.gid = int(cursor.fetchone()[0])
+            indexes[side] = item.inven_idx = indexes[side] + 1
+            cursor.execute(INSERT_SQL, (server, char.cid, char.name, item.gid, 0, item.inven_idx, item.item_id,
+                                        item.stack, item.random, 0, item.upgrade, item.belonging,
+                                        item.assist_a, item.assist_b, item.ctime))
+            if item.box:
+                cursor.execute(PROPS, (item.random, item.upgrade, item.box, item.assist_a, item.assist_b,
+                                       item.belonging, server, char.cid, item.inven_idx))
+    return balances, indexes
+
+
+async def exchange_mito(t, last):
+    from .items import NEW, REMOVED, mod_list
+    why = check(t)
+    if why:
+        for side in t.sides():
+            error(side.session, '20059')
+        return close(t, why)
+    players = {side: side.player for side in t.sides()}
+    changes = plan_inventory(t)
+    db = context.db
+    try:
+        balances, indexes = await db.transaction(lambda cur: persist_mito_trade(cur, db.server_id, t, players, changes))
+    except SettlementChanged:
+        for side in t.sides():
+            error(side.session, '20059')
+        return close(t, 'trade balance or inventory changed')
+    except Exception:
+        close(t, 'settlement failed')
+        raise
+    for side, p in players.items():
+        p.char.part_inven_idx = max(p.char.part_inven_idx, indexes[side])
+        p.char.mito = balances[side]
+        live = {it.inven_idx: it for it in p.items}
+        for original, item, status in changes[side]:
+            if status == NEW:
+                p.items.append(item)
+            elif status == REMOVED:
+                current = live.get(original.inven_idx)
+                if current is not None:
+                    p.items.remove(current)
+            else:
+                current = live.get(original.inven_idx)
+                if current is not None:
+                    current.stack = item.stack
+        delta = t.other(side).money - side.money
+        if delta:
+            send(side.session, Frame(0x8a, struct.pack('<iiqq', 1, 1, delta, p.char.mito) + b'\0\0'))
+        if changes[side]:
+            send(side.session, mod_list(*((item, status) for _, item, status in changes[side])))
+        for frame in stat_frames(p):
+            send(side.session, frame)
+    t.cast(Frame(0x201, struct.pack('<II', t.id, DONE) + wstr(last.name, NAME)))
+    trades.pop(t.id, None)
+    for side in t.sides():
+        if side.session.state.get('trade') == t.id:
+            side.session.state.pop('trade', None)
 
 
 async def exchange(t, last):
@@ -372,5 +518,5 @@ async def trade_on_close(session):
             await asyncio.sleep(3600)
     finally:
         t = trade_of(session)
-        if t:
+        if t and not t.settling:
             close(t, 'a player left')

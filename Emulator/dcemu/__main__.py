@@ -290,6 +290,9 @@ def native_setup(cp):
                 levels = (int(f[4]), int(f[5])) if len(f) >= 6 else (0, 9999)
                 to = context.sections_eu if key.startswith('eu.') else context.sections
                 to[int(key.rsplit('.', 1)[1])] = (f[0], int(f[1]), int(f[2]), float(f[3]), *levels)
+    if version.is_2016():
+        from .native.game.rooms import configure_gate_flags
+        configure_gate_flags(cp['battlezone'] if cp.has_section('battlezone') else {})
     w = n.get('delete_wait_days', '').strip()
     context.delete_wait_days = int(w) if w else None
     context.ranking_port = int(cp['services']['ranking'].split()[0]) if 'ranking' in cp['services'] else 0

@@ -19,9 +19,9 @@ Neo card grid uses) -> `0x5e0f80(index)`. That function **only accepts a slot wh
 it to -1, otherwise `0x134 = arg2` (a reward-set id) — so the second 0x1e3 field is whatever id the server gave the
 panel, and can be ignored while there is one board per race.
 
-So, exactly like the Neo chapter grid, the client expects **face-down cards** and a reveal after the pick: the server
-sends 16 slots with kind 0, the player clicks one, and the server grants that slot's reward and re-sends 0x1e4 with the
-chosen slot revealed (kind + item + the picker's serial, which is how the client prints the name under the card).
+The client initializes the 16 face-down cards locally. The server opens a board when the first human finishes and
+sends one `0x1e4` entry per reveal. `0x5e27c2` clears the addressed slot's button flag even for kind 0, so a full grid
+update would also affect the untouched slots. The picker's serial supplies the name under the revealed card.
 
 Not decoded: what opens the panel (nothing in the client calls `0x5e0900`; it is a vtable method, slot 25 of the
 window whose vtable is `0x95e8c4`), and which reward group the real server used. Ours: one item per card rolled from
@@ -70,10 +70,10 @@ def enabled():
     return ((int.from_bytes(packed[off:off + 4], 'little') >> shift) & ((1 << width) - 1)) > 0
 
 
-def grid_frame(cards):
+def grid_frame(cards, *, start=0):
     """S>C 0x1e4: u32 n, then n x {u32 index, u32 0, u32 picker serial, u32 kind, u32 item, u32 amount}."""
     body = struct.pack('<I', len(cards))
-    for index, (kind, item, amount, picker) in enumerate(cards):
+    for index, (kind, item, amount, picker) in enumerate(cards, start):
         body += struct.pack('<6I', index, 0, picker, kind, item, amount)
     return Frame(0x1e4, body)
 
@@ -97,27 +97,36 @@ def _room(session):
     return room_of(session)
 
 
-def resend(room):
-    """Send the current board again: the client may only look at it when its result window opens, so the board goes
-    once before the 0x1ec result and once after it (both seen in the 2026-11-23 tests)."""
-    if enabled() and getattr(room, 'bonus_cards', None) is not None:
-        room.cast(grid_frame(room.bonus_cards))
+def reset(room):
+    """Discard the previous board and timeout when a new race starts."""
+    if getattr(room, 'bonus_task', None):
+        room.bonus_task.cancel()
+    room.bonus_task = room.bonus_cards = None
 
 
-async def on_race_result(room):
-    """Called after the PvP result was sent: opens this room's board of 16 face-down cards."""
-    from .rooms import MISSION_ROOM
-    if not is_2016() or not enabled() or room.type & MISSION_ROOM:
-        return                                          # no flag (or a mission room: Neo 0xee9 has its own cards)
+def open_board(room):
+    """Prepare the board before the first finisher can act on the result window."""
+    from .rooms import mission_room
+    if not is_2016() or not enabled() or mission_room(room) or getattr(room, 'bonus_cards', None) is not None:
+        return
     players = [m for m in room.members if m.session is not None]
     if not players:
         return
     room.bonus_cards = [[0, 0, 0, 0] for _ in range(CARDS)]
     room.bonus_items = [''] * CARDS
     room.bonus_picked = {}
-    room.bonus_task = asyncio.create_task(_auto(room))
-    room.cast(grid_frame(room.bonus_cards))
-    players[0].session.log.note(f'room {room.id}: pvp bonus board sent ({CARDS} face-down cards)')
+    room.bonus_task = None
+    # 0x5e0900 creates the face-down cards. The update at 0x5e27c2 clears bit 4 of the addressed slot even
+    # when its kind is zero. Leave those controls alone until a slot is revealed.
+    players[0].session.log.note(f'room {room.id}: pvp bonus board opened ({CARDS} face-down cards)')
+
+
+async def on_race_result(room):
+    """Start the fallback once every racer has a result and can pick."""
+    open_board(room)
+    if (getattr(room, 'bonus_cards', None) is not None and not room.bonus_task
+            and any(serial_of(m.session) not in room.bonus_picked for m in room.humans if m.serial in room.racers)):
+        room.bonus_task = asyncio.create_task(_auto(room))
 
 
 async def _auto(room):
@@ -126,10 +135,13 @@ async def _auto(room):
     room.bonus_task = None
     if getattr(room, 'bonus_cards', None) is None:
         return
+    cards = room.bonus_cards
     for m in list(room.members):
-        if not m.session or serial_of(m.session) in room.bonus_picked:
+        if room.bonus_cards is not cards:
+            return
+        if not m.session or m.serial not in room.racers or serial_of(m.session) in room.bonus_picked:
             continue
-        free = [i for i, c in enumerate(room.bonus_cards) if not c[3]]
+        free = [i for i, c in enumerate(cards) if not c[3]]
         if free:
             await pick(room, m.session, random.choice(free))
 
@@ -144,6 +156,10 @@ async def bonus_pick(session, frame):
     if room is None or getattr(room, 'bonus_cards', None) is None:
         session.log.note(f'pvp: bonus card {index} picked outside a race result: ignored')
         return
+    from .rooms import RACING
+    member = room.member(session)
+    if not member or member.serial not in room.racers or (room.state == RACING and not member.end):
+        return
     await pick(room, session, index)
 
 
@@ -155,7 +171,8 @@ async def pick(room, session, index):
     me = serial_of(session)
     p = session.state.get('player')
     if not 0 <= index < len(cards) or me in room.bonus_picked or cards[index][3]:
-        send(session, grid_frame(cards))
+        if 0 <= index < len(cards) and cards[index][3]:
+            send(session, grid_frame([cards[index]], start=index))
         session.log.note(f'pvp: bonus card {index}: not available')
         return False
     card, item = roll_card(p.char.level if p else 1)
@@ -170,10 +187,12 @@ async def pick(room, session, index):
             send(session, mod_list(*gains.items))
     elif p and kind == 3:
         await add_money(p.char, amount)
-    room.cast(grid_frame(cards))
+    if room.bonus_cards is cards:
+        room.cast(grid_frame([card], start=index))
     label = item or f'{amount} Mito'
     session.log.note(f'pvp: bonus card {index} picked: {label} x{amount}')
-    if room.bonus_task and len(room.bonus_picked) >= sum(1 for m in room.members if m.session):
+    if (room.bonus_cards is cards and room.bonus_task
+            and all(serial_of(m.session) in room.bonus_picked for m in room.humans if m.serial in room.racers)):
         room.bonus_task.cancel()
         room.bonus_task = None
     return True

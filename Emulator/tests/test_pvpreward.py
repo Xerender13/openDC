@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from dcemu.native import context, version
-from dcemu.native.game import pvpreward
+from dcemu.native.game import pvpreward, rooms
 from dcemu.wire import Frame
 
 
@@ -25,9 +25,11 @@ class CardBoardTest(unittest.TestCase):
         def cast(*frames, skip=None):
             self.frames.extend(frames)
 
-        self.room = SimpleNamespace(id=7, members=[SimpleNamespace(session=self.session),
-                                                   SimpleNamespace(session=self.other)],
-                                    cast=cast)
+        me = SimpleNamespace(session=self.session, serial=self.session.id, end=(rooms.FINISHED, 0, 0, 1))
+        other = SimpleNamespace(session=self.other, serial=self.other.id, end=None)
+        self.room = SimpleNamespace(id=7, type=0x80, channel=5, state=rooms.RACING, members=[me, other],
+                                    humans=[me, other], racers=[me.serial, other.serial], cast=cast,
+                                    member=lambda s: next((m for m in (me, other) if m.session is s), None))
         self.room.bonus_cards = [[0, 0, 0, 0] for _ in range(pvpreward.CARDS)]
         self.room.bonus_items = [''] * pvpreward.CARDS
         self.room.bonus_picked = {}
@@ -70,11 +72,17 @@ class CardBoardTest(unittest.TestCase):
                                              item_info=lambda idx: SimpleNamespace(table_idx=2134))), \
                 patch.object(pvpreward, 'give', fake_give), \
                 patch.object(pvpreward, 'send', lambda s, *f: self.sent.extend(f)):
-            self.assertTrue(asyncio.run(pvpreward.pick(self.room, self.session, 5)))
+            pvpreward.reset(self.room)
+            pvpreward.open_board(self.room)
+            self.assertEqual(self.frames, [])
+            click = Frame(0x1e3, struct.pack('<II', 5, 0xffffffff))
+            with patch.object(pvpreward, '_room', return_value=self.room):
+                asyncio.run(pvpreward.bonus_pick(self.other, click))
+                asyncio.run(pvpreward.bonus_pick(self.session, click))
         self.assertEqual(given, [('mitrondust_H', 1)])
         self.assertEqual(self.room.bonus_cards[5], [1, 2134, 1, 1234])   # kind 1, item, picker serial
         self.assertEqual(self.room.bonus_items[5], 'mitrondust_H')
-        self.assertEqual(struct.unpack_from('<I', self.frames[-1].payload, 4 + 0x18 * 5 + 0x0c)[0], 1)
+        self.assertEqual(struct.unpack('<7I', self.frames[0].payload), (1, 5, 0, 1234, 1, 2134, 1))
 
     def test_one_card_each_and_none_twice(self):
         async def fake_give(p, rewards):
@@ -96,7 +104,6 @@ class CardBoardTest(unittest.TestCase):
         """BattleZone.PVPResultUI off: the board is not sent, a pick is not paid (the client cannot show either)."""
         with patch.object(pvpreward, 'enabled', return_value=False):
             asyncio.run(pvpreward.on_race_result(self.room))
-            pvpreward.resend(self.room)
             self.assertFalse(asyncio.run(pvpreward.pick(self.room, self.session, 4)))
         self.assertEqual(self.frames, [])
         self.assertEqual(self.room.bonus_cards[4], [0, 0, 0, 0])

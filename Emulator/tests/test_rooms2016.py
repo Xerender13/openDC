@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from dcemu.native import context, version
-from dcemu.native.game import rooms
+from dcemu.native.game import login, rooms
 from dcemu.wire import Frame
 
 # The user's 2016 RoomCreate (logs/2016/20261020-113408, 11:36:26): spectating room 0x80, map 0, 8 seats,
@@ -74,6 +74,57 @@ class Rooms2016Test(unittest.TestCase):
             rooms.rooms[7] = 'room'
             asyncio.run(rooms.room_join(self.s, Frame(0x1d4, bytes(p))))
         self.assertEqual(got, [(b'U' * 16, b'C' * 16, b'P')])
+
+
+class GateFlagsTest(unittest.TestCase):
+    def setUp(self):
+        self.saved = context.__dict__.copy()
+        version.configure({'version': '2016'})
+        context.data = SimpleNamespace(contents={})
+        context.extra_flags = {}
+        self.session = SimpleNamespace(log=SimpleNamespace(note=Mock()))
+        self.room = SimpleNamespace(type=0x80, channel=5, state=rooms.RACING, gates={}, racers=[3, 4], ais=[],
+                                    member=Mock(return_value=SimpleNamespace(serial=3)), ai_by_car=Mock(return_value=None),
+                                    cast=Mock())
+
+    def tearDown(self):
+        context.__dict__.clear()
+        context.__dict__.update(self.saved)
+
+    def report(self, *, serial=3, index=6, variant=0):
+        payload = struct.pack('<IiiIff', serial, index, variant, 0x24eb3c, 15.2, 100)
+        with patch.object(rooms, 'room_of', return_value=self.room):
+            asyncio.run(rooms.gate(self.session, Frame(0x1ed, payload)))
+
+    def test_packs_new_effect_factor_and_all_gate_reporting(self):
+        rooms.configure_gate_flags({'gate_rewards': 'new', 'new_gate_effect_factor': '80', 'all_gate_report': '1'})
+        value, = struct.unpack_from('<I', login.content_flags(), 0x30)
+        self.assertEqual(value & 0x3ffc8000, (1 << 29) | (80 << 19) | (1 << 18))
+
+    def test_new_effect_needs_a_positive_wire_factor(self):
+        for invalid in ('0', '1024'):
+            context.extra_flags = {}
+            with self.assertRaises(ValueError):
+                rooms.configure_gate_flags({'gate_rewards': 'new', 'new_gate_effect_factor': invalid})
+
+    def test_passes_use_the_2016_collision_score_and_deduplicate_by_index(self):
+        rooms.configure_gate_flags({'all_gate_report': '1'})
+        with patch.object(rooms, 'forced_reward', None), patch.object(rooms, 'gate_reward', return_value=2) as draw:
+            self.report(serial=4)
+            self.report(variant=1)
+            self.report(variant=2)
+        draw.assert_called_once_with(2, 1, True, False)
+        self.assertEqual(self.room.gates, {6: [3]})
+        self.room.cast.assert_called_once_with(Frame(0x1ee, struct.pack('<Ii', 3, 2)))
+
+    def test_gate_rewards_off_still_acknowledges_and_counts_passes(self):
+        rooms.configure_gate_flags({'gate_rewards': 'off'})
+        self.assertTrue(login.content_flags()[0x31] & 0x80)
+        with patch.object(rooms, 'forced_reward', 6), patch.object(rooms, 'gate_reward') as draw:
+            self.report()
+        draw.assert_not_called()
+        self.assertEqual(self.room.gates, {6: [3]})
+        self.room.cast.assert_called_once_with(Frame(0x1ee, struct.pack('<Ii', 3, 0)))
 
 
 class RealMatchCar2016Test(unittest.TestCase):

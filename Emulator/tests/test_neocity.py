@@ -324,10 +324,11 @@ class NeoCityFlowTest(unittest.TestCase):
         r = self.enter(key=0)
         patches = self.reward_patches()
         patches.append(patch.object(neocity, 'roll_item', return_value=None))
+        patches.append(patch.object(neocity, 'give_rolled', AsyncMock(return_value=SimpleNamespace(
+            table_idx=1043, item_id='neo_arp_l_10001'))))
         r.failed, r.deaths = 1, 0
         r.kills[neocity.serial_of(self.s)] = {'HUV': 15, 'HUB': 4}
         frames = self.handle(neocity.chapter_complete, Frame(0xeda, struct.pack('<II', 0, r.id)), patches)
-        r.pick_task.cancel()
         self.assertEqual([f.type for f in frames], [0x7d1, 0x7d2, 0xedb, 0xee9])
         frame = frames[2]
         self.assertEqual(len(frame.payload) + 2, 203)                  # one row: n * 0x10 + 0xbb (0x52e969)
@@ -335,6 +336,7 @@ class NeoCityFlowTest(unittest.TestCase):
         self.assertEqual((key, n, prev, failed, deaths, grade), (0, 1, 0, 1, 0, 1))
         row = struct.unpack_from('<7I', frame.payload, 0x19)
         self.assertEqual(row, (neocity.serial_of(self.s), self.c.level, 15, 4, 0, 5000, 5000))
+        self.assertEqual(struct.unpack_from('<4I', frame.payload, 0x19 + 0x1c), (1, 1043, 0, 0))
         self.assertEqual(len(frames[3].payload) + 2, 262)              # 0xee9: u32 0 + 16 x 16 (0x526d80)
         update, insert = self.db.saved[0]
         self.assertEqual(update, (2, 1, 2016, 7, 'neo_c_0000'))       # STATE 2, FAILNUM 1
@@ -386,6 +388,7 @@ class NeoCityFlowTest(unittest.TestCase):
     def test_bonus_card_pick(self):
         """0xee8 (u32 0, u32 slot): the card's item to the picker, 0xee9 with its serial; one card each."""
         r = self.enter(key=0)
+        r.clear_item[neocity.serial_of(self.s)] = 0
         r.cards = [[1, 100 + i, 1, 0] for i in range(16)]
         r.card_items = [f'item_{i}' for i in range(16)]
         give = AsyncMock(return_value=(SimpleNamespace(items=[]), []))
@@ -399,9 +402,9 @@ class NeoCityFlowTest(unittest.TestCase):
             give.assert_awaited_once()
 
     def test_bonus_cards_start_face_down(self):
-        """The first 0xee9 carries no item: every slot all zeros (kind 0 = the "?" face, the only clickable one).
-        Sending the items up front drew all 16 face-up and the client never sent 0xee8 (user, 2026-11-18)."""
+        """The first 0xee9 keeps each slot face-down, and a pick reveals just the selected item."""
         r = self.enter(key=0)
+        r.clear_item[neocity.serial_of(self.s)] = 0
         r.cards = [[1, 100 + i, 1, 0] for i in range(16)]
         r.card_items = [f'item_{i}' for i in range(16)]
         frame = neocity.cards_frame(r)
@@ -416,6 +419,48 @@ class NeoCityFlowTest(unittest.TestCase):
         self.assertEqual(struct.unpack_from('<4I', grid, 4 + 16 * 3), (1, 103, 1, neocity.serial_of(self.s)))
         for i in (0, 1, 2, 4, 15):
             self.assertEqual(struct.unpack_from('<4I', grid, 4 + 16 * i), (0, 0, 0, 0))
+
+    def test_party_bonus_timeout_starts_at_each_completion(self):
+        r = self.enter(key=0)
+        guest_char = SimpleNamespace(**{**vars(self.c), 'cid': 8, 'name': 'Guest'})
+        guest = SimpleNamespace(id=12, state={'player': SimpleNamespace(char=guest_char, items=[]),
+                                              'serial': 4321, 'neo_run': r}, log=Mock())
+        r.members.append(guest)
+        r.solo = False
+        r.cards = [[1, 100 + i, 1, 0] for i in range(16)]
+        r.card_items = [f'item_{i}' for i in range(16)]
+        complete = Frame(0xeda, struct.pack('<II', 0, r.id))
+        pick = Frame(0xee8, struct.pack('<II', 0, 5))
+        send = Mock()
+
+        async def run():
+            await neocity.chapter_complete(self.s, complete)
+            host_serial = neocity.serial_of(self.s)
+            guest_serial = neocity.serial_of(guest)
+            self.assertEqual(set(r.pick_tasks), {host_serial})
+            await neocity.chapter_reward(guest, pick)
+            self.assertEqual(r.cards[5][3], 0)
+            await r.pick_tasks[host_serial]
+            self.assertEqual(r.cards[0][3], host_serial)
+            self.assertTrue(all(call.args[0] is not guest for call in send.call_args_list))
+
+            await neocity.chapter_complete(guest, complete)
+            self.assertEqual(set(r.pick_tasks), {guest_serial})
+            _, summary, grid = send.call_args.args
+            self.assertEqual((summary.type, grid.type), (0xedb, 0xee9))
+            self.assertEqual(struct.unpack_from('<4I', grid.payload, 4), (1, 100, 1, host_serial))
+            await neocity.chapter_reward(guest, pick)
+            self.assertEqual(r.cards[5][3], guest_serial)
+            self.assertEqual(r.pick_tasks, {})
+
+        with contextlib.ExitStack() as stack:
+            for mocked in self.reward_patches():
+                stack.enter_context(mocked)
+            stack.enter_context(patch.object(neocity, 'give_rolled', AsyncMock(return_value=None)))
+            stack.enter_context(patch.object(neocity, 'send', send))
+            stack.enter_context(patch.object(neocity, 'PICK_SECONDS', 0))
+            stack.enter_context(patch.object(neocity.random, 'choice', return_value=0))
+            asyncio.run(run())
 
     def test_bonus_mission_count(self):
         """0xef5 key -> 0xef6 key, 0, clears % 10."""

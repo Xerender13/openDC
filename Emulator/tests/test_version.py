@@ -80,6 +80,33 @@ class VersionTest(unittest.TestCase):
             self.assertEqual(path.read_text(), '[client]\n; which build\nversion = 2011\n[2016]\nversion.x = 1\n')
             self.assertEqual(load_config(str(path))['client']['version'], '2011')
 
+    def test_2016_item_display_promotion_and_real_match_effect(self):
+        context.data = SimpleNamespace(contents={})
+        context.extra_flags = {}
+        context.promotion = {'enabled': True}
+        version.configure({'version': '2016'})
+        flags = login.content_flags(Etc_RealMatchEffect=5)
+        self.assertEqual(struct.unpack_from('<I', flags, 0x4c)[0] & 0xe0000002, 0xa0000002)
+        self.assertTrue(flags[0x50] & 0x08)
+        context.promotion['enabled'] = False
+        context.extra_flags = {'Etc.ShowDropItem': 0}
+        flags = login.content_flags()
+        self.assertFalse(flags[0x4c] & 0x02)
+        self.assertFalse(flags[0x50] & 0x08)
+        version.configure({'version': '2011'})
+        context.extra_flags = {}
+        self.assertFalse(login.content_flags()[0x4c] & 0x04)
+
+    def test_2016_spectator_sections_flag_can_be_overridden(self):
+        context.data = SimpleNamespace(contents={})
+        context.extra_flags = {}
+        version.configure({'version': '2011'})
+        self.assertFalse(login.content_flags()[0x2d] & 0x40)
+        version.configure({'version': '2016'})
+        self.assertTrue(login.content_flags()[0x31] & 0x40)
+        context.extra_flags['BattleZone.ObserveAllMode'] = 0
+        self.assertFalse(login.content_flags()[0x31] & 0x40)
+
     def test_character_offsets_and_uint64_experience(self):
         c = character()
         old, new = c.encode(2011), c.encode(2016)
