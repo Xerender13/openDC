@@ -4,7 +4,26 @@ Written 2026-10-16 (end of session 13) for moving the work from the Steam Deck t
 a new Claude session. The detailed research log is `docs/EMULATOR_NOTES.md` (newest entries at the top); this file
 says what to copy, how to set up, how the work is done, and what is open.
 
-## Session 53 (2026-11-19): LAA for the memory crash, Zorro hidden, shipped 2016 client repacked — resume here
+## Session 54 (2026-11-23): content flags (PvP bonus board), flag audit, boost refill still open — resume here
+
+Details: EMULATOR_NOTES session 54. 442 tests pass.
+- **PvP bonus card board** (`game/pvpreward.py`, S>C 0x1e4 / C>S 0x1e3): implemented and **flag-gated**. The client
+  stored the board (all 16 slots filled) but never drew it because `BattleZone.PVPResultUI` — and the reward flags
+  `BattleZone.BattleReward` / `LottoPVPReward` — were 0: our `Contents.ini` is the 2008 file and has no entry. All
+  three are now in `[flags]`. `pvpreward.enabled()` reads the same packed block `login.content_flags()` sends, so
+  with the flag off there is no board, no pick, no payout and no auto-pick. **Not yet seen in game** (set 2026-11-23).
+- **Content flag audit:** the 2016 client knows 197 flags, 82 are 0 at runtime. Every one is a season event, a
+  timing/limit, a feature this server does not implement, or deliberate — the full breakdown is in the notes. Added
+  `Main.CharacterErase` (`lobby.delete_char` exists, the client hid the delete button). `Main.PasserBy` (pedestrians)
+  stays an opt-in. Already module-coupled: DCGP, WorldMatch, AttackPlayer, Mita500, Bacchus, championship times, rush.
+- **Boost passive refill: NOT fixed, and not the GM status.** `[client] admin_ptype` (A/N) was added to test the
+  `PType < 'N'` theory and set to N; the refill stayed fast, so that was wrong. The server has no boost-refill code
+  and Xerander's stats are ordinary (car 142 V5 boost 136 + level 81 = 217, no boost parts), so it is client-side —
+  a timed buff, a self-applied assist, or the gauge logic. Next: watch the gauge value in the running client.
+- Until the board is confirmed in game, the 18 s auto-pick hands out one random `rw_battle_*` item per race with
+  nothing on screen — disable before shipping.
+
+## Session 53 (2026-11-19): LAA for the memory crash, Zorro hidden, shipped 2016 client repacked
 
 Details: EMULATOR_NOTES session 53. 436 tests pass. Not yet tried in game.
 - **Memory crash on entering the city** (user: "abnormal program termination" at Moon Palace after many cars): the exe

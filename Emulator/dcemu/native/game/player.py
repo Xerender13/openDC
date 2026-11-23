@@ -219,7 +219,7 @@ async def load(name, member=None):
         cid=int(cid), name=cname, member=member_id, last_date=time_t(last), avatar=_i(avatar), level=level,
         exp=_i(exp), exp_next=nxt, exp_base=base, mito=_i(gold), team_id=_i(team) if team is not None else -1,
         team_mark=_i(mark), team_name=team_name or '', team_rank=_i(team_rank) if team_rank is not None else -1,
-        ptype='A' if (member_id or '').lower() in t.admins else (ptype or 'N'),
+        ptype=context.admin_ptype if (member_id or '').lower() in t.admins else (ptype or 'N'),
         pvp=(_i(pvp_n), _i(pvp_w), _i(pvp_p)), tpvp=(_i(tpvp_n), _i(tpvp_w), _i(tpvp_p)),
         quick_cnt=_i(arbeit_wins), km=_f(km), pos=(_f(x), _f(y), _f(z), _f(w)), last_area=_i(area), city=_i(city),
         pos_state=_i(pos_state), cur_car=_i(cur_car), quick_slots=quick_slots_of(qs1, qs2), team_dates=(time_t(tjoin), time_t(tclose), time_t(tleave)),

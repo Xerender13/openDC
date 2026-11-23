@@ -175,6 +175,9 @@ def content_flags(**overrides):
         # (client 0x7cf760 sets the race object's +0x58 only with it) and lets the 0xfbe handler 0x540f90 apply damage
         if context.attack.get('enabled'):
             named['BattleZone.AttackPlayer'] = 1
+        # character deletion (lobby.delete_char: reserve, then delete when [native] delete_wait_days has passed):
+        # the 2016 client hides the delete button on the character screen without this flag (flags +0x8 bit 21).
+        named['Main.CharacterErase'] = 1
     named.update({k.replace('_', '.', 1): v for k, v in overrides.items()})
     return pack_flags(named)
 

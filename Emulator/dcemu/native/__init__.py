@@ -66,6 +66,8 @@ def ticket_for(member):
 class Context:
     client_version = 2011   # server-wide wire build, independent of nation
     max_level_2016 = 100    # 2016 advertised cap and progression cap; 2011 keeps its existing rules
+    admin_ptype = 'A'       # the PType an admin member's character is sent with ('A' = the client's GM debug
+                            # features are on, 'N' = off; GM chat commands work either way, they test the member list)
     db = None            # native.db.Database
     data = None          # native.data.Tables
     server_list = []     # native.auth.ServerEntry

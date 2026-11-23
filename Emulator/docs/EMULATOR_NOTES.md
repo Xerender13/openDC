@@ -8,6 +8,57 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 54 (2026-11-23): the PvP bonus card board (0x1e4 / 0x1e3), content flags, boost refill still open
+
+**Boost refilled "way too quickly passively" (user): NOT FIXED, and not the GM status.** Nothing on the server refills
+the boost gauge: it is the client's, and the server only sends the stat block (0x2f8) at login / car change / item
+change. Xerander's numbers are ordinary — car 142 V5 is speed 108 / crash 47 / accel 79 / **boost 136**
+(VehicleUpgrade.xlt), + 81 character points, the parts on the car (crash 25+25, accel 22+22) and the S15 paint / window
+/ neon (`Bonus Speed 15` each) add **no** boost: total 217. Neo City gear adds nothing either (ItemClient type 12 is not
+one of the option stats 6-9, `data.OPTION_STAT`). Admins were sent PType 'A', and the client turns developer behaviour
+on for `PType < 'N'`, so that was the first suspect: `[client] admin_ptype` (A or N, default A; `version.configure`
+validates it, `player.load` uses `context.admin_ptype`) was added to test it. Set to **N the refill stayed fast**
+(user, 2026-11-23), so the GM gate is **not** the cause. Where it comes from is still unknown: it is in the client —
+a timed stat buff (`Stats.item_use`, `Player.buffs`), an assist the client applies to itself, or the gauge's own
+logic. Next: watch the gauge value in the running client (gdb) and compare a character without this car / these items.
+
+**PvP race bonus cards** (`dcemu/native/game/pvpreward.py`, 2016 only, after the 0x1ec result): decoded from the client
+(2026-11-23), the handler 0x542720 takes `u32 n @frame+2`, then n x 0x18 `{index, unused, serial, kind, item, amount}`
+(frame `0x1e + (n-1)*0x18`) and fills window `[[app+0x158]+0x3f8]` (serial @+0x5c8+0x10i, kind @+0x5cc, item @+0x5d0,
+amount @+0x5d4). The kinds are the Neo card kinds (0 face-down, 1 item, 2 catalogue, 3/4/5 Mito / mileage / EXP). The
+click (WndProc 0x5e1f40, controls 0x4127b3..0x4127c2, event 0x101) calls 0x5e0f80(index), which **only accepts a
+kind-0 slot** and sends C>S 0x1e3 (sender 0x84d550): `u32 index @0`, `u32 [win+0x134] @4`; `0x5e0900(arg1,arg2)` sets
+that value (`arg1 == 0` clears the board). So the client wants 16 face-down cards and a reveal after the pick; the
+server now sends that, reveals the picked slot with the picker's serial, and rolls one `rw_battle_low/mid/high` item by
+level (ours; the real table is unknown), with an 18 s auto-pick (ours).
+
+**Status: the board arrives but no window shows.** In the race test (11:02) the client logged `RECV_1e4 n=16` and
+filled all 16 slots, the click never came, and `0x5e0900` was never called. The window is only touched by the result
+state machine at `0x7d0d40` (states 0x0b / 0x0f / 0x10), which is not part of the 0x1ec race-result path — the packet
+is `Cmd_PvpBattleBonusResult`, so it most likely belongs to the **battle zone** result. Until that is settled the
+auto-pick hands out one random item per race with nothing on screen; set the module aside or disable it before
+shipping. Tests: `tests/test_pvpreward.py` (frame layout, kind-0 rule, reveal, one card each, 2011 gets none); 442 pass.
+
+**Why it never showed: the content flag.** The 2016 client draws the result's bonus page only with
+`BattleZone.PVPResultUI` (and the reward path with `BattleZone.BattleReward` / `BattleZone.LottoPVPReward`). Our
+`Contents.ini` is the 2008 file and has none of them, so they were 0. All three are now in `emulator.ini [flags]`.
+`pvpreward.enabled()` reads the same packed block `login.content_flags()` sends, and the whole feature (board, pick,
+payout, auto-pick) is skipped while it is 0 — the server follows exactly what the client was told.
+
+**Content flag audit (2026-11-23).** The 2016 client knows 197 flags (`dcemu/data/flags_2016.tsv`); with the runtime
+defaults 82 are 0. Most are season events (`Etc.Event*`, Hongbao, Christmas, ...), timings and limits (`NetSync.*`,
+`BattleZone.*MatchTime`, `TouringASpeed/B`, `RoomGradeLimit`, `Sticker*`, `VShop*`) or features this server does not
+implement (`RealMatchSystem`, `BattingJackpot`, `Main.Ladder`, `PrivateChat`, `PartyChase`, `Main.Mileage`, `MitoTrade`,
+`RQHouseInstant`, `MovePacketBufferSend`, `SetTournamentClass`, `SafeCGameCheckIn`, `AllGateReport`, `NoGateSupport`,
+`NewGateEffect` - we stay on the old gate path). Deliberately off: `City.NeoCras/Koinonia/MoonPalace` (no maps),
+`City.TaipeiUC` (Taipei has no undercity area), `PvpGhostBattle` (not implemented), `Etc.AlchemySystem`
+(`Main.ManufacturingSystem` covers it), `AssistTransferBelongLevel` (the client never reads it), `VirtualChasing`,
+`ObserveAllMode`, `FrontAi`, `Main.OptionItem`/`Etc.NewOption` ([items] option_parts = 0). Already tied to their module:
+`BattleZone.DCGP` ([dcgp]), `WorldMatch` ([worldmatch]), `AttackPlayer` ([battlezone] attack), `InstantMission.Mita500`,
+Bacchus, the championship match times and the rush flags. **Added:** `Main.CharacterErase` - `lobby.delete_char` is
+implemented, but the client hid the delete button without it (flags +0x8 bit 21). Left as an opt-in: `Main.PasserBy`
+(pedestrians; client-side, known to work, costs performance).
+
 ## Session 53 (2026-11-19): 32-bit address space (LAA), Zorro hidden, repacked 2016 client
 
 **User:** random "Microsoft Visual C++ Runtime Library - abnormal program termination" when entering Moon Palace after

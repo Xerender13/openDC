@@ -1910,6 +1910,8 @@ async def result(room):
         m.ready = m.serial == room.master or not m.session     # AIs are always ready (a second race was refused 20182)
     if team_room(room.type) and room.members:
         room.members[0].session.log.note(f'room {room.id}: team points {team_points}')
+    from . import pvpreward                    # 2016: the PvP bonus card board (0x1e4) *before* the result, so the
+    await pvpreward.on_race_result(room)       # result window is built with the cards already in it (and again after)
     result_frame = Frame(0x1ec, struct.pack('<iIIfii', 1, *team_points, 0.0, room.first_end or 0, len(entries))
                          + b''.join(entries))
     host = room.by_serial(room.master)
@@ -1918,6 +1920,8 @@ async def result(room):
     room.cast(room.master_frame(), result_frame, *([ready_frame(host)] if host else []), *map(ready_frame, room.ais))
     for s in room.observers:                    # BS_OBSRoom::SetResult
         send(s, result_frame)
+    from . import pvpreward                    # 2016: the same board again, now that the result window exists
+    pvpreward.resend(room)
     from .pickem import on_result               # spectators' Pick'em draws (after the result they see)
     await on_result(room)
     lists_changed(room.channel)

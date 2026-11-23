@@ -36,8 +36,12 @@ def configure(section):
     cap = int(section.get('max_level_2016', '100'))
     if not 1 <= cap <= 1023:
         raise ValueError('[client] max_level_2016 must be between 1 and 1023')
+    ptype = (section.get('admin_ptype', 'A') or 'A').strip().upper()
+    if ptype not in ('A', 'N'):
+        raise ValueError(f'[client] admin_ptype: expected A or N, got {ptype!r}')
     context.client_version = int(value)
     context.max_level_2016 = cap
+    context.admin_ptype = ptype
 
 
 def is_2016():
