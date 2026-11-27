@@ -1,6 +1,6 @@
 # 2016 XiContentsFlag: name, absolute dword offset, shift, width.
 # Group bases measured at DriftCity.exe 0x464820; fields from flags_2016_raw.tsv.
-# Ambiguous parser results remain commented. ChannelPro and RealMatchEffect are verified in the client parser.
+# Corrected fields use client parser write-backs; see EMULATOR_NOTES session 59.
 BattleZone.AllGateReport	0x30	29	1
 BattleZone.AttackPlayer	0x3c	5	1
 BattleZone.BattingJackpot	0x30	17	1
@@ -30,7 +30,7 @@ BattleZone.NewGateEffect	0x30	18	1
 BattleZone.NewGateEffectFactor	0x30	19	10
 BattleZone.NoGateSupport	0x30	15	1
 BattleZone.ObserveAllMode	0x30	14	1
-#BattleZone.ObserveGacha	0x30	0	31
+BattleZone.ObserveGacha	0x30	31	1
 BattleZone.PVPResultUI	0x38	26	2
 BattleZone.PracticeMode	0x30	13	1
 BattleZone.PreMatchTime	0x34	11	7
@@ -87,17 +87,17 @@ Etc.EventModifyBetter	0x5c	0	3
 Etc.EventPartyPatrol	0x4c	10	1
 Etc.EventQuest	0x54	11	1
 Etc.EventQuestMoslem	0x54	12	1
-#Etc.EventTeamChase	0x58	0	31
+Etc.EventTeamChase	0x58	31	1
 Etc.EventTeamPoint	0x58	30	1
 Etc.EventValentainChocolate	0x5c	3	1
 Etc.EventValentine	0x54	17	1
 Etc.EventWaterMelon	0x4c	6	1
 Etc.ExitPopup	0x4c	4	1
-#Etc.Exp2MitoRate	0x54	0	10
+Etc.Exp2MitoRate	0x54	0	10
 Etc.GotchaSeason	0x54	19	6
 Etc.HongbaoEvent	0x50	1	1
 Etc.HongbaoEventRush	0x50	2	1
-#Etc.Indy4Event	0x48	0	31
+Etc.Indy4Event	0x48	31	1
 Etc.InventoryReform	0x58	7	2
 Etc.LevelLimit	0x50	16	10
 Etc.MaxStickerAttach	0x48	12	5
@@ -108,7 +108,7 @@ Etc.MoveEventEffect	0x4c	26	3
 Etc.NewChar2ExpEvent	0x4c	3	1
 Etc.NewLicenseSystem	0x54	25	1
 Etc.NewLicenseSystemnDay	0x58	0	7
-#Etc.NewLicenseSystemnPercent	0x54	0	7
+Etc.NewLicenseSystemnPercent	0x54	26	6
 Etc.NewOption	0x50	12	1
 Etc.NoviceAdvUI2nd	0x58	27	1
 Etc.PartyBonus	0x4c	12	1
@@ -191,7 +191,7 @@ Main.TeamMark	0x0	5	1
 Main.VirtualChasing	0x8	17	1
 NetSync.MinUpdate	0x44	0	12
 NetSync.P2PErrBound	0x44	20	8
-#NetSync.P2PMember	0x44	0	28
+NetSync.P2PMember	0x44	28	4
 NetSync.SvrErrBound	0x44	12	8
 OMDBase.Auction	0x28	7	1
 OMDBase.AutoShop	0x28	2	1

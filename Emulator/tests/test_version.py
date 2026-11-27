@@ -107,6 +107,30 @@ class VersionTest(unittest.TestCase):
         context.extra_flags['BattleZone.ObserveAllMode'] = 0
         self.assertFalse(login.content_flags()[0x31] & 0x40)
 
+    def test_2016_game_setting_encodes_remaining_content_fields(self):
+        version.configure({'version': '2016'})
+        context.data = SimpleNamespace(contents={})
+        # Values with several bits set exercise the numeric fields as well as the switches.
+        fields = (
+            ('BattleZone.ObserveGacha', 0x30, 0x80000000, 1),
+            ('NetSync.P2PMember', 0x44, 0xb0000000, 11),
+            ('Etc.Indy4Event', 0x48, 0x80000000, 1),
+            ('Etc.Exp2MitoRate', 0x54, 0x000002ab, 683),
+            ('Etc.NewLicenseSystemnPercent', 0x54, 0xac000000, 43),
+            ('Etc.EventTeamChase', 0x58, 0x80000000, 1),
+        )
+        for name, offset, bits, value in fields:
+            with self.subTest(name=name):
+                context.data.contents = {name: value}
+                context.extra_flags = {name: 0}
+                off = login.game_setting().payload
+                word, = struct.unpack_from('<I', off, 8 + offset)
+                self.assertEqual(word & bits, 0)
+                expected = bytearray(off)
+                struct.pack_into('<I', expected, 8 + offset, word | bits)
+                context.extra_flags.clear()
+                self.assertEqual(login.game_setting().payload, expected)
+
     def test_character_offsets_and_uint64_experience(self):
         c = character()
         old, new = c.encode(2011), c.encode(2016)

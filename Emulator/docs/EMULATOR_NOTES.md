@@ -8,6 +8,27 @@ version (`../../Client US`) and, since session 14, the European version (`../../
 (session 12) and the session entries.
 Paths in older entries say `Server/...`: that folder is now `Server2008/`. Moving to another device: `docs/HANDOVER.md`.
 
+## Session 59 (2026-11-27) — remaining 2016 content tags
+
+The 2016 client's eight content-group readers called by `DriftCity.exe` at `0x464820` reference 204 distinct tag
+names. Six had been commented out in `dcemu/data/flags_2016.tsv`. The raw extractor sometimes took the mask
+for the *old* bits kept in the destination, or a read of the next field, as the width of the new value.
+The named lookups and their write-backs give these positions in the 96-byte content block of GameSetting (0x1e).
+
+| Tag | Dword | Bits (inclusive) | Lookup through store |
+| --- | --- | --- | --- |
+| BattleZone.ObserveGacha | 0x30 | 31 | 0x4637d3–0x4637e9 |
+| NetSync.P2PMember | 0x44 | 28–31 | 0x463bcf–0x463be9 |
+| Etc.Indy4Event | 0x48 | 31 | 0x463c98–0x463cae |
+| Etc.Exp2MitoRate | 0x54 | 0–9 | 0x464044–0x46405b |
+| Etc.NewLicenseSystemnPercent | 0x54 | 26–31 | 0x4641fe–0x464222 |
+| Etc.EventTeamChase | 0x58 | 31 | 0x464396–0x4643ae |
+
+All six read as zero with the shipped settings. Verified explicit on/off overrides through native setup and the
+outgoing login frame, and multi-bit values in the packet regression test. Across 32 sets of input values the
+server encoder also produced the same 96 bytes as an offline evaluation of all 204 client parser write-backs
+(Main.StatApply held at its configured 1000). In-game effects remain unverified.
+
 ## Session 57 (2026-11-23): 2016 Mito trade and spectator section flags
 
 - `Etc.MitoTrade` is enabled for 2016. Client getter `0x6bacc5` extracts bit 25 of flag dword `0x4c`;
